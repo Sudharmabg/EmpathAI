@@ -1,8 +1,8 @@
-fastapi
-uvicorn
-openai
-python-dotenv
-pydantic
-httpx
-sentence-transformers
-tiktoken
+fastapi==0.110.1
+uvicorn==0.29.0
+openai==1.14.3
+python-dotenv==1.0.1
+pydantic==2.6.4
+httpx==0.27.0
+sentence-transformers==2.6.1
+tiktoken==0.6.0

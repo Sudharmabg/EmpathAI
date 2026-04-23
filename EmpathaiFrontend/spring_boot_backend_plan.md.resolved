@@ -1,0 +1,350 @@
+# EmpathAI – Spring Boot REST API Backend Plan
+
+## Overview
+This document maps the **existing React frontend** to a **Java Spring Boot backend** covering three admin modules:
+1. **User Management** (Admin Panel)
+2. **Feelings Explorer** (Questionnaire / Assessments)
+3. **Curriculum Management**
+
+---
+
+## 1. Tech Stack & Project Setup
+
+| Layer | Choice |
+|---|---|
+| Framework | Spring Boot 3.x |
+| Language | Java 17+ |
+| Build Tool | Maven or Gradle |
+| Database | PostgreSQL (recommended) or MySQL |
+| ORM | Spring Data JPA + Hibernate |
+| Security | Spring Security + JWT |
+| API Docs | SpringDoc OpenAPI (Swagger UI) |
+| Validation | Jakarta Validation (`@Valid`) |
+| Password | BCryptPasswordEncoder |
+
+### Spring Initializr Dependencies
+```
+- Spring Web
+- Spring Data JPA
+- Spring Security
+- PostgreSQL Driver
+- Spring Boot DevTools
+- Validation
+- Lombok
+- SpringDoc OpenAPI (manual add)
+```
+
+---
+
+## 2. Domain / Entity Models
+
+### 2.1 User (Polymorphic – Single Table Inheritance)
+```
+User (base)
+├── id (Long)
+├── name (String)
+├── email (String, unique)
+├── passwordHash (String)
+├── role (Enum: STUDENT, SCHOOL_ADMIN, PSYCHOLOGIST, CONTENT_ADMIN, SUPER_ADMIN)
+├── phoneNumber (String)
+├── createdAt (LocalDateTime)
+└── updatedAt (LocalDateTime)
+
+Student extends User
+├── className (String)  // "4th Standard"
+├── school (String)
+├── parentName (String)
+├── dateOfBirth (LocalDate)
+├── address (String)
+├── bloodGroup (String)
+└── emergencyContact (String)
+
+SchoolAdmin extends User
+└── school (String)
+
+Psychologist extends User
+└── licenseId (String)
+
+ContentAdmin extends User
+└── department (Enum: CURRICULUM, ASSESSMENT, TECHNICAL)
+```
+
+### 2.2 Curriculum / Syllabus
+```
+Syllabus
+├── id (Long)
+├── subject (String)
+├── classLevel (String)  // "10th Standard"
+├── createdAt / updatedAt
+└── modules (List<LearningModule>)
+
+LearningModule
+├── id (Long)
+├── syllabus (ManyToOne → Syllabus)
+├── title (String)
+├── videoUrl (String)
+├── summary (String)
+├── summaryImageUrl (String)
+├── orderIndex (Integer)
+├── learningObjectives (List<String> → @ElementCollection)
+└── quizQuestions (List<QuizQuestion>)
+
+QuizQuestion
+├── id (Long)
+├── module (ManyToOne → LearningModule)
+├── questionText (String)
+├── imageUrl (String, nullable)
+├── options (List<String> → @ElementCollection)
+├── correctAnswerIndex (Integer)
+└── explanation (String)
+```
+
+### 2.3 Feelings Explorer (Assessment / Questionnaire)
+```
+AssessmentQuestion
+├── id (Long)
+├── questionText (String)
+├── questionType (Enum: SCALE, MEMORY, TEXT)
+├── options (List<AssessmentOption>)
+└── orderIndex (Integer)
+
+AssessmentOption
+├── id (Long)
+├── question (ManyToOne → AssessmentQuestion)
+├── label (String)
+├── value (Integer)
+└── emotionType (Enum: HAPPY, NEUTRAL, CONCERN, SAD)
+
+AssessmentResponse (stores a student's completed assessment)
+├── id (Long)
+├── student (ManyToOne → Student)
+├── submittedAt (LocalDateTime)
+└── answers (List<AnswerRecord>)
+
+AnswerRecord
+├── id (Long)
+├── response (ManyToOne → AssessmentResponse)
+├── question (ManyToOne → AssessmentQuestion)
+└── answerValue (String)  // numeric or JSON array for memory
+```
+
+---
+
+## 3. REST API Endpoints
+
+### 3.1 Authentication
+```
+POST   /api/auth/login           → { email, password } → { token, user }
+POST   /api/auth/refresh          → { refreshToken } → { token }
+POST   /api/auth/logout
+POST   /api/auth/reset-password   → { userId, newPassword }
+```
+
+### 3.2 User Management (Admin only)
+```
+GET    /api/users                → List all users (filter by ?role=student&school=X)
+POST   /api/users                → Create user (role-specific body)
+GET    /api/users/{id}           → Get user by ID (with extended profile)
+PUT    /api/users/{id}           → Update user
+DELETE /api/users/{id}           → Soft-delete user
+POST   /api/users/{id}/reset-password → Admin resets a user's password
+
+# School grouping (for student tab)
+GET    /api/users/schools         → [{ schoolName, studentCount }]
+GET    /api/users/by-school/{school} → All students in a school
+```
+
+### 3.3 Curriculum Management
+```
+GET    /api/syllabi               → List all syllabi (filter ?classLevel=10th Standard)
+POST   /api/syllabi               → Create syllabus
+GET    /api/syllabi/{id}          → Get syllabus with modules
+PUT    /api/syllabi/{id}          → Update syllabus
+DELETE /api/syllabi/{id}          → Delete syllabus
+
+GET    /api/syllabi/{id}/modules         → List modules for a syllabus
+POST   /api/syllabi/{id}/modules         → Add module
+GET    /api/syllabi/{id}/modules/{modId} → Get module detail (with quiz)
+PUT    /api/syllabi/{id}/modules/{modId} → Update module
+DELETE /api/syllabi/{id}/modules/{modId} → Delete module
+
+# Quiz
+GET    /api/modules/{modId}/quiz         → Get quiz questions
+PUT    /api/modules/{modId}/quiz         → Replace all quiz questions
+```
+
+### 3.4 Feelings Explorer (Questionnaire)
+```
+GET    /api/questionnaire/questions      → Get all questions (ordered)
+POST   /api/questionnaire/submit         → Submit completed assessment
+GET    /api/questionnaire/responses      → Admin: list all responses
+GET    /api/questionnaire/responses/{studentId} → Student's history
+GET    /api/questionnaire/responses/{id}/report → Report for one session
+```
+
+---
+
+## 4. Request/Response DTOs (Examples)
+
+### LoginRequest / LoginResponse
+```json
+// Request
+{ "email": "admin@empathai.com", "password": "admin1234" }
+
+// Response
+{
+  "token": "eyJ...",
+  "tokenType": "Bearer",
+  "user": {
+    "id": 1, "name": "Super Admin",
+    "email": "admin@empathai.com",
+    "role": "SUPER_ADMIN"
+  }
+}
+```
+
+### CreateUserRequest (Student)
+```json
+{
+  "name": "Aarav Sharma",
+  "email": "aarav@school.com",
+  "password": "AutoGen#123",
+  "role": "STUDENT",
+  "className": "4th Standard",
+  "school": "TIGPS",
+  "parentName": "Rajesh Sharma",
+  "phoneNumber": "+91 98765 43210",
+  "dateOfBirth": "2014-05-15",
+  "address": "Sector 12, Dwarka, Delhi",
+  "bloodGroup": "O+",
+  "emergencyContact": "+91 98765 43211"
+}
+```
+
+### AssessmentSubmitRequest
+```json
+{
+  "studentId": 42,
+  "answers": [
+    { "questionId": 1, "answerValue": "8" },
+    { "questionId": 2, "answerValue": "6" },
+    { "questionId": 7, "answerValue": "[3,7,2,9]" }
+  ]
+}
+```
+
+---
+
+## 5. Security Model
+
+```
+Role              Can Access
+─────────────────────────────────────────────────────
+SUPER_ADMIN       Everything
+CONTENT_ADMIN     Curriculum read/write, Assessment questions
+SCHOOL_ADMIN      Students in their own school (read/write)
+PSYCHOLOGIST      Assessment responses, Student profiles (read)
+STUDENT           Own profile, Questionnaire submit, Curriculum read
+```
+
+### JWT Strategy
+- Access token: 1 hour expiry
+- Refresh token: 7 days
+- Stored in HTTP-only cookie OR Authorization header (align with frontend choice)
+
+---
+
+## 6. Project Package Structure
+
+```
+com.empathai
+├── config/
+│   ├── SecurityConfig.java
+│   ├── JwtConfig.java
+│   └── CorsConfig.java
+├── controller/
+│   ├── AuthController.java
+│   ├── UserController.java
+│   ├── SyllabusController.java
+│   ├── ModuleController.java
+│   └── QuestionnaireController.java
+├── service/
+│   ├── AuthService.java
+│   ├── UserService.java
+│   ├── CurriculumService.java
+│   └── QuestionnaireService.java
+├── repository/
+│   ├── UserRepository.java
+│   ├── SyllabusRepository.java
+│   ├── LearningModuleRepository.java
+│   └── AssessmentResponseRepository.java
+├── entity/
+│   ├── User.java
+│   ├── Student.java
+│   ├── SchoolAdmin.java
+│   ├── Psychologist.java
+│   ├── ContentAdmin.java
+│   ├── Syllabus.java
+│   ├── LearningModule.java
+│   ├── QuizQuestion.java
+│   ├── AssessmentQuestion.java
+│   └── AssessmentResponse.java
+├── dto/
+│   ├── auth/  (LoginRequest, LoginResponse)
+│   ├── user/  (CreateUserRequest, UserResponse, UpdateUserRequest)
+│   ├── curriculum/ (SyllabusRequest, SyllabusResponse, ModuleRequest...)
+│   └── questionnaire/ (SubmitRequest, ResponseReport)
+├── exception/
+│   ├── GlobalExceptionHandler.java
+│   ├── ResourceNotFoundException.java
+│   └── UnauthorizedException.java
+└── util/
+    ├── JwtUtil.java
+    └── PasswordGenerator.java
+```
+
+---
+
+## 7. CORS Configuration
+
+```java
+// CorsConfig.java
+@Bean
+public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration config = new CorsConfiguration();
+    config.setAllowedOrigins(List.of("http://localhost:3001")); // Frontend dev URL
+    config.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
+    config.setAllowedHeaders(List.of("*"));
+    config.setAllowCredentials(true);
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/api/**", config);
+    return source;
+}
+```
+
+---
+
+## 8. Development Phases
+
+| Phase | Scope |
+|---|---|
+| **Phase 1** | Project setup, Auth (JWT), User CRUD |
+| **Phase 2** | Curriculum (Syllabus + Module + Quiz) CRUD |
+| **Phase 3** | Feelings Explorer (Questions + Submit + Report) |
+| **Phase 4** | Role-based access control + Swagger docs |
+| **Phase 5** | Frontend API integration (replace mock data) |
+
+---
+
+## 9. Key Discussion Points
+
+> These are open questions to align before implementation:
+
+1. **Database**: PostgreSQL or MySQL? (Recommendation: PostgreSQL)
+2. **Token storage**: HTTP-only cookie vs. Authorization header on the frontend?
+3. **Password reset flow**: Should admin-triggered reset send an email, or just return the new password in the API response?
+4. **Assessment questions**: Are they static (seeded once) or should admins be able to add/edit them from the admin panel?
+5. **Multi-tenancy**: Is one school completely isolated from another, or do admins see all school data?
+6. **File uploads**: Do module summary images need to be uploaded to the server, or just URL references?
+7. **Pagination**: Should list endpoints be paginated from the start?
+8. **Soft delete**: Should deleted users/syllabi be archived or permanently removed?

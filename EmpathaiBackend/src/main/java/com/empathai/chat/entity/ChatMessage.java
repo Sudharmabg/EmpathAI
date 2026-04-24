@@ -33,6 +33,12 @@ public class ChatMessage {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Builder.Default
+    @Column(name = "flagged", nullable = false)
+    private Boolean flagged = false;
+
+
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();

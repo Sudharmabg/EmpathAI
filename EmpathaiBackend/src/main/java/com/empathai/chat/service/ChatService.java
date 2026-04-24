@@ -47,59 +47,85 @@ public class ChatService {
 
     @Transactional
     public ChatMessageResponse sendMessage(Long studentId, String message) {
+        log.info("Processing sendMessage for studentId: {}", studentId);
+        
         // 1. Check daily limit
         checkDailyLimit(studentId);
 
-        // 2. Get or create the current week's session
+        // 2. Crisis Intercept (Hardcoded fallback for safety)
+        if (isCrisisMessage(message)) {
+            log.info("Crisis detected in message from studentId: {}", studentId);
+            return handleCrisisResponse(studentId, message);
+        }
+
+        // 3. Get or create the current week's session
         LocalDate weekStart = getCurrentWeekStart();
         ChatSession session = sessionRepo.findByStudentIdAndWeekStart(studentId, weekStart)
-                .orElseGet(() -> sessionRepo.save(ChatSession.builder()
+                .orElseGet(() -> {
+                    log.info("Creating new chat session for studentId: {} for week: {}", studentId, weekStart);
+                    return sessionRepo.save(ChatSession.builder()
                         .studentId(studentId)
                         .weekStart(weekStart)
-                        .build()));
+                        .build());
+                });
 
-        // 3. Load last 10 messages for context
+        // 4. Load last 10 messages for context
         List<ChatMessage> recentMessages = messageRepo.findTop10BySessionIdOrderByCreatedAtDesc(session.getId());
-        Collections.reverse(recentMessages); // oldest first for GPT
+        Collections.reverse(recentMessages);
 
-        // 4. Build history payload for Python service
+        // 5. Build history payload
         List<Map<String, String>> history = recentMessages.stream()
-                .map(m -> Map.of("role", m.getRole(), "content", m.getContent()))
+                .map(m -> {
+                    Map<String, String> msgMap = new java.util.HashMap<>();
+                    msgMap.put("role", m.getRole());
+                    msgMap.put("content", m.getContent());
+                    return msgMap;
+                })
                 .collect(Collectors.toList());
 
-        // 5. Get student name and grade
+        // 6. Get student info
         User user = userRepository.findById(studentId)
                 .orElseThrow(() -> new EmpathaiException("Student not found"));
         String grade = (user instanceof Student s) ? (s.getClassName() != null ? s.getClassName() : "1st Standard") : "1st Standard";
 
-        // 6. Call Python AI service
-        Map<String, Object> aiRequest = Map.of(
-                "student_name", user.getName(),
-                "grade", grade,
-                "message", message,
-                "history", history
-        );
+        // 7. Call Python AI service
+        Map<String, Object> aiRequest = new java.util.HashMap<>();
+        aiRequest.put("student_name", user.getName());
+        aiRequest.put("grade", grade);
+        aiRequest.put("message", message);
+        aiRequest.put("history", history);
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> aiResponse = webClientBuilder.build()
-                .post()
-                .uri(aiServiceUrl + "/chat")
-                .bodyValue(aiRequest)
-                .retrieve()
-                .onStatus(status -> status.is5xxServerError(),
-                        response -> response.bodyToMono(String.class)
-                                .map(body -> new EmpathaiException("AI service error: " + body)))
-                .bodyToMono(Map.class)
-                .block();
+        log.info("Calling AI service at: {}/chat", aiServiceUrl);
+        
+        Map<String, Object> aiResponse;
+        try {
+            aiResponse = webClientBuilder.build()
+                    .post()
+                    .uri(aiServiceUrl + "/chat")
+                    .bodyValue(aiRequest)
+                    .retrieve()
+                    .onStatus(status -> status.is5xxServerError(),
+                            response -> response.bodyToMono(String.class)
+                                    .map(body -> new EmpathaiException("AI service error: " + body)))
+                    .bodyToMono(Map.class)
+                    .timeout(java.time.Duration.ofSeconds(15))
+                    .block();
+        } catch (Exception e) {
+            log.error("AI service call failed: {}", e.getMessage());
+            throw new EmpathaiException("ChatBuddy is temporarily unavailable. Please try again in a moment.");
+        }
 
         if (aiResponse == null) {
+            log.error("AI service returned null response");
             throw new EmpathaiException("Received empty response from AI service");
         }
 
         String reply = (String) aiResponse.get("reply");
         String detectedMode = (String) aiResponse.getOrDefault("detected_mode", "curriculum");
 
-        // 7. Save student message
+        log.info("AI response received. Mode: {}", detectedMode);
+
+        // 8. Save student message
         messageRepo.save(ChatMessage.builder()
                 .sessionId(session.getId())
                 .role("user")
@@ -107,7 +133,7 @@ public class ChatService {
                 .detectedMode(detectedMode)
                 .build());
 
-        // 8. Save AI reply
+        // 9. Save AI reply
         ChatMessage savedReply = messageRepo.save(ChatMessage.builder()
                 .sessionId(session.getId())
                 .role("assistant")
@@ -115,10 +141,8 @@ public class ChatService {
                 .detectedMode(detectedMode)
                 .build());
 
-        // 9. Increment daily usage
+        // 10. Increment daily usage
         incrementUsage(studentId);
-
-        log.debug("Chat message processed for student {} | mode: {}", studentId, detectedMode);
 
         return toMessageResponse(savedReply);
     }
@@ -186,6 +210,40 @@ public class ChatService {
 
     private LocalDate getCurrentWeekStart() {
         return LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    }
+
+    private boolean isCrisisMessage(String message) {
+        if (message == null) return false;
+        String lower = message.toLowerCase();
+        return lower.contains("suicide") || lower.contains("kill myself") || 
+               lower.contains("end my life") || lower.contains("want to die");
+    }
+
+    private ChatMessageResponse handleCrisisResponse(Long studentId, String message) {
+        LocalDate weekStart = getCurrentWeekStart();
+        ChatSession session = sessionRepo.findByStudentIdAndWeekStart(studentId, weekStart)
+                .orElseGet(() -> sessionRepo.save(ChatSession.builder()
+                        .studentId(studentId)
+                        .weekStart(weekStart)
+                        .build()));
+
+        String crisisReply = "I'm really sorry to hear that you're feeling this way. Please know that you're not alone, and there's help available. You can reach out to the iCall helpline at 9152987821. They are there to support you.";
+
+        messageRepo.save(ChatMessage.builder()
+                .sessionId(session.getId())
+                .role("user")
+                .content(message)
+                .detectedMode("mental_health")
+                .build());
+
+        ChatMessage savedReply = messageRepo.save(ChatMessage.builder()
+                .sessionId(session.getId())
+                .role("assistant")
+                .content(crisisReply)
+                .detectedMode("mental_health")
+                .build());
+
+        return toMessageResponse(savedReply);
     }
 
     private ChatMessageResponse toMessageResponse(ChatMessage m) {

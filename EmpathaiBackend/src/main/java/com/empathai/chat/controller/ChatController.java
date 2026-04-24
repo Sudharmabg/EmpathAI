@@ -1,6 +1,9 @@
 package com.empathai.chat.controller;
 
-import com.empathai.chat.dto.*;
+import com.empathai.chat.dto.ChatMessageRequest;
+import com.empathai.chat.dto.ChatMessageResponse;
+import com.empathai.chat.dto.ChatSessionResponse;
+import com.empathai.chat.dto.ChatUsageResponse;
 import com.empathai.chat.service.ChatService;
 import com.empathai.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +30,6 @@ public class ChatController {
      * POST /api/chat/message
      */
     @PostMapping("/message")
-    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<ChatMessageResponse> sendMessage(
             @AuthenticationPrincipal User currentUser,
             @RequestBody ChatMessageRequest request) {
@@ -48,7 +50,6 @@ public class ChatController {
      * GET /api/chat/sessions
      */
     @GetMapping("/sessions")
-    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<List<ChatSessionResponse>> getSessions(
             @AuthenticationPrincipal User currentUser) {
         logger.info("getSessions started for userId={}", currentUser.getId());
@@ -67,7 +68,6 @@ public class ChatController {
      * GET /api/chat/session/{id}
      */
     @GetMapping("/session/{id}")
-    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<ChatSessionResponse> getSession(
             @PathVariable Long id,
             @AuthenticationPrincipal User currentUser) {
@@ -87,7 +87,6 @@ public class ChatController {
      * GET /api/chat/usage
      */
     @GetMapping("/usage")
-    @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<ChatUsageResponse> getUsage(
             @AuthenticationPrincipal User currentUser) {
         logger.info("getUsage started for userId={}", currentUser.getId());

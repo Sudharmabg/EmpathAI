@@ -70,8 +70,10 @@ public class WebSecurityConfig {
                         .requestMatchers("/api/teachers/**")
                         .hasAnyRole("SUPER_ADMIN", "SCHOOL_ADMIN")
 
+                        // Chat
+                        .requestMatchers("/api/chat/**").authenticated()
+                        
                         // Everything else requires authentication
-                        // (Fine-grained role checks should be done with @PreAuthorize in controllers)
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider)

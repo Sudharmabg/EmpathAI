@@ -11,14 +11,21 @@ import java.util.Optional;
 
 @Repository
 public interface AssessmentResponseRepository extends JpaRepository<AssessmentResponse, Long> {
+
     List<AssessmentResponse> findByGroupName(String groupName);
+
     List<AssessmentResponse> findByStudentId(Long studentId);
+
     List<AssessmentResponse> findByClassName(String className);
+
     void deleteByQuestionId(Long questionId);
+
     void deleteByStudentId(Long studentId);
+
     List<AssessmentResponse> findByGroupNameIgnoreCaseOrClassNameIgnoreCase(
             String groupName, String className
     );
+
     List<AssessmentResponse> findByGroupNameIgnoreCaseOrClassNameIgnoreCaseOrSchoolNameIgnoreCase(
             String groupName, String className, String schoolName
     );
@@ -45,4 +52,7 @@ public interface AssessmentResponseRepository extends JpaRepository<AssessmentRe
     @Query("UPDATE AssessmentResponse r SET r.studentName = :name WHERE r.studentId = :studentId")
     void updateStudentNameByStudentId(@Param("studentId") Long studentId,
                                       @Param("name") String name);
+
+    @Query("SELECT COUNT(DISTINCT CONCAT(CAST(a.studentId AS string), '-', CAST(FUNCTION('DATE', a.submittedAt) AS string))) FROM AssessmentResponse a")
+    long countDistinctSubmissions();
 }

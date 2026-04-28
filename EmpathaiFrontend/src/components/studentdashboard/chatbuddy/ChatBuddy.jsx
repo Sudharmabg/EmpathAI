@@ -145,10 +145,10 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   ])
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError]   = useState(null)
+  const [error, setError] = useState(null)
 
   // History sidebar state
-  const [sessions, setSessions]           = useState([])
+  const [sessions, setSessions] = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [historySearch, setHistorySearch] = useState('')
@@ -159,7 +159,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   // Misc
   const [showCrisisModal, setShowCrisisModal] = useState(false)
   const messagesEndRef = useRef(null)
-  const inputRef       = useRef(null)
+  const inputRef = useRef(null)
 
   // ── scroll to bottom ──
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isLoading])
@@ -257,11 +257,16 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     try {
       const response = await chatService.sendMessage(text)
       // Backend returns { id, role, content, detectedMode, createdAt }
+      const effectiveMode =
+        response.isFlagged || response.is_flagged
+          ? 'mental_health'
+          : response.detectedMode
+
       const botMsg = {
         id: response.id ?? `b-${Date.now()}`,
         role: 'assistant',
         content: response.content,
-        detectedMode: response.detectedMode,
+        detectedMode: effectiveMode,           // ← uses corrected mode
         createdAt: response.createdAt,
       }
       setMessages(prev => [...prev, botMsg])
@@ -369,7 +374,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
 
                     <div className={`flex items-center gap-2 mt-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <span className="text-xs text-gray-400">{formatTime(msg.createdAt)}</span>
-                      {msg.role === 'assistant' && <ModeBadge mode={msg.detectedMode} />}
+                      {/* {msg.role === 'assistant' && <ModeBadge mode={msg.detectedMode} />} */}
                     </div>
                   </div>
                 </div>

@@ -37,6 +37,9 @@ public class ChatService {
     private final UserRepository userRepository;
     private final WebClient.Builder webClientBuilder;
 
+    // ── NEW: injected to create support-alert flags ───────────────────────────
+    private final FlaggedChatService flaggedChatService;
+
     @Value("${app.chat.daily-limit:20}")
     private int dailyLimit;
 
@@ -48,7 +51,7 @@ public class ChatService {
     @Transactional
     public ChatMessageResponse sendMessage(Long studentId, String message) {
         log.info("Processing sendMessage for studentId: {}", studentId);
-        
+
         // 1. Check daily limit
         checkDailyLimit(studentId);
 
@@ -64,9 +67,9 @@ public class ChatService {
                 .orElseGet(() -> {
                     log.info("Creating new chat session for studentId: {} for week: {}", studentId, weekStart);
                     return sessionRepo.save(ChatSession.builder()
-                        .studentId(studentId)
-                        .weekStart(weekStart)
-                        .build());
+                            .studentId(studentId)
+                            .weekStart(weekStart)
+                            .build());
                 });
 
         // 4. Load last 10 messages for context
@@ -96,7 +99,7 @@ public class ChatService {
         aiRequest.put("history", history);
 
         log.info("Calling AI service at: {}/chat", aiServiceUrl);
-        
+
         Map<String, Object> aiResponse;
         try {
             aiResponse = webClientBuilder.build()
@@ -120,10 +123,35 @@ public class ChatService {
             throw new EmpathaiException("Received empty response from AI service");
         }
 
-        String reply = (String) aiResponse.get("reply");
+        String reply        = (String) aiResponse.get("reply");
         String detectedMode = (String) aiResponse.getOrDefault("detected_mode", "curriculum");
 
         log.info("AI response received. Mode: {}", detectedMode);
+
+        // ── NEW: Support-Alert flag processing ───────────────────────────────
+        Boolean isFlagged = (Boolean) aiResponse.get("is_flagged");
+        if (Boolean.TRUE.equals(isFlagged)) {
+            String flagReason = (String) aiResponse.get("flag_reason");
+            String sentiment  = (String) aiResponse.get("sentiment");
+            String severity   = (String) aiResponse.get("severity");
+
+            log.info("Flag detected: studentId={} severity={} reason={}", studentId, severity, flagReason);
+
+            try {
+                flaggedChatService.createFlag(
+                        session.getId(),
+                        studentId,
+                        message,
+                        flagReason  != null ? flagReason : "Unspecified",
+                        sentiment   != null ? sentiment  : "Concerned",
+                        severity    != null ? severity   : "medium"
+                );
+            } catch (Exception ex) {
+                // Flag creation must NEVER break the student chat experience
+                log.error("Failed to create support alert flag: {}", ex.getMessage(), ex);
+            }
+        }
+        // ── END Support-Alert flag processing ─────────────────────────────────
 
         // 8. Save student message
         messageRepo.save(ChatMessage.builder()
@@ -215,8 +243,8 @@ public class ChatService {
     private boolean isCrisisMessage(String message) {
         if (message == null) return false;
         String lower = message.toLowerCase();
-        return lower.contains("suicide") || lower.contains("kill myself") || 
-               lower.contains("end my life") || lower.contains("want to die");
+        return lower.contains("suicide") || lower.contains("kill myself") ||
+                lower.contains("end my life") || lower.contains("want to die");
     }
 
     private ChatMessageResponse handleCrisisResponse(Long studentId, String message) {
@@ -242,6 +270,21 @@ public class ChatService {
                 .content(crisisReply)
                 .detectedMode("mental_health")
                 .build());
+
+        // ── NEW: Always flag hardcoded crisis intercepts as CRITICAL ──────────
+        try {
+            flaggedChatService.createFlag(
+                    session.getId(),
+                    studentId,
+                    message,
+                    "Suicidal ideation / Self-harm",
+                    "Highly Concerned",
+                    "critical"
+            );
+        } catch (Exception ex) {
+            log.error("Failed to create crisis flag: {}", ex.getMessage(), ex);
+        }
+        // ──────────────────────────────────────────────────────────────────────
 
         return toMessageResponse(savedReply);
     }

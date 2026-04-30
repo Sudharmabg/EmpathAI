@@ -1,1 +1,0 @@
-export { Chatbot as default } from '../../PlaceholderComponents'

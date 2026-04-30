@@ -355,9 +355,10 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                           remarkPlugins={[remarkMath]}
                           rehypePlugins={[rehypeKatex]}
                           components={{
-                            p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-                            ul: ({ children }) => <ul className="list-disc list-inside space-y-0.5 my-1">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-0.5 my-1">{children}</ol>,
+                            p: ({ children }) => <p className="mb-0 last:mb-0 inline">{children}</p>,
+                            ul: ({ children }) => <ul className="list-disc list-inside space-y-2 my-1">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-2 my-1">{children}</ol>,
+                            li: ({ children }) => <li className="leading-snug">{children}</li>,
                             strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                             code: ({ inline, children }) =>
                               inline

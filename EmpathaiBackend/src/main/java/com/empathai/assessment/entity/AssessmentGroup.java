@@ -21,6 +21,7 @@ public class AssessmentGroup extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String name;
 
+
     @Column(name = "text")
     private String description;
 

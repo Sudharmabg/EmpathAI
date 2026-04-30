@@ -55,4 +55,7 @@ public interface AssessmentResponseRepository extends JpaRepository<AssessmentRe
 
     @Query("SELECT COUNT(DISTINCT CONCAT(CAST(a.studentId AS string), '-', CAST(FUNCTION('DATE', a.submittedAt) AS string))) FROM AssessmentResponse a")
     long countDistinctSubmissions();
+
+
+
 }

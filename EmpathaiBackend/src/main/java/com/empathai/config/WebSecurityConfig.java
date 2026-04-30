@@ -56,6 +56,7 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/groups/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/responses").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/responses/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/analytics/analyze").permitAll()
 
                         // Questions
                         .requestMatchers(HttpMethod.GET, "/api/questions/**").permitAll()

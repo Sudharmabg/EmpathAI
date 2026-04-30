@@ -1,3 +1,7 @@
+import ReactMarkdown from 'react-markdown'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import { useState, useEffect, useCallback } from 'react'
 import {
     ChatBubbleLeftRightIcon,
@@ -90,12 +94,35 @@ function TranscriptModal({ flagId, studentName, onClose }) {
                                     <span className="text-[10px] text-gray-400 px-1">
                                         {isStudent ? (studentName ?? 'Student') : 'ChatBuddy'}
                                     </span>
-                                    <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${isStudent
-                                        ? 'bg-purple-600 text-white rounded-tr-sm'
-                                        : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                                    <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${isStudent
+                                            ? 'bg-purple-600 text-white rounded-tr-sm'
+                                            : 'bg-gray-100 text-gray-800 rounded-tl-sm'
                                         }`}>
-                                        {msg.content}
+                                        {isStudent ? (
+                                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                                        ) : (
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkMath]}
+                                                rehypePlugins={[rehypeKatex]}
+                                                components={{
+                                                    p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                                                    ul: ({ children }) => <ul className="list-disc list-inside space-y-0 my-1">{children}</ul>,
+                                                    ol: ({ children }) => <ol className="list-decimal list-inside space-y-0 my-1">{children}</ol>,
+                                                    li: ({ children }) => <li className="leading-snug">{children}</li>,
+                                                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                                    code: ({ inline, children }) =>
+                                                        inline
+                                                            ? <code className="bg-white/20 text-white px-1 rounded text-xs font-mono">{children}</code>
+                                                            : <pre className="bg-black/10 p-2 rounded text-xs overflow-x-auto my-1"><code>{children}</code></pre>,
+                                                }}
+                                            >
+                                                {msg.content}
+                                            </ReactMarkdown>
+                                        )}
                                     </div>
+
+
+
                                     <span className="text-[10px] text-gray-400 px-1">{formatTime(msg.createdAt)}</span>
                                 </div>
                             </div>
@@ -295,7 +322,7 @@ export default function FlaggedChats() {
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     <button className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700 transition shadow-sm flex items-center gap-1 ml-auto">
-                                                        Assign to Psychologist <ChevronRightIcon className="w-3 h-3" />
+                                                        Action <ChevronRightIcon className="w-3 h-3" />
                                                     </button>
                                                 </td>
                                             </tr>

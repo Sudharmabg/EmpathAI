@@ -1,5 +1,6 @@
 import os
 import re
+import random
 import tiktoken
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -11,6 +12,116 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 _enc = tiktoken.get_encoding("cl100k_base")
 HISTORY_TOKEN_BUDGET = 2000
+
+# ── Casual message handler (zero OpenAI tokens used) ─────────────────────────
+
+CASUAL_PATTERNS = {
+    "greeting": {
+        "keywords": [
+            "good morning", "good evening", "good afternoon", "good night",
+            "gm", "gn", "hey", "hello", "hi", "hii", "hiii", "hola",
+            "namaste", "namaskar", "sat sri akal", "jai hind",
+            "assalamualaikum", "salam", "adab",
+            "suprabhat", "shubh prabhat", "shubh sandhya",
+        ],
+        "responses": [
+            "Hey {name}! 😊 Great to see you! How are you doing today?",
+            "Hello {name}! 👋 Hope you're having a wonderful day! What can I help you with?",
+            "Hi {name}! 🌟 Lovely to hear from you! Are you here to study or just chat?",
+            "Hey there, {name}! 😄 How's your day going so far?",
+        ]
+    },
+    "how_are_you": {
+        "keywords": [
+            "how are you", "how r u", "how are u", "hru", "how do you do",
+            "how's it going", "how is it going", "whats up", "what's up",
+            "wassup", "sup", "you ok", "are you ok", "you good", "are you good",
+            "kaisa hai", "kaise ho", "kya haal", "theek ho",
+        ],
+        "responses": [
+            "I'm doing great, {name}! Thanks for asking 😊 I'm always ready to help you learn or chat. How about you?",
+            "I'm wonderful, {name}! 🌟 Always happy when a student checks in. How are YOU doing today?",
+            "All good here, {name}! 😄 Ready to help with studies or just have a chat. What's on your mind?",
+        ]
+    },
+    "i_am_fine": {
+        "keywords": [
+            "i am fine", "i'm fine", "im fine", "i am good", "i'm good", "im good",
+            "i am okay", "i'm okay", "im okay", "i am ok", "i'm ok", "doing well",
+            "doing good", "all good", "all is well", "main theek hoon", "theek hoon",
+            "mein thik hun", "sab theek",
+        ],
+        "responses": [
+            "That's great to hear, {name}! 😊 I'm glad you're doing well. Ready to learn something today?",
+            "Wonderful! 🌟 Happy to know you're fine, {name}! What would you like to do — study or chat?",
+            "So good to hear that, {name}! 😄 Feeling good is the perfect time to learn something new!",
+        ]
+    },
+    "thanks": {
+        "keywords": [
+            "thank you", "thanks", "thankyou", "thank u", "thx", "ty",
+            "shukriya", "dhanyavaad", "dhanyawad",
+            "bahut shukriya", "bahut dhanyavaad",
+        ],
+        "responses": [
+            "You're welcome, {name}! 😊 Always happy to help. Anything else you need?",
+            "My pleasure, {name}! 🌟 That's what I'm here for. Feel free to ask anything anytime!",
+            "Anytime, {name}! 😄 Don't hesitate to come back whenever you need help!",
+        ]
+    },
+    "bye": {
+        "keywords": [
+            "bye", "goodbye", "good bye", "see you", "see ya", "cya", "take care",
+            "alvida", "phir milenge", "phir milte hain", "tata",
+            "ok bye", "okay bye", "byee", "byeee",
+        ],
+        "responses": [
+            "Goodbye, {name}! 👋 Take care and keep learning! See you next time 😊",
+            "Bye, {name}! 🌟 It was great chatting with you. Come back anytime!",
+            "See you soon, {name}! 😄 Remember, I'm always here if you need help. Take care!",
+        ]
+    },
+    "compliment": {
+        "keywords": [
+            "you are great", "you're great", "you are awesome", "you're awesome",
+            "you are amazing", "you're amazing", "you are helpful", "you're helpful",
+            "you are good", "you're good", "i like you", "best chatbot",
+            "you are the best", "you're the best",
+        ],
+        "responses": [
+            "Aww, thank you so much, {name}! 😊 That really made my day! I'm here to do my best for you!",
+            "That's so kind of you, {name}! 🌟 I love helping students like you. Keep up the great work!",
+            "You're too sweet, {name}! 😄 I'm just happy I could help. Now let's keep learning together!",
+        ]
+    },
+}
+
+
+def _detect_casual(message: str) -> str | None:
+    """
+    Returns the category name if the message is casual/greeting.
+    Returns None if the message should go to OpenAI.
+    Only triggers for short messages (8 words or less) to avoid
+    catching mixed messages like 'I am fine but I need math help'.
+    """
+    lower = message.lower().strip()
+    if len(lower.split()) > 8:
+        return None
+    for category, data in CASUAL_PATTERNS.items():
+        for keyword in data["keywords"]:
+            if keyword in lower:
+                return category
+    return None
+
+
+def _get_casual_response(category: str, name: str) -> str:
+    """Pick a random response for the detected casual category."""
+    responses = CASUAL_PATTERNS[category]["responses"]
+    template = random.choice(responses)
+    return template.format(name=name)
+
+
+# ── System prompt ─────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT_TEMPLATE = """You are EmpathAI Assistant, a caring and intelligent chatbot for school students.
 
@@ -88,9 +199,9 @@ FORMATTING GUIDELINES
   CORRECT:
   1. **First point**: explanation here
   2. **Second point**: explanation here
-  WRONG (do NOT do this — no blank lines between items):
+  WRONG (do NOT do this):
   1. **First point**
-  
+
   explanation here
 - Keep responses concise, friendly, and encouraging.
 
@@ -120,6 +231,8 @@ Example: [MODE:curriculum][FLAG:false]
 
 Automatically detect which mode is needed. Always append hidden mode tag AND flag block on the very last line."""
 
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _trim_history(history: list[dict]) -> list[dict]:
     total = 0
@@ -185,14 +298,34 @@ def _get_temperature(history: list[dict], message: str) -> float:
     return 0.3
 
 
+# ── Main entry point ──────────────────────────────────────────────────────────
+
 def get_chat_response(request: ChatRequest) -> ChatResponse:
-    # ── Normal chat flow ──────────────────────────────────────────────────────
+    # ── Step 1: Casual message check (no OpenAI tokens used) ─────────────────
+    casual_category = _detect_casual(request.message)
+    if casual_category:
+        casual_reply = _get_casual_response(casual_category, request.student_name)
+        return ChatResponse(
+            reply=casual_reply,
+            detected_mode="casual",
+            is_flagged=False,
+        )
+
+    # ── Step 2: Cache check for curriculum questions ──────────────────────────
     if not request.history:
         cached = get_cached(request.message)
         if cached:
-            return ChatResponse(reply=cached["answer"], detected_mode=cached["mode"], is_flagged=False)
+            return ChatResponse(
+                reply=cached["answer"],
+                detected_mode=cached["mode"],
+                is_flagged=False,
+            )
 
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(name=request.student_name, grade=request.grade)
+    # ── Step 3: Call OpenAI for academic/emotional messages ───────────────────
+    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+        name=request.student_name,
+        grade=request.grade
+    )
     history_dicts = [{"role": m.role, "content": m.content} for m in request.history]
     trimmed_history = _trim_history(history_dicts)
 

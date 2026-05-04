@@ -35,7 +35,8 @@ export default function Questionnaire ({ user }) {
   const [loading, setLoading]                   = useState(true)
 
   const gridNumbers = [3, 7, 2, 9]
-
+const [analysis, setAnalysis]         = useState(null)
+const [analysisLoading, setAnalysisLoading] = useState(false)
   /* ── Fetch questions ── */
   useEffect(() => {
     const className =
@@ -239,10 +240,35 @@ const progress        = currentQ ? ((currentQuestion + 1) / activeQuestions.leng
     }
   }
 
-  const handleSubmit = () => {
+ /* const handleSubmit = () => {
     console.log('[Questionnaire] Assessment complete. Answers:', answers)
     setShowReport(true)
+  }*/
+ const handleSubmit = async () => {
+  console.log('[Questionnaire] Assessment complete. Fetching analysis...')
+  setShowReport(true)
+  setAnalysisLoading(true)
+
+  try {
+    const savedUser = localStorage.getItem('user')
+    const u = savedUser ? JSON.parse(savedUser) : user
+    const studentId = u?.id ?? null
+
+    const response = await fetch('http://localhost:8080/api/analytics/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId })
+    })
+
+    const data = await response.json()
+    console.log('[Questionnaire] Analysis received:', data)
+    setAnalysis(data)
+  } catch (err) {
+    console.error('[Questionnaire] Analysis failed:', err)
+  } finally {
+    setAnalysisLoading(false)
   }
+}
 
   if (loading) {
     return (
@@ -275,37 +301,58 @@ const progress        = currentQ ? ((currentQuestion + 1) / activeQuestions.leng
         <div className="mb-4 max-w-4xl mx-auto w-full">
           <h3 className="text-lg font-serif font-bold text-[#0B1E36] mb-2 text-center">Key Insights</h3>
           <div className="grid md:grid-cols-2 gap-3">
-            <div className="bg-[#dcfce7] border border-[#bbf7d0] rounded-xl p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 bg-white/60 rounded-full flex items-center justify-center shrink-0">
-                  <StarIcon className="w-5 h-5 text-green-600" />
-                </div>
-                <h4 className="text-lg font-serif font-bold text-[#1a202c]">Strengths</h4>
-              </div>
-              <ul className="text-[13px] font-serif text-[#4a5568] space-y-1.5 ml-1">
-                {['Good emotional awareness', 'Positive self-perception', 'Strong memory skills'].map((item, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />{item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="bg-[#ffedd5] border border-[#fed7aa] rounded-xl p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 bg-white/60 rounded-full flex items-center justify-center shrink-0">
-                  <FlagIcon className="w-5 h-5 text-orange-500" />
-                </div>
-                <h4 className="text-lg font-serif font-bold text-[#1a202c]">Areas to Focus</h4>
-              </div>
-              <ul className="text-[13px] font-serif text-[#4a5568] space-y-1.5 ml-1">
-                {['Managing school pressure', 'Building confidence', 'Stress management'].map((item, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />{item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+  <div className="bg-[#dcfce7] border border-[#bbf7d0] rounded-xl p-4 shadow-sm">
+    <div className="flex items-center gap-2 mb-2">
+      <div className="w-8 h-8 bg-white/60 rounded-full flex items-center justify-center shrink-0">
+        <StarIcon className="w-5 h-5 text-green-600" />
+      </div>
+      <h4 className="text-lg font-serif font-bold text-[#1a202c]">Strengths</h4>
+    </div>
+    <ul className="text-[13px] font-serif text-[#4a5568] space-y-1.5 ml-1">
+      {analysisLoading ? (
+        <li className="text-green-500 animate-pulse">Generating your analysis...</li>
+      ) : analysis?.strengths ? (
+        analysis.strengths.map((item, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0 mt-1.5" />{item}
+          </li>
+        ))
+      ) : (
+        ['Good emotional awareness', 'Positive self-perception', 'Strong memory skills'].map((item, i) => (
+          <li key={i} className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />{item}
+          </li>
+        ))
+      )}
+    </ul>
+  </div>
+
+  <div className="bg-[#ffedd5] border border-[#fed7aa] rounded-xl p-4 shadow-sm">
+    <div className="flex items-center gap-2 mb-2">
+      <div className="w-8 h-8 bg-white/60 rounded-full flex items-center justify-center shrink-0">
+        <FlagIcon className="w-5 h-5 text-orange-500" />
+      </div>
+      <h4 className="text-lg font-serif font-bold text-[#1a202c]">Areas to Focus</h4>
+    </div>
+    <ul className="text-[13px] font-serif text-[#4a5568] space-y-1.5 ml-1">
+      {analysisLoading ? (
+        <li className="text-orange-500 animate-pulse">Generating your analysis...</li>
+      ) : analysis?.improvements ? (
+        analysis.improvements.map((item, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 mt-1.5" />{item}
+          </li>
+        ))
+      ) : (
+        ['Managing school pressure', 'Building confidence', 'Stress management'].map((item, i) => (
+          <li key={i} className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />{item}
+          </li>
+        ))
+      )}
+    </ul>
+  </div>
+</div>
         </div>
 
         <div className="max-w-4xl mx-auto w-full mb-2">

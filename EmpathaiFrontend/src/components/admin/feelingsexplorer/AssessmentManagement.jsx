@@ -301,7 +301,7 @@ const grp = question.groupMapId ? [question.groupMapId] : [];
 }
 
 
-     const handleSaveQuestion = () => {
+const handleSaveQuestion = () => {
     const options = [
         questionFormData.option1,
         questionFormData.option2,
@@ -319,59 +319,76 @@ const grp = question.groupMapId ? [question.groupMapId] : [];
         return
     }
 
-   
+    const formattedOptions = options.map((opt) => `${opt}`)
+    const questionData = {
+        questionText: questionFormData.question,
+        options: formattedOptions.join(','),
+    }
 
-const formattedOptions = options.map((opt) => `${opt}`)
-// IMPORTANT: groupMapId must be a Number (Long), not a string.
-// Sending a string causes the backend to receive null for the Long field,
-// which means group_map_id is saved as NULL in DB → question disappears on refresh.
-const rawGroupId = questionFormData.groups.length > 0 ? questionFormData.groups[0] : null
-const groupMapId = rawGroupId !== null && rawGroupId !== undefined ? Number(rawGroupId) : null
-const questionData = {
-    questionText: questionFormData.question,
-    options: formattedOptions.join(','),
-    groupMapId: groupMapId
-}
     if (editingQuestion) {
-        updateQuestion(editingQuestion.id, questionData)
-            .then(updated => {
-                const merged = updated && updated.id
-                    ? updated
-                    : { ...editingQuestion, ...questionData }
-                setQuestions(prev => prev.map(q =>
-                    q.id === editingQuestion.id ? merged : q
-                ))
+        const groupIds = questionFormData.groups.map(id => Number(id))
+        const originalGroupId = Number(editingQuestion.groupMapId)
+
+       
+        const newGroupIds = groupIds.filter(id => id !== originalGroupId)
+        
+        const keepOriginal = groupIds.includes(originalGroupId)
+
+        const tasks = []
+
+     
+        if (keepOriginal) {
+            tasks.push(
+                updateQuestion(editingQuestion.id, { ...questionData, groupMapId: originalGroupId })
+            )
+        } else {
+            
+            tasks.push(
+                updateQuestion(editingQuestion.id, { ...questionData, groupMapId: groupIds[0] })
+            )
+        }
+
+       
+        newGroupIds.forEach(gid => {
+            tasks.push(
+                createQuestion({ ...questionData, groupMapId: gid })
+            )
+        })
+
+        Promise.all(tasks)
+            .then(() => {
                 setIsQuestionModalOpen(false)
+                fetchQuestions(0, 100)
+                    .then(data => {
+                        const questionList = data?.content || data || []
+                        if (questionList.length > 0) setQuestions(questionList)
+                    })
+                    .catch(err => console.error('Refetch error:', err))
             })
-            .catch(() => {
-                setQuestions(prev => prev.map(q =>
-                    q.id === editingQuestion.id
-                        ? { ...editingQuestion, ...questionData }
-                        : q
-                ))
+            .catch(err => {
+                console.error('❌ Question update failed:', err)
                 setIsQuestionModalOpen(false)
             })
     } else {
-        // Replace the createQuestion call in handleSaveQuestion:
-const groupIds = questionFormData.groups.map(id => Number(id))
+       
+        const groupIds = questionFormData.groups.map(id => Number(id))
 
-Promise.all(
-    groupIds.map(gid =>
-        createQuestion({ ...questionData, groupMapId: gid })
-    )
-).then(results => {
-    console.log('✅ Questions saved for all groups:', results)
-    setIsQuestionModalOpen(false)
-    fetchQuestions(0, 100)
-        .then(data => {
-            const questionList = data?.content || data || []
-            if (questionList.length > 0) setQuestions(questionList)
+        Promise.all(
+            groupIds.map(gid =>
+                createQuestion({ ...questionData, groupMapId: gid })
+            )
+        ).then(() => {
+            setIsQuestionModalOpen(false)
+            fetchQuestions(0, 100)
+                .then(data => {
+                    const questionList = data?.content || data || []
+                    if (questionList.length > 0) setQuestions(questionList)
+                })
+                .catch(err => console.error('Refetch error:', err))
+        }).catch(err => {
+            console.error('❌ Question NOT saved:', err)
+            setIsQuestionModalOpen(false)
         })
-        .catch(err => console.error('Refetch error:', err))
-}).catch(err => {
-    console.error('❌ Question NOT saved:', err)
-    setIsQuestionModalOpen(false)
-})
     }
 }
    const handleSaveGroup = () => {
@@ -380,20 +397,15 @@ Promise.all(
         return
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // FIX: className must be stored as "1st Standard", "2nd Standard", etc.
-    // groupFormData.name comes from the select as "Class 1st", "Class 2nd", etc.
-    // Strip the leading "Class " prefix so className = "1st Standard".
-    // This matches the existing DB rows (e.g. "1st Standard", "2nd Standard").
-    // ─────────────────────────────────────────────────────────────────────────
-    const ordinalPart = groupFormData.name.replace(/^Class\s+/, '').trim() // "1st"
-    const classNameForDB = ordinalPart + ' Standard'                        // "1st Standard"
+
+    const ordinalPart = groupFormData.name.replace(/^Class\s+/, '').trim() 
+    const classNameForDB = ordinalPart + ' Standard'                       
 
     const groupData = {
-        name: groupFormData.name + ' Standard',   // "Class 1st Standard"
+        name: groupFormData.name + ' Standard',   
         color: groupFormData.color,
         isDefault: false,
-        className: classNameForDB                  // "1st Standard" ← FIXED
+        className: classNameForDB                 
     }
 
     console.log('✅ Creating group — sending to DB:', groupData)
@@ -527,15 +539,10 @@ const handleOptionClick = (question, option) => {
             setIsResponseModalOpen(true)
 
            
-    // ─────────────────────────────────────────────────────────────────────
-    // FIX: After saving a response, refresh the response sheet using the
-    // group's stored name (same key used by fetchResponseSheet).
-    // Previously this re-filtered locally using className string matching
-    // which was fragile. Now we just re-fetch from the API by groupName.
-    // ─────────────────────────────────────────────────────────────────────
+   
     const currentGroups = groupsRef.current
     const currentGroupObj2 = currentGroups.find(g => g.id === selectedGroupRef.current)
-    // Use className to match stored group_name in DB
+
     const currentGroupName = currentGroupObj2?.className || currentGroupObj2?.name || ''
 
     if (showResponseSheetRef.current && currentGroupName) {

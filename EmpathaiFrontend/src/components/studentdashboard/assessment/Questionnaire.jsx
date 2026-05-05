@@ -82,6 +82,12 @@ const [analysisLoading, setAnalysisLoading] = useState(false)
       .finally(() => setLoading(false))
   }, [user])
 
+useEffect(() => {
+  setSelectedOption(null)
+  setDisplayEmoji('')
+  setEmojiOpacity(0)
+  setEmojiScale(0.5)
+}, [currentQuestion])
   /* ── Memory grid auto-hide ── */
   useEffect(() => {
     if (activeQuestions[currentQuestion]?.type === 'memory') {
@@ -476,14 +482,14 @@ if (!currentQ) return null
         ) : (
           <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 content-center">
             {currentQ.options.map((option, index) => {
-              const isSelected = selectedOption === index || answers[currentQ.id] === option.value
+              const isSelected = selectedOption === index
               return (
                 <label
                   key={index}
                   className={`flex items-center justify-between p-4 border-2 rounded-xl cursor-pointer transition-all duration-300 group bg-white ${isSelected ? 'border-green-500 shadow-lg shadow-green-500/20 scale-[1.02]' : 'border-gray-100 hover:border-green-200 hover:bg-green-50/30 hover:shadow-md'}`}
                 >
                   <div className="flex items-center gap-3">
-                    <input type="radio" name={`question-${currentQ.id}`} value={option.value} checked={answers[currentQ.id] === option.value} onChange={() => handleAnswerSelect(currentQ.id, option, index)} className="sr-only" />
+                    <input type="radio" name={`question-${currentQ.id}`} value={option.value} checked={false} onChange={() => handleAnswerSelect(currentQ.id, option, index)} className="sr-only" />
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${isSelected ? 'border-green-500 bg-green-500' : 'border-gray-300 group-hover:border-green-400'}`}>
                       {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                     </div>

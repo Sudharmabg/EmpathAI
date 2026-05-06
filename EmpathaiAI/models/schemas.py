@@ -13,13 +13,17 @@ class ChatRequest(BaseModel):
     message: str
     history: list[ChatMessage] = []
 
+    # ── Image attachment (optional) ───────────────────────────────────────────
+    image_base64: Optional[str] = None      # Raw base64 image data
+    image_mime_type: Optional[str] = None   # e.g. "image/png"
+
 
 class ChatResponse(BaseModel):
     reply: str
-    detected_mode: str                      # "curriculum" | "mental_health"
+    detected_mode: str        # "curriculum" | "mental_health" | "casual"
 
-    # ── Support-Alert fields (None when not flagged) ──────────────────────────
-    is_flagged: bool = False                # True when AI detects a concerning message
-    flag_reason: Optional[str] = None      # e.g. "Suicidal ideation / Self-harm"
-    sentiment: Optional[str] = None        # e.g. "Highly Concerned", "Distressed"
-    severity: Optional[str] = None         # "critical" | "high" | "medium"
+    # ── Support-Alert fields ───────────────────────────────────────────────────
+    is_flagged: bool = False
+    flag_reason: Optional[str] = None
+    sentiment: Optional[str] = None
+    severity: Optional[str] = None

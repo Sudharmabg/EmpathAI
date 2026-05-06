@@ -299,17 +299,18 @@ def _get_temperature(history: list[dict], message: str) -> float:
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
-
 def get_chat_response(request: ChatRequest) -> ChatResponse:
-    # ── Step 1: Casual message check (no OpenAI tokens used) ─────────────────
-    casual_category = _detect_casual(request.message)
-    if casual_category:
-        casual_reply = _get_casual_response(casual_category, request.student_name)
-        return ChatResponse(
-            reply=casual_reply,
-            detected_mode="casual",
-            is_flagged=False,
-        )
+    # ── Step 1: Casual message check (skip if image is attached) ─────────────
+    has_image = bool(request.image_base64 and request.image_mime_type)
+    if not has_image:
+        casual_category = _detect_casual(request.message)
+        if casual_category:
+            casual_reply = _get_casual_response(casual_category, request.student_name)
+            return ChatResponse(
+                reply=casual_reply,
+                detected_mode="curriculum",
+                is_flagged=False,
+            )
 
     # ── Step 2: Cache check for curriculum questions ──────────────────────────
     if not request.history:
@@ -329,19 +330,42 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
     history_dicts = [{"role": m.role, "content": m.content} for m in request.history]
     trimmed_history = _trim_history(history_dicts)
 
+    # Build the user message — text only OR text + image (vision)
+    has_image = bool(request.image_base64 and request.image_mime_type)
+
+    if has_image:
+        user_content = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{request.image_mime_type};base64,{request.image_base64}",
+                    "detail": "high",
+                }
+            },
+            {
+                "type": "text",
+                "text": request.message or "Please analyse this image and help me."
+            }
+        ]
+    else:
+        user_content = request.message
+
     messages = (
         [{"role": "system", "content": system_prompt}]
         + trimmed_history
-        + [{"role": "user", "content": request.message}]
+        + [{"role": "user", "content": user_content}]
     )
 
     temperature = _get_temperature(trimmed_history, request.message)
 
+    # Use gpt-4o-mini for text, gpt-4o for vision (better image understanding)
+    model = "gpt-4o" if has_image else "gpt-4o-mini"
+
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model,
         messages=messages,
         temperature=temperature,
-        max_tokens=512,
+        max_tokens=2048,
     )
 
     raw_reply = response.choices[0].message.content.strip()

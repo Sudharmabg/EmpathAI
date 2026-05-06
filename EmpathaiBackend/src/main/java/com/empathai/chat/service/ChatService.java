@@ -36,8 +36,6 @@ public class ChatService {
     private final ChatUsageRepository usageRepo;
     private final UserRepository userRepository;
     private final WebClient.Builder webClientBuilder;
-
-    // ── NEW: injected to create support-alert flags ───────────────────────────
     private final FlaggedChatService flaggedChatService;
 
     @Value("${app.chat.daily-limit:20}")
@@ -46,22 +44,22 @@ public class ChatService {
     @Value("${chatbot.ai-service.url:http://localhost:8000}")
     private String aiServiceUrl;
 
-    // ── Send Message ─────────────────────────────────────────────────────────
-
     @Transactional
-    public ChatMessageResponse sendMessage(Long studentId, String message) {
+    public ChatMessageResponse sendMessage(
+            Long studentId,
+            String message,
+            String imageBase64,
+            String imageMimeType
+    ) {
         log.info("Processing sendMessage for studentId: {}", studentId);
 
-        // 1. Check daily limit
         checkDailyLimit(studentId);
 
-        // 2. Crisis Intercept (Hardcoded fallback for safety)
         if (isCrisisMessage(message)) {
             log.info("Crisis detected in message from studentId: {}", studentId);
             return handleCrisisResponse(studentId, message);
         }
 
-        // 3. Get or create the current week's session
         LocalDate weekStart = getCurrentWeekStart();
         ChatSession session = sessionRepo.findByStudentIdAndWeekStart(studentId, weekStart)
                 .orElseGet(() -> {
@@ -72,11 +70,9 @@ public class ChatService {
                             .build());
                 });
 
-        // 4. Load last 10 messages for context
         List<ChatMessage> recentMessages = messageRepo.findTop10BySessionIdOrderByCreatedAtDesc(session.getId());
         Collections.reverse(recentMessages);
 
-        // 5. Build history payload
         List<Map<String, String>> history = recentMessages.stream()
                 .map(m -> {
                     Map<String, String> msgMap = new java.util.HashMap<>();
@@ -86,17 +82,24 @@ public class ChatService {
                 })
                 .collect(Collectors.toList());
 
-        // 6. Get student info
         User user = userRepository.findById(studentId)
                 .orElseThrow(() -> new EmpathaiException("Student not found"));
-        String grade = (user instanceof Student s) ? (s.getClassName() != null ? s.getClassName() : "1st Standard") : "1st Standard";
+        String grade = (user instanceof Student s)
+                ? (s.getClassName() != null ? s.getClassName() : "1st Standard")
+                : "1st Standard";
 
-        // 7. Call Python AI service
         Map<String, Object> aiRequest = new java.util.HashMap<>();
         aiRequest.put("student_name", user.getName());
         aiRequest.put("grade", grade);
         aiRequest.put("message", message);
         aiRequest.put("history", history);
+
+        // ── Pass image data if present ────────────────────────────────────────
+        if (imageBase64 != null && !imageBase64.isEmpty()) {
+            aiRequest.put("image_base64", imageBase64);
+            aiRequest.put("image_mime_type", imageMimeType);
+            log.info("Image attached for studentId: {} mimeType: {}", studentId, imageMimeType);
+        }
 
         log.info("Calling AI service at: {}/chat", aiServiceUrl);
 
@@ -111,7 +114,7 @@ public class ChatService {
                             response -> response.bodyToMono(String.class)
                                     .map(body -> new EmpathaiException("AI service error: " + body)))
                     .bodyToMono(Map.class)
-                    .timeout(java.time.Duration.ofSeconds(15))
+                    .timeout(java.time.Duration.ofSeconds(60))
                     .block();
         } catch (Exception e) {
             log.error("AI service call failed: {}", e.getMessage());
@@ -128,32 +131,24 @@ public class ChatService {
 
         log.info("AI response received. Mode: {}", detectedMode);
 
-        // ── NEW: Support-Alert flag processing ───────────────────────────────
         Boolean isFlagged = (Boolean) aiResponse.get("is_flagged");
         if (Boolean.TRUE.equals(isFlagged)) {
             String flagReason = (String) aiResponse.get("flag_reason");
             String sentiment  = (String) aiResponse.get("sentiment");
             String severity   = (String) aiResponse.get("severity");
-
             log.info("Flag detected: studentId={} severity={} reason={}", studentId, severity, flagReason);
-
             try {
                 flaggedChatService.createFlag(
-                        session.getId(),
-                        studentId,
-                        message,
-                        flagReason  != null ? flagReason : "Unspecified",
-                        sentiment   != null ? sentiment  : "Concerned",
-                        severity    != null ? severity   : "medium"
+                        session.getId(), studentId, message,
+                        flagReason != null ? flagReason : "Unspecified",
+                        sentiment  != null ? sentiment  : "Concerned",
+                        severity   != null ? severity   : "medium"
                 );
             } catch (Exception ex) {
-                // Flag creation must NEVER break the student chat experience
                 log.error("Failed to create support alert flag: {}", ex.getMessage(), ex);
             }
         }
-        // ── END Support-Alert flag processing ─────────────────────────────────
 
-        // 8. Save student message
         messageRepo.save(ChatMessage.builder()
                 .sessionId(session.getId())
                 .role("user")
@@ -161,7 +156,6 @@ public class ChatService {
                 .detectedMode(detectedMode)
                 .build());
 
-        // 9. Save AI reply
         ChatMessage savedReply = messageRepo.save(ChatMessage.builder()
                 .sessionId(session.getId())
                 .role("assistant")
@@ -169,13 +163,9 @@ public class ChatService {
                 .detectedMode(detectedMode)
                 .build());
 
-        // 10. Increment daily usage
         incrementUsage(studentId);
-
         return toMessageResponse(savedReply);
     }
-
-    // ── Sessions ─────────────────────────────────────────────────────────────
 
     public List<ChatSessionResponse> getSessions(Long studentId) {
         return sessionRepo.findByStudentIdOrderByWeekStartDesc(studentId).stream()
@@ -190,9 +180,7 @@ public class ChatService {
     public ChatSessionResponse getSessionMessages(Long sessionId, Long studentId) {
         ChatSession session = sessionRepo.findById(sessionId)
                 .orElseThrow(() -> new EmpathaiException("Session not found"));
-        if (!session.getStudentId().equals(studentId)) {
-            throw new EmpathaiException("Access denied");
-        }
+        if (!session.getStudentId().equals(studentId)) throw new EmpathaiException("Access denied");
         List<ChatMessageResponse> messages = messageRepo.findBySessionIdOrderByCreatedAtAsc(sessionId)
                 .stream().map(this::toMessageResponse).collect(Collectors.toList());
         return ChatSessionResponse.builder()
@@ -203,35 +191,25 @@ public class ChatService {
                 .build();
     }
 
-    // ── Usage ─────────────────────────────────────────────────────────────────
-
     public ChatUsageResponse getUsage(Long studentId) {
         int used = usageRepo.findByStudentIdAndUsageDate(studentId, LocalDate.now())
                 .map(ChatUsage::getMessageCount).orElse(0);
         return ChatUsageResponse.builder()
-                .used(used)
-                .limit(dailyLimit)
-                .remaining(Math.max(0, dailyLimit - used))
+                .used(used).limit(dailyLimit).remaining(Math.max(0, dailyLimit - used))
                 .build();
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void checkDailyLimit(Long studentId) {
         int used = usageRepo.findByStudentIdAndUsageDate(studentId, LocalDate.now())
                 .map(ChatUsage::getMessageCount).orElse(0);
-        if (used >= dailyLimit) {
+        if (used >= dailyLimit)
             throw new EmpathaiException("Daily message limit of " + dailyLimit + " reached. Try again tomorrow!");
-        }
     }
 
     private void incrementUsage(Long studentId) {
         ChatUsage usage = usageRepo.findByStudentIdAndUsageDate(studentId, LocalDate.now())
                 .orElseGet(() -> ChatUsage.builder()
-                        .studentId(studentId)
-                        .usageDate(LocalDate.now())
-                        .messageCount(0)
-                        .build());
+                        .studentId(studentId).usageDate(LocalDate.now()).messageCount(0).build());
         usage.setMessageCount(usage.getMessageCount() + 1);
         usageRepo.save(usage);
     }
@@ -251,51 +229,30 @@ public class ChatService {
         LocalDate weekStart = getCurrentWeekStart();
         ChatSession session = sessionRepo.findByStudentIdAndWeekStart(studentId, weekStart)
                 .orElseGet(() -> sessionRepo.save(ChatSession.builder()
-                        .studentId(studentId)
-                        .weekStart(weekStart)
-                        .build()));
+                        .studentId(studentId).weekStart(weekStart).build()));
 
         String crisisReply = "I'm really sorry to hear that you're feeling this way. Please know that you're not alone, and there's help available. You can reach out to the iCall helpline at 9152987821. They are there to support you.";
 
-        messageRepo.save(ChatMessage.builder()
-                .sessionId(session.getId())
-                .role("user")
-                .content(message)
-                .detectedMode("mental_health")
-                .build());
+        messageRepo.save(ChatMessage.builder().sessionId(session.getId()).role("user")
+                .content(message).detectedMode("mental_health").build());
 
-        ChatMessage savedReply = messageRepo.save(ChatMessage.builder()
-                .sessionId(session.getId())
-                .role("assistant")
-                .content(crisisReply)
-                .detectedMode("mental_health")
-                .build());
+        ChatMessage savedReply = messageRepo.save(ChatMessage.builder().sessionId(session.getId())
+                .role("assistant").content(crisisReply).detectedMode("mental_health").build());
 
-        // ── NEW: Always flag hardcoded crisis intercepts as CRITICAL ──────────
         try {
-            flaggedChatService.createFlag(
-                    session.getId(),
-                    studentId,
-                    message,
-                    "Suicidal ideation / Self-harm",
-                    "Highly Concerned",
-                    "critical"
-            );
+            flaggedChatService.createFlag(session.getId(), studentId, message,
+                    "Suicidal ideation / Self-harm", "Highly Concerned", "critical");
         } catch (Exception ex) {
             log.error("Failed to create crisis flag: {}", ex.getMessage(), ex);
         }
-        // ──────────────────────────────────────────────────────────────────────
 
         return toMessageResponse(savedReply);
     }
 
     private ChatMessageResponse toMessageResponse(ChatMessage m) {
         return ChatMessageResponse.builder()
-                .id(m.getId())
-                .role(m.getRole())
-                .content(m.getContent())
-                .detectedMode(m.getDetectedMode())
-                .createdAt(m.getCreatedAt())
+                .id(m.getId()).role(m.getRole()).content(m.getContent())
+                .detectedMode(m.getDetectedMode()).createdAt(m.getCreatedAt())
                 .build();
     }
 }

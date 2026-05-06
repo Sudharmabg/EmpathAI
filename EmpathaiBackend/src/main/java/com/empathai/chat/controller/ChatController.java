@@ -35,7 +35,12 @@ public class ChatController {
             @RequestBody ChatMessageRequest request) {
         logger.info("sendMessage started for userId={}", currentUser.getId());
         try {
-            ChatMessageResponse response = chatService.sendMessage(currentUser.getId(), request.getMessage());
+            ChatMessageResponse response = chatService.sendMessage(
+                    currentUser.getId(),
+                    request.getMessage(),
+                    request.getImageBase64(),
+                    request.getImageMimeType()
+            );
             ResponseEntity<ChatMessageResponse> result = ResponseEntity.ok(response);
             logger.info("sendMessage completed successfully for userId={}", currentUser.getId());
             return result;

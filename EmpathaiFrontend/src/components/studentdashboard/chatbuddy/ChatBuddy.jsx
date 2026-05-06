@@ -371,6 +371,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   const [usage, setUsage] = useState(null)
   const [showCrisisModal, setShowCrisisModal] = useState(false)
   const [attachedFiles, setAttachedFiles] = useState([])
+  const [previewUrls, setPreviewUrls] = useState([])  // object URLs for image previews
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -420,15 +421,33 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     if (!text || isLoading) return
     const lower = text.toLowerCase()
     if (CRISIS_KEYWORDS.some(kw => lower.includes(kw))) { setShowCrisisModal(true); return }
-    const userMsg = { id: `u-${Date.now()}`, role: 'user', content: text, detectedMode: null, createdAt: new Date().toISOString() }
+
+    const imageFile = attachedFiles.find(f => f.type.startsWith('image/')) || null
+
+    const imagePreviewUrl = imageFile ? URL.createObjectURL(imageFile) : null
+    const userMsg = {
+      id: `u-${Date.now()}`,
+      role: 'user',
+      content: text,
+      detectedMode: null,
+      createdAt: new Date().toISOString(),
+      imagePreview: imagePreviewUrl,
+    }
     setMessages(prev => [...prev, userMsg])
     setInputMessage('')
     setIsLoading(true)
+    // Get first image file if any attached
+
+
     try {
-      const response = await chatService.sendMessage(text)
+      const response = await chatService.sendMessage(text, imageFile)
       const effectiveMode = response.isFlagged || response.is_flagged ? 'mental_health' : response.detectedMode
       const botMsg = { id: response.id ?? `b-${Date.now()}`, role: 'assistant', content: response.content, detectedMode: effectiveMode, createdAt: response.createdAt }
       setMessages(prev => [...prev, botMsg])
+      // Clear attachments after sending
+      previewUrls.forEach(url => { if (url) URL.revokeObjectURL(url) })
+      setAttachedFiles([])
+      setPreviewUrls([])
       loadUsage(); loadSessions()
     } catch (err) {
       setError(err.message || 'Failed to send message. Please try again.')
@@ -447,11 +466,20 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   }
 
   const handleFileSelect = (files) => {
-    setAttachedFiles(prev => [...prev, ...files])
+    const newFiles = files.filter(f => f.size <= 20 * 1024 * 1024) // 20MB limit
+    setAttachedFiles(prev => [...prev, ...newFiles])
+    // Create preview URLs for images
+    const urls = newFiles.map(f =>
+      f.type.startsWith('image/') ? URL.createObjectURL(f) : null
+    )
+    setPreviewUrls(prev => [...prev, ...urls])
   }
 
   const removeAttachedFile = (index) => {
+    // Revoke object URL to free memory
+    if (previewUrls[index]) URL.revokeObjectURL(previewUrls[index])
     setAttachedFiles(prev => prev.filter((_, i) => i !== index))
+    setPreviewUrls(prev => prev.filter((_, i) => i !== index))
   }
 
   const filteredSessions = sessions.filter(s =>
@@ -516,7 +544,17 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                           }}
                         >{msg.content}</ReactMarkdown>
                       ) : (
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                        <div>
+                          {msg.imagePreview && (
+                            <img
+                              src={msg.imagePreview}
+                              alt="Attached"
+                              className="rounded-xl mb-2 max-h-48 max-w-full object-cover border border-white/20 cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => window.open(msg.imagePreview, '_blank')}
+                            />
+                          )}
+                          {msg.content && <p className="whitespace-pre-wrap">{msg.content}</p>}
+                        </div>
                       )}
                     </div>
                     <div className={`flex items-center gap-2 mt-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -546,20 +584,37 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
 
             {/* Input row */}
             <div className="px-4 py-3 border-t border-gray-100 bg-white shrink-0">
-              {/* Attached files preview strip */}
+              {/* Attached files preview strip — image thumbnail style like ChatGPT */}
               {attachedFiles.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                   {attachedFiles.map((file, idx) => (
-                    <div key={idx} className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1 text-xs text-purple-700 max-w-[160px]">
-                      {file.type.startsWith('image/') ? (
-                        <PhotoIcon className="w-3.5 h-3.5 shrink-0" />
+                    <div key={idx} className="relative group">
+                      {previewUrls[idx] ? (
+                        /* Image thumbnail preview */
+                        <div className="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-purple-200 shadow-sm">
+                          <img
+                            src={previewUrls[idx]}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                          />
+                          {/* Remove button */}
+                          <button
+                            onClick={() => removeAttachedFile(idx)}
+                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors"
+                          >
+                            <XMarkIcon className="w-2.5 h-2.5 text-white" />
+                          </button>
+                        </div>
                       ) : (
-                        <PaperClipIcon className="w-3.5 h-3.5 shrink-0" />
+                        /* Non-image file chip */
+                        <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1 text-xs text-purple-700 max-w-[160px]">
+                          <PaperClipIcon className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{file.name}</span>
+                          <button onClick={() => removeAttachedFile(idx)} className="shrink-0 text-purple-400 hover:text-red-500 transition-colors ml-0.5">
+                            <XMarkIcon className="w-3 h-3" />
+                          </button>
+                        </div>
                       )}
-                      <span className="truncate">{file.name}</span>
-                      <button onClick={() => removeAttachedFile(idx)} className="shrink-0 text-purple-400 hover:text-red-500 transition-colors ml-0.5">
-                        <XMarkIcon className="w-3 h-3" />
-                      </button>
                     </div>
                   ))}
                 </div>

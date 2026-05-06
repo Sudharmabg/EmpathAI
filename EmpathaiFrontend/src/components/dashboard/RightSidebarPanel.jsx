@@ -3,11 +3,11 @@ import { getLatestMood, getLatestSleep, saveMoodEntry, saveSleepEntry } from '..
 import { completeIntervention } from '../../api/activitiesApi.js'
 
 const MOOD_OPTIONS = [
-    { emoji: '😊', label: 'Happy', value: 'happy' },
-    { emoji: '😐', label: 'Okay', value: 'neutral' },
-    { emoji: '😔', label: 'Sad', value: 'sad' },
+    { emoji: '😊', label: 'Happy',   value: 'happy'   },
+    { emoji: '😐', label: 'Okay',    value: 'neutral' },
+    { emoji: '😔', label: 'Sad',     value: 'sad'     },
     { emoji: '😰', label: 'Anxious', value: 'anxious' },
-    { emoji: '😡', label: 'Angry', value: 'angry' },
+    { emoji: '😡', label: 'Angry',   value: 'angry'   },
 ]
 
 const MOOD_EMOJI = { happy: '😊', neutral: '😐', sad: '😔', anxious: '😰', angry: '😡' }
@@ -16,9 +16,9 @@ const QUALITY_LABEL = { excellent: 'Excellent', good: 'Good', fair: 'Fair', poor
 
 const QUALITY_COLOR = {
     excellent: 'text-green-600 bg-green-50 border-green-200',
-    good: 'text-blue-600 bg-blue-50 border-blue-200',
-    fair: 'text-yellow-600 bg-yellow-50 border-yellow-200',
-    poor: 'text-red-600 bg-red-50 border-red-200',
+    good:      'text-blue-600 bg-blue-50 border-blue-200',
+    fair:      'text-yellow-600 bg-yellow-50 border-yellow-200',
+    poor:      'text-red-600 bg-red-50 border-red-200',
 }
 
 function getSleepLabel(h) {
@@ -38,32 +38,44 @@ function getSleepColor(h) {
 }
 
 function getSliderBg(h) {
-    const pct = ((h - 1) / 11) * 100
+    const pct    = ((h - 1) / 11) * 100
     const colors = h < 4 ? '#ef4444' : h < 6 ? '#f97316' : h < 7 ? '#eab308' : h < 9 ? '#22c55e' : '#3b82f6'
     return `linear-gradient(to right, ${colors} 0%, ${colors} ${pct}%, #e5e7eb ${pct}%, #e5e7eb 100%)`
+}
+
+// ── helper: returns today's date as "YYYY-MM-DD" ──────────────────────────────
+function todayStr() {
+    return new Date().toISOString().split('T')[0]
+}
+
+// ── helper: returns the date part of a backend timestamp ─────────────────────
+function entryDateStr(dateStr) {
+    if (!dateStr) return ''
+    return new Date(dateStr).toISOString().split('T')[0]
 }
 
 export default function RightSidebarPanel({ user }) {
     const [completedTasks, setCompletedTasks] = useState({})
 
-    // Mood
-    const [latestMood, setLatestMood] = useState(null)
-    const [moodLoading, setMoodLoading] = useState(true)
-    const [selectedMood, setSelectedMood] = useState(null)
-    const [moodNote, setMoodNote] = useState('')
-    const [moodSaving, setMoodSaving] = useState(false)
-    const [moodSaved, setMoodSaved] = useState(false)
+    // ── Mood ──────────────────────────────────────────────────────────────────
+    const [latestMood,    setLatestMood]    = useState(null)
+    const [moodLoading,   setMoodLoading]   = useState(true)
+    const [selectedMood,  setSelectedMood]  = useState(null)
+    const [moodNote,      setMoodNote]      = useState('')
+    const [moodSaving,    setMoodSaving]    = useState(false)
+    const [moodSaved,     setMoodSaved]     = useState(false)
 
-    // Sleep
-    const [latestSleep, setLatestSleep] = useState(null)
-    const [sleepLoading, setSleepLoading] = useState(true)
-    const [sleepHours, setSleepHours] = useState(7)
-    const [sleepQuality, setSleepQuality] = useState('')
-    const [sleepSaving, setSleepSaving] = useState(false)
-    const [sleepSaved, setSleepSaved] = useState(false)
+    // ── Sleep ─────────────────────────────────────────────────────────────────
+    const [latestSleep,   setLatestSleep]   = useState(null)
+    const [sleepLoading,  setSleepLoading]  = useState(true)
+    const [sleepHours,    setSleepHours]    = useState(7)
+    const [sleepQuality,  setSleepQuality]  = useState('')
+    const [sleepSaving,   setSleepSaving]   = useState(false)
+    const [sleepSaved,    setSleepSaved]    = useState(false)
 
     useEffect(() => {
         if (!user?.id) return
+
         getLatestMood(user.id)
             .then(data => setLatestMood(data))
             .catch(err => console.error('Failed to load latest mood:', err))
@@ -75,6 +87,17 @@ export default function RightSidebarPanel({ user }) {
             .finally(() => setSleepLoading(false))
     }, [user?.id])
 
+    // ── Was mood already logged TODAY? ────────────────────────────────────────
+    const moodLoggedToday = latestMood
+        ? entryDateStr(latestMood.loggedAt) === todayStr()
+        : false
+
+    // ── Was sleep already logged TODAY? ──────────────────────────────────────
+    const sleepLoggedToday = latestSleep
+        ? entryDateStr(latestSleep.loggedAt) === todayStr()
+        : false
+
+    // ── Save mood ─────────────────────────────────────────────────────────────
     const saveMood = async () => {
         if (!selectedMood || !user?.id) return
         setMoodSaving(true)
@@ -93,14 +116,15 @@ export default function RightSidebarPanel({ user }) {
         }
     }
 
+    // ── Save sleep ────────────────────────────────────────────────────────────
     const saveSleep = async () => {
         if (!sleepQuality || !user?.id) return
         setSleepSaving(true)
         const totalMinutes = Math.round(sleepHours * 60)
-        const bedMinutes = (7 * 60) - totalMinutes
-        const bedHour = Math.floor(((bedMinutes % 1440) + 1440) % 1440 / 60)
-        const bedMin = ((bedMinutes % 1440) + 1440) % 1440 % 60
-        const bedtime = (bedHour < 10 ? '0' : '') + bedHour + ':' + (bedMin < 10 ? '0' : '') + bedMin
+        const bedMinutes   = (7 * 60) - totalMinutes
+        const bedHour      = Math.floor(((bedMinutes % 1440) + 1440) % 1440 / 60)
+        const bedMin       = ((bedMinutes % 1440) + 1440) % 1440 % 60
+        const bedtime      = (bedHour < 10 ? '0' : '') + bedHour + ':' + (bedMin < 10 ? '0' : '') + bedMin
         try {
             const saved = await saveSleepEntry(user.id, bedtime, '07:00', sleepQuality)
             setLatestSleep(saved)
@@ -119,7 +143,7 @@ export default function RightSidebarPanel({ user }) {
     return (
         <div className="font-lora">
 
-            {/* Mood Tracker */}
+            {/* ── Mood Tracker ── */}
             <div className="mb-6">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                     <span className="w-2 h-2 bg-orange-400 rounded-full" />How are you feeling?
@@ -129,12 +153,25 @@ export default function RightSidebarPanel({ user }) {
                         <div className="flex justify-center py-3">
                             <div className="w-5 h-5 border-4 border-purple-200 border-t-purple-500 rounded-full animate-spin" />
                         </div>
+
+                    ) : moodLoggedToday ? (
+                        // ── Already logged today — show summary, hide form ──
+                        <div className="text-center py-2">
+                            <span className="text-3xl">{MOOD_EMOJI[latestMood?.mood] || '😊'}</span>
+                            <p className="text-sm font-bold text-gray-700 mt-2 capitalize">{latestMood?.mood}</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">Logged today ✓</p>
+                            <p className="text-[10px] text-gray-300 mt-2">Come back tomorrow!</p>
+                        </div>
+
                     ) : moodSaved ? (
+                        // ── Just saved — show confirmation ──
                         <div className="text-center py-2">
                             <span className="text-3xl">{MOOD_EMOJI[latestMood?.mood] || '😊'}</span>
                             <p className="text-sm text-green-600 font-bold mt-2">Mood saved!</p>
                         </div>
+
                     ) : (
+                        // ── Not yet logged today — show form ──
                         <div>
                             {latestMood && !selectedMood && (
                                 <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
@@ -153,7 +190,9 @@ export default function RightSidebarPanel({ user }) {
                                         key={mood.value}
                                         onClick={() => setSelectedMood(mood.value)}
                                         className={'flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all ' +
-                                            (selectedMood === mood.value ? 'bg-purple-100 scale-110 border-2 border-purple-400' : 'hover:bg-gray-50 border-2 border-transparent')}
+                                            (selectedMood === mood.value
+                                                ? 'bg-purple-100 scale-110 border-2 border-purple-400'
+                                                : 'hover:bg-gray-50 border-2 border-transparent')}
                                     >
                                         <span className="text-2xl">{mood.emoji}</span>
                                         <span className="text-[9px] font-bold text-gray-500">{mood.label}</span>
@@ -169,7 +208,11 @@ export default function RightSidebarPanel({ user }) {
                                         placeholder="Add a note (optional)"
                                         className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-300 focus:border-purple-400 outline-none"
                                     />
-                                    <button onClick={saveMood} disabled={moodSaving} className="w-full bg-black text-white text-xs font-bold py-2 rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors">
+                                    <button
+                                        onClick={saveMood}
+                                        disabled={moodSaving}
+                                        className="w-full bg-black text-white text-xs font-bold py-2 rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                                    >
                                         {moodSaving ? 'Saving...' : 'Save Mood'}
                                     </button>
                                 </div>
@@ -179,7 +222,7 @@ export default function RightSidebarPanel({ user }) {
                 </div>
             </div>
 
-            {/* Sleep Tracker */}
+            {/* ── Sleep Tracker ── */}
             <div className="mb-6">
                 <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                     <span className="w-2 h-2 bg-purple-400 rounded-full" />Last Night's Sleep
@@ -189,12 +232,30 @@ export default function RightSidebarPanel({ user }) {
                         <div className="flex justify-center py-3">
                             <div className="w-5 h-5 border-4 border-purple-200 border-t-purple-500 rounded-full animate-spin" />
                         </div>
+
+                    ) : sleepLoggedToday ? (
+                        // ── Already logged today — show summary, hide form ──
+                        <div className="text-center py-2">
+                            <span className="text-3xl">🌙</span>
+                            <p className="text-sm font-bold text-gray-700 mt-2">
+                                {latestSleep?.bedtime} → {latestSleep?.wakeTime}
+                            </p>
+                            <span className={'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border mt-1 ' +
+                                (QUALITY_COLOR[latestSleep?.quality] || 'text-gray-600 bg-gray-50 border-gray-200')}>
+                                {QUALITY_LABEL[latestSleep?.quality] || latestSleep?.quality}
+                            </span>
+                            <p className="text-[10px] text-gray-300 mt-2">Logged today ✓ — Come back tomorrow!</p>
+                        </div>
+
                     ) : sleepSaved ? (
+                        // ── Just saved — show confirmation ──
                         <div className="text-center py-2">
                             <span className="text-3xl">🌙</span>
                             <p className="text-sm text-green-600 font-bold mt-2">Sleep logged!</p>
                         </div>
+
                     ) : (
+                        // ── Not yet logged today — show form ──
                         <div>
                             {latestSleep && (
                                 <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
@@ -255,14 +316,14 @@ export default function RightSidebarPanel({ user }) {
                 </div>
             </div>
 
-            {/* Tasks */}
+            {/* ── Tasks ── */}
             <div className="mb-6">
                 <h3 className="font-semibold text-gray-900 mb-3">Tasks to be done</h3>
                 <div className="bg-white border-2 border-purple-200 rounded-xl p-4 space-y-3">
                     {[
                         { id: 'task1', text: 'Complete Math Chapter 5 exercises' },
-                        { id: 'task2', text: 'Science project submission' },
-                        { id: 'task3', text: 'English essay writing' },
+                        { id: 'task2', text: 'Science project submission'        },
+                        { id: 'task3', text: 'English essay writing'             },
                     ].map(task => (
                         <div key={task.id} className="flex items-center space-x-3">
                             <input
@@ -279,16 +340,16 @@ export default function RightSidebarPanel({ user }) {
                 </div>
             </div>
 
-            {/* Recent Activity */}
+            {/* ── Recent Activity ── */}
             <div>
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                     <span className="w-2 h-2 bg-primary rounded-full" />Recent Activity
                 </h3>
                 <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3 shadow-sm">
                     {[
-                        { bg: 'bg-green-50/50', border: 'border-green-100', iconBg: 'bg-green-100', icon: '✓', iconColor: 'text-green-600', title: 'Completed Math Quiz', time: '2 hours ago' },
-                        { bg: 'bg-blue-50/50', border: 'border-blue-100', iconBg: 'bg-blue-100', icon: '💬', iconColor: 'text-blue-600', title: 'ChatBuddy session', time: 'Yesterday' },
-                        { bg: 'bg-primary/5', border: 'border-primary/10', iconBg: 'bg-primary/10', icon: '📝', iconColor: 'text-primary', title: 'Feelings Explorer', time: '2 days ago' },
+                        { bg: 'bg-green-50/50',  border: 'border-green-100',    iconBg: 'bg-green-100',    icon: '✓',  iconColor: 'text-green-600', title: 'Completed Math Quiz',  time: '2 hours ago' },
+                        { bg: 'bg-blue-50/50',   border: 'border-blue-100',     iconBg: 'bg-blue-100',     icon: '💬', iconColor: 'text-blue-600',  title: 'ChatBuddy session',    time: 'Yesterday'   },
+                        { bg: 'bg-primary/5',    border: 'border-primary/10',   iconBg: 'bg-primary/10',   icon: '📝', iconColor: 'text-primary',   title: 'Feelings Explorer',   time: '2 days ago'  },
                     ].map((item, i) => (
                         <div key={i} className={'flex items-center space-x-3 p-3 rounded-xl border ' + item.bg + ' ' + item.border}>
                             <div className={'w-10 h-10 ' + item.iconBg + ' rounded-lg flex items-center justify-center shrink-0'}>

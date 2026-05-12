@@ -48,6 +48,7 @@ public class ChatService {
     public ChatMessageResponse sendMessage(
             Long studentId,
             String message,
+            List<String> images,
             String imageBase64,
             String imageMimeType
     ) {
@@ -93,6 +94,7 @@ public class ChatService {
         aiRequest.put("grade", grade);
         aiRequest.put("message", message);
         aiRequest.put("history", history);
+        aiRequest.put("images", images != null ? images : Collections.emptyList());
 
         // ── Pass image data if present ────────────────────────────────────────
         if (imageBase64 != null && !imageBase64.isEmpty()) {

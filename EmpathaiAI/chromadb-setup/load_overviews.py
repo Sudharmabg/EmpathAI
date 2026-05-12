@@ -2,13 +2,27 @@ import chromadb
 import pandas as pd
 from chromadb.utils import embedding_functions
 
-client = chromadb.PersistentClient(path="./chroma_store")
-ef = embedding_functions.DefaultEmbeddingFunction()
+import logging
 
-collection = client.get_or_create_collection(
-    name="psychologist_overviews",
-    embedding_function=ef
-)
+# Configure logging for the setup script
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
+logger = logging.getLogger("chroma_setup")
+
+client = chromadb.PersistentClient(path="./chroma_store")
+
+try:
+    logger.info("Initializing DefaultEmbeddingFunction (all-MiniLM-L6-v2)...")
+    ef = embedding_functions.DefaultEmbeddingFunction()
+    
+    logger.info("Connecting to collection 'psychologist_overviews'...")
+    collection = client.get_or_create_collection(
+        name="psychologist_overviews",
+        embedding_function=ef
+    )
+except Exception as e:
+    logger.error(f"Failed to initialize ChromaDB or Embedding Function: {str(e)}")
+    logger.error("TIP: This usually happens due to network issues while downloading the model from Hugging Face.")
+    raise
 
 df = pd.read_excel("Empath.AI pitched for Std 8th.xlsx", sheet_name="Interpretations")
 

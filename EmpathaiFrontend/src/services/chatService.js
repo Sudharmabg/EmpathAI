@@ -35,17 +35,19 @@ function fileToBase64(file) {
 
 const chatService = {
   /**
-   * Send a student message with optional image attachment.
+   * Send a student message with optional image attachment(s).
    * @param {string} message - Text message
-   * @param {File|null} imageFile - Optional image file to send
+   * @param {File|string[]|null} imagesOrFile - Single image File or array of base64 strings
    */
-  sendMessage: async (message, imageFile = null) => {
+  sendMessage: async (message, imagesOrFile = []) => {
     const payload = { message }
 
-    if (imageFile) {
-      const base64 = await fileToBase64(imageFile)
+    if (Array.isArray(imagesOrFile)) {
+      payload.images = imagesOrFile
+    } else if (imagesOrFile instanceof File) {
+      const base64 = await fileToBase64(imagesOrFile)
       payload.imageBase64 = base64
-      payload.imageMimeType = imageFile.type  // e.g. "image/png"
+      payload.imageMimeType = imagesOrFile.type
     }
 
     return apiPost('/api/chat/message', payload)

@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.*;
 import java.util.List;
 
 @Entity
-@Table(name = "modules")
+@Table(name = "learning_modules")
 @Data
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor

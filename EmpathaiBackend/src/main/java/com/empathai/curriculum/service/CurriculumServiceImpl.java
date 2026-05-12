@@ -247,12 +247,14 @@ public class CurriculumServiceImpl implements CurriculumService {
 
         QuizQuestion q = new QuizQuestion();
         q.setSubTopic(subTopic);
+        q.setModule(subTopic.getModule());
         q.setQuestionText(request.getQuestionText());
         q.setOptionA(request.getOptionA());
         q.setOptionB(request.getOptionB());
         q.setOptionC(request.getOptionC());
         q.setOptionD(request.getOptionD());
         q.setCorrectAnswer(request.getCorrectAnswer());
+        q.setCorrectAnswerIndex(request.getCorrectAnswer());
         q.setExplanation(request.getExplanation());
         q.setCreatedBy(request.getCreatedBy());
         q.setUpdatedBy(request.getCreatedBy());
@@ -269,11 +271,13 @@ public class CurriculumServiceImpl implements CurriculumService {
                         "Quiz question not found with id: " + id, HttpStatus.NOT_FOUND));
 
         q.setQuestionText(request.getQuestionText());
+        q.setModule(q.getSubTopic().getModule());
         q.setOptionA(request.getOptionA());
         q.setOptionB(request.getOptionB());
         q.setOptionC(request.getOptionC());
         q.setOptionD(request.getOptionD());
         q.setCorrectAnswer(request.getCorrectAnswer());
+        q.setCorrectAnswerIndex(request.getCorrectAnswer());
         q.setExplanation(request.getExplanation());
         q.setUpdatedBy(request.getUpdatedBy());
         applyQuizImage(q, questionImage);

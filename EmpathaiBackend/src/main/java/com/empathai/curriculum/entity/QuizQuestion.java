@@ -22,6 +22,10 @@ public class QuizQuestion extends BaseEntity {
     @JsonBackReference("subtopic-quiz")
     private SubTopic subTopic;
 
+    @ManyToOne
+    @JoinColumn(name = "module_id")
+    private Module module;
+
     @Column(name = "question_text", nullable = false, columnDefinition = "TEXT")
     private String questionText;
 
@@ -39,6 +43,9 @@ public class QuizQuestion extends BaseEntity {
 
     @Column(name = "correct_answer", nullable = false)
     private Integer correctAnswer;
+
+    @Column(name = "correct_answer_index")
+    private Integer correctAnswerIndex;
 
     @Column(columnDefinition = "TEXT")
     private String explanation;

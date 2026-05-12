@@ -12,6 +12,7 @@ class ChatRequest(BaseModel):
     grade: str
     message: str
     history: list[ChatMessage] = []
+    images: list[str] = []
 
     # ── Image attachment (optional) ───────────────────────────────────────────
     image_base64: Optional[str] = None      # Raw base64 image data

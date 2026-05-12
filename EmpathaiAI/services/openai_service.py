@@ -1,6 +1,7 @@
 import os
 import re
 import random
+import logging
 import tiktoken
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -8,10 +9,18 @@ from models.schemas import ChatRequest, ChatResponse
 from services.cache_service import get_cached, add_to_cache
 
 load_dotenv()
+logger = logging.getLogger("openai_service")
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-_enc = tiktoken.get_encoding("cl100k_base")
+_enc = None
 HISTORY_TOKEN_BUDGET = 2000
+
+def get_encoder():
+    global _enc
+    if _enc is None:
+        import tiktoken
+        _enc = tiktoken.get_encoding("cl100k_base")
+    return _enc
 
 # ── Casual message handler (zero OpenAI tokens used) ─────────────────────────
 
@@ -178,8 +187,12 @@ FULL SOLUTION FORMAT (only when triggered):
 6. Add a one-line conceptual explanation of why the method works.
 
 Use LaTeX for all math expressions:
-  - Inline: $expression$ (e.g. $x + y = 10$)
-  - Block:  $$expression$$ (e.g. $$2x - y = 3$$)
+  - Inline: $x+y=10$ (No spaces between $ and the expression).
+  - Block:  
+    $$
+    expression
+    $$
+    (Put block math on its own line with $$ on separate lines).
 
 - Add the tag [MODE:curriculum] at the very end of your response (hidden from student).
 
@@ -238,7 +251,7 @@ def _trim_history(history: list[dict]) -> list[dict]:
     total = 0
     trimmed = []
     for msg in reversed(history):
-        tokens = len(_enc.encode(msg["content"]))
+        tokens = len(get_encoder().encode(msg["content"]))
         if total + tokens > HISTORY_TOKEN_BUDGET:
             break
         trimmed.insert(0, msg)
@@ -300,15 +313,16 @@ def _get_temperature(history: list[dict], message: str) -> float:
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 def get_chat_response(request: ChatRequest) -> ChatResponse:
-    # ── Step 1: Casual message check (skip if image is attached) ─────────────
-    has_image = bool(request.image_base64 and request.image_mime_type)
-    if not has_image:
+    # ── Step 1: Casual message check (skip if images are attached) ───────────
+    has_images = bool(request.images and len(request.images) > 0) or bool(request.image_base64)
+    if not has_images:
         casual_category = _detect_casual(request.message)
         if casual_category:
+            logger.info(f"Casual message detected: '{casual_category}' for student {request.student_name}")
             casual_reply = _get_casual_response(casual_category, request.student_name)
             return ChatResponse(
                 reply=casual_reply,
-                detected_mode="curriculum",
+                detected_mode="casual",
                 is_flagged=False,
             )
 
@@ -316,13 +330,17 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
     if not request.history:
         cached = get_cached(request.message)
         if cached:
+            logger.info(f"Cache hit for message from {request.student_name}")
             return ChatResponse(
                 reply=cached["answer"],
                 detected_mode=cached["mode"],
                 is_flagged=False,
             )
+        else:
+            logger.debug(f"Cache miss for message from {request.student_name}")
 
     # ── Step 3: Call OpenAI for academic/emotional messages ───────────────────
+    logger.info(f"Calling OpenAI for {request.student_name}...")
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
         name=request.student_name,
         grade=request.grade
@@ -330,25 +348,29 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
     history_dicts = [{"role": m.role, "content": m.content} for m in request.history]
     trimmed_history = _trim_history(history_dicts)
 
-    # Build the user message — text only OR text + image (vision)
-    has_image = bool(request.image_base64 and request.image_mime_type)
-
-    if has_image:
-        user_content = [
-            {
+    # Build content for the current user message
+    user_content = [{"type": "text", "text": request.message or "Please analyse this image and help me."}]
+    
+    # Handle multiple images from request.images (stashed)
+    if request.images:
+        for img_base64 in request.images:
+            url = img_base64 if img_base64.startswith("data:") else f"data:image/jpeg;base64,{img_base64}"
+            user_content.append({
                 "type": "image_url",
-                "image_url": {
-                    "url": f"data:{request.image_mime_type};base64,{request.image_base64}",
-                    "detail": "high",
-                }
-            },
-            {
-                "type": "text",
-                "text": request.message or "Please analyse this image and help me."
+                "image_url": {"url": url, "detail": "high"}
+            })
+            
+    # Handle single image from upstream fields
+    if request.image_base64 and request.image_mime_type:
+        user_content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:{request.image_mime_type};base64,{request.image_base64}",
+                "detail": "high",
             }
-        ]
-    else:
-        user_content = request.message
+        })
+
+    has_images = len(user_content) > 1
 
     messages = (
         [{"role": "system", "content": system_prompt}]
@@ -359,7 +381,7 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
     temperature = _get_temperature(trimmed_history, request.message)
 
     # Use gpt-4o-mini for text, gpt-4o for vision (better image understanding)
-    model = "gpt-4o" if has_image else "gpt-4o-mini"
+    model = "gpt-4o" if has_images else "gpt-4o-mini"
 
     response = client.chat.completions.create(
         model=model,
@@ -367,6 +389,7 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
         temperature=temperature,
         max_tokens=2048,
     )
+    logger.info(f"OpenAI call completed for {request.student_name}")
 
     raw_reply = response.choices[0].message.content.strip()
     flag_data = _parse_flags(raw_reply)

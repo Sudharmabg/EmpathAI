@@ -38,6 +38,7 @@ public class ChatController {
             ChatMessageResponse response = chatService.sendMessage(
                     currentUser.getId(),
                     request.getMessage(),
+                    request.getImages(),
                     request.getImageBase64(),
                     request.getImageMimeType()
             );

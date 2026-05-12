@@ -36,9 +36,6 @@ export default function AdminPanel({ user, onLogout }) {
     }
     return item
   }).filter(item => {
-    // TODO: Unhide curriculum tab when ready
-    if (item.id === 'curriculum') return false
-
     const role = user?.role
 
     // Schedule Planner — visible to SUPER_ADMIN, SCHOOL_ADMIN, TEACHER only

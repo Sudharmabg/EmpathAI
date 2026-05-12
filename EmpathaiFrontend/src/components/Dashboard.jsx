@@ -9,6 +9,7 @@ import ChatBuddy from './studentdashboard/chatbuddy/ChatBuddy'
 import Activities from './studentdashboard/activity/Activities'
 import Questionnaire from './studentdashboard/assessment/Questionnaire'
 import Schedule from './studentdashboard/schedule/Schedule'
+import Curriculum from './studentdashboard/curriculum/Curriculum'
 import OverviewPanel from './dashboard/OverviewPanel'
 import RightSidebarPanel from './dashboard/RightSidebarPanel'
 import BadgesModal from './dashboard/BadgesModal'
@@ -63,6 +64,7 @@ export default function Dashboard({ user, onLogout }) {
     { id: 'chatbuddy', name: 'ChatBuddy', icon: ChatBubbleLeftRightIcon },
     { id: 'schedule', name: 'My Schedule', icon: CalendarIcon },
     { id: 'questionnaire', name: 'Feelings Explorer', icon: ClipboardDocumentListIcon },
+    { id: 'curriculum', name: 'Curriculum', icon: BookOpenIcon },
     { id: 'activities', name: 'Activities', icon: PuzzlePieceIcon },
   ]
 
@@ -250,6 +252,7 @@ export default function Dashboard({ user, onLogout }) {
             )
           )}
           {activeTab === 'questionnaire' && <Questionnaire user={user} />}
+          {activeTab === 'curriculum' && <Curriculum user={user} setActiveTab={setActiveTab} />}
           {activeTab === 'activities' && <Activities user={user} />}
         </main>
 

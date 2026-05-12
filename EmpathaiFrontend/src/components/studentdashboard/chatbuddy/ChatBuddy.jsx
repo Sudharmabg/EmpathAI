@@ -413,8 +413,16 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   const handleNewChat = () => {
     setMessages([{ id: 'welcome', role: 'assistant', content: `Hi again, **${user?.firstName || 'there'}**! 😊 What would you like help with?`, detectedMode: null, createdAt: null }])
     setActiveSessionId(null)
+    setAttachedFiles([])
     inputRef.current?.focus()
   }
+
+  const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
 
   const handleSendMessage = async () => {
     const text = inputMessage.trim()
@@ -434,13 +442,22 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
       imagePreview: imagePreviewUrl,
     }
     setMessages(prev => [...prev, userMsg])
+    const filesToUpload = [...attachedFiles]
     setInputMessage('')
+    setAttachedFiles([])
     setIsLoading(true)
     // Get first image file if any attached
 
 
     try {
-      const response = await chatService.sendMessage(text, imageFile)
+      // Convert images to base64 strings
+      const imageBase64s = await Promise.all(
+        filesToUpload
+          .filter(f => f.type.startsWith('image/'))
+          .map(f => fileToBase64(f))
+      )
+
+      const response = await chatService.sendMessage(text, imageBase64s)
       const effectiveMode = response.isFlagged || response.is_flagged ? 'mental_health' : response.detectedMode
       const botMsg = { id: response.id ?? `b-${Date.now()}`, role: 'assistant', content: response.content, detectedMode: effectiveMode, createdAt: response.createdAt }
       setMessages(prev => [...prev, botMsg])
@@ -533,14 +550,14 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                           remarkPlugins={[remarkMath]}
                           rehypePlugins={[rehypeKatex]}
                           components={{
-                            p: ({ children }) => <p className="mb-0 last:mb-0 inline">{children}</p>,
-                            ul: ({ children }) => <ul className="list-disc list-inside space-y-2 my-1">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-2 my-1">{children}</ol>,
-                            li: ({ children }) => <li className="leading-snug">{children}</li>,
-                            strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                            p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-gray-800">{children}</p>,
+                            ul: ({ children }) => <ul className="list-disc list-inside space-y-2 my-3 text-gray-800">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-2 my-3 text-gray-800">{children}</ol>,
+                            li: ({ children }) => <li className="mb-1">{children}</li>,
+                            strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
                             code: ({ inline, children }) => inline
-                              ? <code className="bg-gray-100 text-purple-700 px-1 rounded text-xs font-mono">{children}</code>
-                              : <pre className="bg-gray-100 p-2 rounded text-xs overflow-x-auto my-1.5"><code>{children}</code></pre>,
+                              ? <code className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs font-mono border border-purple-100">{children}</code>
+                              : <div className="my-4 rounded-xl overflow-hidden border border-gray-200 shadow-sm"><pre className="bg-gray-900 p-4 text-xs overflow-x-auto text-gray-100 font-mono"><code>{children}</code></pre></div>,
                           }}
                         >{msg.content}</ReactMarkdown>
                       ) : (

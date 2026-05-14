@@ -210,7 +210,6 @@ public class AnswerOptionService {
         );
     }
 
-    // ── Delete ────────────────────────────────────────────────────────────────
 
     @Transactional
     public void deleteByQuestionId(Long questionId) {

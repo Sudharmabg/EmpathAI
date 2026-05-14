@@ -17,7 +17,6 @@ public class AnswerOptionResponse {
     private String overallMeaning;
     private String interpretation;
     private String tag;
-
     private String cachedBullets;
     private LocalDateTime bulletsGeneratedAt;
     private LocalDateTime createdAt;

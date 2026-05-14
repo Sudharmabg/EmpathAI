@@ -51,7 +51,6 @@ public class AssessmentResponse {
     private Integer age;
     @Column(name = "school_name")
     private String schoolName;
-
     @Column(name = "submitted_at", updatable = false)
     private LocalDateTime submittedAt;
 

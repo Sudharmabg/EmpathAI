@@ -29,7 +29,6 @@ public interface AssessmentResponseRepository extends JpaRepository<AssessmentRe
     List<AssessmentResponse> findByGroupNameIgnoreCaseOrClassNameIgnoreCaseOrSchoolNameIgnoreCase(
             String groupName, String className, String schoolName
     );
-
     Optional<AssessmentResponse> findByStudentIdAndQuestionId(Long studentId, Long questionId);
 
     @Modifying

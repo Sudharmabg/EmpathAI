@@ -14,7 +14,6 @@ public class GroupResponse {
     private Boolean isDefault;
     private String description;
     private LocalDateTime createdAt;
-
     private LocalDateTime updatedAt;
     private String className;
 }

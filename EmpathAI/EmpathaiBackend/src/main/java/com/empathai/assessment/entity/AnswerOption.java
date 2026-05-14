@@ -42,9 +42,6 @@ public class AnswerOption {
     @Column(name = "tag", length = 100)
     private String tag;
 
-    // ── Cache fields — managed explicitly by AnswerOptionService ─────────────
-    // DO NOT clear these in @PreUpdate — the service controls cache invalidation
-    // explicitly via invalidateCacheForQuestion() when interpretation changes.
     @Column(name = "cached_bullets", columnDefinition = "TEXT")
     private String cachedBullets;
 
@@ -66,11 +63,6 @@ public class AnswerOption {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
-        // ✅ FIXED: Do NOT clear cachedBullets here.
-        // Previously this wiped the cache on EVERY save (including when
-        // generateBulletsAsync() called answerOptionRepo.save(option) to store
-        // the freshly generated bullets — causing an infinite wipe loop).
-        // Cache is invalidated explicitly in AnswerOptionService.saveOption()
-        // only when the psychologist changes interpretation content.
+
     }
 }

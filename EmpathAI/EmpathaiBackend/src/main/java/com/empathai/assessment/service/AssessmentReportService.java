@@ -243,8 +243,8 @@ public class AssessmentReportService {
             Format:
             {
               "summary": "2 warm supportive sentences about the student.",
-              "strengths": ["3-4 word phrase", "3-4 word phrase"],
-              "improvements": ["3-4 word phrase", "3-4 word phrase"],
+              "strengths": ["6-8 word phrase", "6-8 word phrase"],
+              "improvements": ["6-8 word phrase", "6-8 word phrase"],
               "tip": "3-4 word action phrase"
             }
             STRICT RULES:

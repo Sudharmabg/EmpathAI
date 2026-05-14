@@ -20,10 +20,8 @@ public interface AnswerOptionRepository extends JpaRepository<AnswerOption, Long
 
     Optional<AnswerOption> findByQuestionIdAndOptionLabel(Long questionId, String optionLabel);
 
-
     @Query("SELECT ao FROM AnswerOption ao WHERE ao.questionId = :qid AND ao.cachedBullets IS NULL")
     List<AnswerOption> findUncachedByQuestionId(@Param("qid") Long questionId);
-
 
     @Query("SELECT ao FROM AnswerOption ao WHERE ao.cachedBullets IS NULL")
     List<AnswerOption> findAllUncached();

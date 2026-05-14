@@ -27,6 +27,9 @@ const emojiSequences = {
   sad:     ['😢', '💜', '🌧️'],
 }
 
+
+
+
 export default function Questionnaire ({ user }) {
   const [currentQuestion, setCurrentQuestion]   = useState(0)
   const [answers, setAnswers]                   = useState({})
@@ -45,7 +48,6 @@ export default function Questionnaire ({ user }) {
 
   const gridNumbers = [3, 7, 2, 9]
 
-  /* ── Fetch questions ── */
   useEffect(() => {
     const className =
       user?.className    ||

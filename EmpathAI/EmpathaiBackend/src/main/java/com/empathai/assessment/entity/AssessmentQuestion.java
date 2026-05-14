@@ -40,7 +40,6 @@ public class AssessmentQuestion {
     @Column(name = "option_d")
     private String optionD;
 
-    /** Psychologist-defined domain, e.g. "Mood assessment", "Emotional Well-being" — col B */
     @Column(name = "domain", length = 200)
     private String domain;
 

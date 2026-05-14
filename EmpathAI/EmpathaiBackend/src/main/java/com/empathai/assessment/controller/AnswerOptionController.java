@@ -115,7 +115,7 @@ public class AnswerOptionController {
         return ResponseEntity.ok(reportService.getReportsByGroup(groupId));
     }
 
-    // ── Psychologist Semantic Search ──────────────────────────────────────────
+
 
 
     @PostMapping("/search")

@@ -20,15 +20,7 @@ public class ChromaDBService {
 
     private static final String STUDENT_PROFILES_COLLECTION = "student_assessment_profiles";
 
-    /**
-     * Upsert a student's completed assessment report as an embedded document.
-     * Used for teacher/psychologist semantic search:
-     *   e.g. "students struggling with emotional regulation in Class 8th"
-     *
-     * @param docId    unique ID for the document, e.g. "report_42"
-     * @param document full text to embed (summary + bullets + student metadata)
-     * @param metadata key-value pairs stored alongside the vector for filtering
-     */
+
     public void upsertDocument(String docId, String document, Map<String, String> metadata) {
         try {
             // Ensure collection exists first
@@ -52,14 +44,7 @@ public class ChromaDBService {
         }
     }
 
-    /**
-     * Semantic search over student profiles.
-     * Returns list of matching student metadata maps (not full documents).
-     *
-     * @param queryText natural language query by teacher/psychologist
-     * @param topN      number of closest matches to return
-     * @param whereFilter optional ChromaDB where clause, e.g. {"className": "Class 8th"}
-     */
+
     public List<Map<String, Object>> searchStudentProfiles(
             String queryText, int topN, Map<String, Object> whereFilter) {
         try {

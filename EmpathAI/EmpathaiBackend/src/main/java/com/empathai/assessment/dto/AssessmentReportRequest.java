@@ -11,7 +11,7 @@ import java.util.List;
 @AllArgsConstructor
 public class AssessmentReportRequest {
 
-    private String studentId;       // email / UUID
+    private String studentId;
     private String studentName;
     private Long   groupId;
     private String groupName;

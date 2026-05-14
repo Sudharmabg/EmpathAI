@@ -10,7 +10,6 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AssessmentReportResponse {
-
     private Long        id;
     private String      studentId;
     private String      studentName;
@@ -18,13 +17,8 @@ public class AssessmentReportResponse {
     private String      groupName;
     private String      className;
     private LocalDate   sessionDate;
-
-
     private String      summaryText;
-
-
     private String      bulletPoints;
-
     private Boolean     chromaSynced;
     private LocalDateTime createdAt;
 }

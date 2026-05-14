@@ -261,7 +261,7 @@ public class AssessmentController {
 
     // ── AI Summary ────────────────────────────────────────────────────────────
     // Called by the admin response sheet to show AI summary per student.
-    // Frontend: GET /api/responses/summary/{studentId}?groupId=123
+
 
     @GetMapping("/responses/summary/{studentId}")
     public ResponseEntity<Map<String, Object>> getStudentSummary(

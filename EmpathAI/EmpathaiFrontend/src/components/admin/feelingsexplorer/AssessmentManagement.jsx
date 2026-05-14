@@ -992,7 +992,7 @@ export default function AssessmentManagement() {
                 </div>
             )}
 
-            {/* Create Group Modal */}
+            {/* Create Group Modal new added */}
             {isGroupModalOpen && (
                 <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="group-modal-title" role="dialog" aria-modal="true">
                     <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -1032,6 +1032,7 @@ export default function AssessmentManagement() {
                                         </div>
                                     </div>
                                 </div>
+                                
                             </div>
                             <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
                                 <button

@@ -40,7 +40,7 @@ public class AssessmentReport {
     private Long id;
 
     @Column(name = "student_id")
-    private String studentId;   // email or UUID from frontend
+    private String studentId;
 
     @Column(name = "student_name")
     private String studentName;
@@ -65,7 +65,6 @@ public class AssessmentReport {
 
     @Column(name = "bullet_points", columnDefinition = "TEXT")
     private String bulletPoints;
-
 
     @Builder.Default
     @Column(name = "chroma_synced")

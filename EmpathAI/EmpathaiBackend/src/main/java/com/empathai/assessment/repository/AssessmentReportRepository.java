@@ -12,7 +12,6 @@ import java.util.Optional;
 
 @Repository
 public interface AssessmentReportRepository extends JpaRepository<AssessmentReport, Long> {
-
     Optional<AssessmentReport> findByStudentIdAndGroupIdAndSessionDate(
             String studentId, Long groupId, LocalDate sessionDate);
 

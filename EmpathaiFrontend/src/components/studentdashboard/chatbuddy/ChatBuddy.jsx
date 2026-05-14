@@ -551,9 +551,9 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                           rehypePlugins={[rehypeKatex]}
                           components={{
                             p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-gray-800">{children}</p>,
-                            ul: ({ children }) => <ul className="list-disc list-inside space-y-2 my-3 text-gray-800">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-decimal list-inside space-y-2 my-3 text-gray-800">{children}</ol>,
-                            li: ({ children }) => <li className="mb-1">{children}</li>,
+                            ul: ({ children }) => <ul className="list-disc pl-4 space-y-2 my-3 text-gray-800">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal pl-4 space-y-2 my-3 text-gray-800">{children}</ol>,
+                            li: ({ children }) => <li className="leading-relaxed pl-1">{children}</li>,
                             strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
                             code: ({ inline, children }) => inline
                               ? <code className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs font-mono border border-purple-100">{children}</code>

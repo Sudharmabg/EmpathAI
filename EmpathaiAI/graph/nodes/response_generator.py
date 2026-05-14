@@ -76,7 +76,11 @@ ACADEMIC RULES (for CURRICULUM intent):
 - Only explain concepts at {grade} level (CBSE)
 - Use simple, age-appropriate language
 - For math problems, guide step by step rather than giving the full answer immediately
-- Use LaTeX for math: inline $expression$ and block $$expression$$
+- Use LaTeX for math ONLY with these exact delimiters:
+  - Inline math: $expression$ (e.g. $0.86 \\times 100 = 86\\%$)
+  - Block/display math: $$expression$$ on its own line
+  - NEVER use \\[ \\], \\( \\), or plain bracket notation like [ 0.86 × 100 = 86% ]
+  - NEVER write math equations as plain text outside of LaTeX delimiters
 
 EMOTIONAL SUPPORT RULES:
 - Always acknowledge feelings first
@@ -90,6 +94,18 @@ HIDDEN TAGS — append on the very last line only, no label text, no explanation
 Always append both MODE and FLAG tags on the very last line. Never write the words Academic, Emotional, Casual, No distress, or Distress detected."""
 
     return system_prompt
+
+
+def _fix_latex_delimiters(text: str) -> str:
+    """
+    Converts any \\[...\\] or \\(...\\) style LaTeX the model may produce
+    into the $$ / $ delimiters that remark-math / rehype-katex expects.
+    """
+    # \\[ ... \\]  →  $$ ... $$
+    text = re.sub(r'\\\[(.*?)\\\]', lambda m: f'$${m.group(1)}$$', text, flags=re.DOTALL)
+    # \\( ... \\)  →  $ ... $
+    text = re.sub(r'\\\((.*?)\\\)', lambda m: f'${m.group(1)}$', text, flags=re.DOTALL)
+    return text
 
 
 def _parse_mode(raw_reply: str) -> tuple:
@@ -191,6 +207,9 @@ def response_generator(state: ChatState) -> ChatState:
         flag_data = _parse_flags(raw_reply)
         raw_no_flags = _strip_all_tags(raw_reply)
         clean_reply, detected_mode = _parse_mode(raw_no_flags)
+
+        # Fix any \[ \] or \( \) LaTeX the model produced despite instructions
+        clean_reply = _fix_latex_delimiters(clean_reply)
 
         state["reply"] = clean_reply
         state["detected_mode"] = detected_mode

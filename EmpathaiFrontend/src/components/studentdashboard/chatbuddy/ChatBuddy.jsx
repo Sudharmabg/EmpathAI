@@ -18,7 +18,6 @@ import {
   CheckIcon,
   PlusIcon,
   PaperClipIcon,
-  PhotoIcon,
   GlobeAltIcon,
   MagnifyingGlassCircleIcon
 } from '@heroicons/react/24/outline'
@@ -39,15 +38,24 @@ function formatSessionLabel(session) {
 
 function formatRelative(iso) {
   if (!iso) return ''
-  const then = new Date(iso)
-  const now = new Date()
-  const diffMs = now - then
-  const diffH = Math.floor(diffMs / 36e5)
+  const diffH = Math.floor((new Date() - new Date(iso)) / 36e5)
   if (diffH < 1) return 'Just now'
   if (diffH < 24) return `${diffH}h ago`
   const diffD = Math.floor(diffH / 24)
-  if (diffD === 1) return 'Yesterday'
-  return `${diffD} days ago`
+  return diffD === 1 ? 'Yesterday' : `${diffD} days ago`
+}
+
+/**
+ * Build a displayable image src from a message.
+ * - Fresh messages use a blob URL (imagePreview)
+ * - History-loaded messages use base64 (imageBase64 + imageMimeType)
+ */
+function resolveImageSrc(msg) {
+  if (msg.imagePreview) return msg.imagePreview
+  if (msg.imageBase64 && msg.imageMimeType) {
+    return `data:${msg.imageMimeType};base64,${msg.imageBase64}`
+  }
+  return null
 }
 
 const CRISIS_KEYWORDS = ['suicide', 'kill myself', 'end my life', 'want to die', 'self harm']
@@ -116,20 +124,15 @@ function UsageBar({ usage }) {
   )
 }
 
-
 // ─── Attachment / Plus Button ─────────────────────────────────────────────────
 function AttachmentButton({ onFileSelect, disabled }) {
   const [open, setOpen] = useState(false)
-  const [files, setFiles] = useState([])
   const fileInputRef = useRef(null)
   const dropdownRef = useRef(null)
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setOpen(false)
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false)
     }
     if (open) document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -138,15 +141,9 @@ function AttachmentButton({ onFileSelect, disabled }) {
   const handleFileChange = (e) => {
     const selected = Array.from(e.target.files)
     if (selected.length === 0) return
-    setFiles(prev => [...prev, ...selected])
     onFileSelect?.(selected)
     setOpen(false)
-    // Reset input so same file can be re-selected
     e.target.value = ''
-  }
-
-  const removeFile = (index) => {
-    setFiles(prev => prev.filter((_, i) => i !== index))
   }
 
   const MENU_ITEMS = [
@@ -174,7 +171,6 @@ function AttachmentButton({ onFileSelect, disabled }) {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -183,8 +179,6 @@ function AttachmentButton({ onFileSelect, disabled }) {
         className="hidden"
         onChange={handleFileChange}
       />
-
-      {/* Plus button */}
       <button
         onClick={() => setOpen(prev => !prev)}
         disabled={disabled}
@@ -197,8 +191,6 @@ function AttachmentButton({ onFileSelect, disabled }) {
       >
         <PlusIcon className={`w-4 h-4 transition-transform ${open ? 'rotate-45' : ''}`} />
       </button>
-
-      {/* Dropdown menu */}
       {open && (
         <div className="absolute bottom-10 left-0 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100">
@@ -210,10 +202,7 @@ function AttachmentButton({ onFileSelect, disabled }) {
               onClick={item.action ?? undefined}
               disabled={item.disabled}
               className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors
-                ${item.disabled
-                  ? 'opacity-40 cursor-not-allowed'
-                  : 'hover:bg-purple-50 cursor-pointer'
-                }`}
+                ${item.disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-purple-50 cursor-pointer'}`}
             >
               <span className={`p-1.5 rounded-lg ${item.disabled ? 'bg-gray-100 text-gray-400' : 'bg-purple-100 text-purple-600'}`}>
                 {item.icon}
@@ -224,13 +213,6 @@ function AttachmentButton({ onFileSelect, disabled }) {
               </div>
             </button>
           ))}
-        </div>
-      )}
-
-      {/* Attached files preview */}
-      {files.length > 0 && (
-        <div className="absolute bottom-10 left-0 right-0 w-max max-w-xs">
-          {/* This is shown above the input — handled in parent */}
         </div>
       )}
     </div>
@@ -246,32 +228,16 @@ function VoiceInputButton({ onTranscript, disabled }) {
 
   const startListening = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      setUnsupported(true)
-      return
-    }
-
+    if (!SpeechRecognition) { setUnsupported(true); return }
     const recognition = new SpeechRecognition()
-    recognition.lang = 'en-IN'          // Indian English — works for Hindi accents too
-    recognition.interimResults = true   // show words as they're spoken
+    recognition.lang = 'en-IN'
+    recognition.interimResults = true
     recognition.continuous = false
-
     recognition.onresult = (e) => {
-      const current = Array.from(e.results)
-        .map(r => r[0].transcript)
-        .join('')
+      const current = Array.from(e.results).map(r => r[0].transcript).join('')
       setTranscript(current)
     }
-
-    recognition.onend = () => {
-      // Don't auto-confirm — let user press ✓ or ✗
-    }
-
-    recognition.onerror = () => {
-      setIsListening(false)
-      setTranscript('')
-    }
-
+    recognition.onerror = () => { setIsListening(false); setTranscript('') }
     recognitionRef.current = recognition
     recognition.start()
     setIsListening(true)
@@ -279,9 +245,7 @@ function VoiceInputButton({ onTranscript, disabled }) {
   }
 
   const handleConfirm = () => {
-    if (transcript.trim()) {
-      onTranscript(transcript.trim())
-    }
+    if (transcript.trim()) onTranscript(transcript.trim())
     handleCancel()
   }
 
@@ -291,60 +255,29 @@ function VoiceInputButton({ onTranscript, disabled }) {
     setTranscript('')
   }
 
-  if (unsupported) {
-    return (
-      <span className="text-[10px] text-gray-400 px-1">Voice N/A</span>
-    )
-  }
+  if (unsupported) return <span className="text-[10px] text-gray-400 px-1">Voice N/A</span>
 
-  // ── While listening: show waveform + ✗ ✓ buttons ──
   if (isListening) {
     return (
       <div className="flex items-center gap-1.5">
-        {/* Animated waveform dots */}
         <div className="flex items-center gap-0.5 px-1">
           {[0, 1, 2, 3, 4].map(i => (
-            <span
-              key={i}
-              className="w-0.5 bg-purple-500 rounded-full animate-pulse"
-              style={{
-                height: `${8 + (i % 3) * 4}px`,
-                animationDelay: `${i * 0.1}s`,
-                animationDuration: '0.6s'
-              }}
-            />
+            <span key={i} className="w-0.5 bg-purple-500 rounded-full animate-pulse"
+              style={{ height: `${8 + (i % 3) * 4}px`, animationDelay: `${i * 0.1}s`, animationDuration: '0.6s' }} />
           ))}
         </div>
-
-        {/* Cancel ✗ */}
-        <button
-          onClick={handleCancel}
-          className="w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors"
-          title="Cancel"
-        >
+        <button onClick={handleCancel} className="w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors" title="Cancel">
           <XMarkIcon className="w-3.5 h-3.5" />
         </button>
-
-        {/* Confirm ✓ */}
-        <button
-          onClick={handleConfirm}
-          className="w-6 h-6 rounded-full bg-green-100 hover:bg-green-200 text-green-600 flex items-center justify-center transition-colors"
-          title="Use this text"
-        >
+        <button onClick={handleConfirm} className="w-6 h-6 rounded-full bg-green-100 hover:bg-green-200 text-green-600 flex items-center justify-center transition-colors" title="Use this text">
           <CheckIcon className="w-3.5 h-3.5" />
         </button>
       </div>
     )
   }
 
-  // ── Default: mic button ──
   return (
-    <button
-      onClick={startListening}
-      disabled={disabled}
-      className="text-gray-400 hover:text-purple-600 transition-colors disabled:opacity-40"
-      title="Voice input"
-    >
+    <button onClick={startListening} disabled={disabled} className="text-gray-400 hover:text-purple-600 transition-colors disabled:opacity-40" title="Voice input">
       <MicrophoneIcon className="w-5 h-5" />
     </button>
   )
@@ -361,19 +294,19 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
       createdAt: null,
     }
   ])
-  const [inputMessage, setInputMessage] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [sessions, setSessions] = useState([])
+  const [inputMessage, setInputMessage]   = useState('')
+  const [isLoading, setIsLoading]         = useState(false)
+  const [error, setError]                 = useState(null)
+  const [sessions, setSessions]           = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [historySearch, setHistorySearch] = useState('')
-  const [usage, setUsage] = useState(null)
+  const [usage, setUsage]                 = useState(null)
   const [showCrisisModal, setShowCrisisModal] = useState(false)
   const [attachedFiles, setAttachedFiles] = useState([])
-  const [previewUrls, setPreviewUrls] = useState([])  // object URLs for image previews
+  const [previewUrls, setPreviewUrls]     = useState([])
   const messagesEndRef = useRef(null)
-  const inputRef = useRef(null)
+  const inputRef       = useRef(null)
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isLoading])
 
@@ -401,28 +334,39 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     try {
       const data = await chatService.getSessionHistory(sessionId)
       const loaded = (data.messages || []).map(m => ({
-        id: m.id, role: m.role, content: m.content,
-        detectedMode: m.detectedMode, createdAt: m.createdAt,
+        id:           m.id,
+        role:         m.role,
+        content:      m.content,
+        detectedMode: m.detectedMode,
+        createdAt:    m.createdAt,
+        // ── FIX: map image fields from history so they render after refresh ──
+        imageBase64:  m.imageBase64   || null,
+        imageMimeType: m.imageMimeType || null,
       }))
-      setMessages(loaded.length ? loaded : [{ id: 'empty', role: 'assistant', content: 'No messages in this session yet.', detectedMode: null, createdAt: null }])
+      setMessages(
+        loaded.length
+          ? loaded
+          : [{ id: 'empty', role: 'assistant', content: 'No messages in this session yet.', detectedMode: null, createdAt: null }]
+      )
       setActiveSessionId(sessionId)
-    } catch (err) { setError('Failed to load session: ' + (err.message || 'Unknown error')) }
-    finally { setIsLoading(false) }
+    } catch (err) {
+      setError('Failed to load session: ' + (err.message || 'Unknown error'))
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleNewChat = () => {
-    setMessages([{ id: 'welcome', role: 'assistant', content: `Hi again, **${user?.firstName || 'there'}**! 😊 What would you like help with?`, detectedMode: null, createdAt: null }])
+    setMessages([{
+      id: 'welcome', role: 'assistant',
+      content: `Hi again, **${user?.firstName || 'there'}**! 😊 What would you like help with?`,
+      detectedMode: null, createdAt: null,
+    }])
     setActiveSessionId(null)
     setAttachedFiles([])
+    setPreviewUrls([])
     inputRef.current?.focus()
   }
-
-  const fileToBase64 = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = error => reject(error);
-  });
 
   const handleSendMessage = async () => {
     const text = inputMessage.trim()
@@ -430,70 +374,72 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     const lower = text.toLowerCase()
     if (CRISIS_KEYWORDS.some(kw => lower.includes(kw))) { setShowCrisisModal(true); return }
 
+    // ── Pick only the first image file (backend saves one at a time) ──────────
     const imageFile = attachedFiles.find(f => f.type.startsWith('image/')) || null
-
     const imagePreviewUrl = imageFile ? URL.createObjectURL(imageFile) : null
+
     const userMsg = {
       id: `u-${Date.now()}`,
       role: 'user',
       content: text,
       detectedMode: null,
       createdAt: new Date().toISOString(),
-      imagePreview: imagePreviewUrl,
+      imagePreview: imagePreviewUrl,   // blob URL — works until page refresh
+      imageBase64: null,               // not yet available; backend saves and returns on next history load
+      imageMimeType: imageFile?.type || null,
     }
+
     setMessages(prev => [...prev, userMsg])
     const filesToUpload = [...attachedFiles]
     setInputMessage('')
     setAttachedFiles([])
+    setPreviewUrls([])
     setIsLoading(true)
-    // Get first image file if any attached
-
 
     try {
-      // Convert images to base64 strings
-      const imageBase64s = await Promise.all(
-        filesToUpload
-          .filter(f => f.type.startsWith('image/'))
-          .map(f => fileToBase64(f))
-      )
+      // ── FIX: send first image as a File so chatService uses imageBase64 /
+      //   imageMimeType path — which the backend saves to DB ─────────────────
+      const firstImageFile = filesToUpload.find(f => f.type.startsWith('image/')) || null
+      const response = await chatService.sendMessage(text, firstImageFile)
 
-      const response = await chatService.sendMessage(text, imageBase64s)
       const effectiveMode = response.isFlagged || response.is_flagged ? 'mental_health' : response.detectedMode
-      const botMsg = { id: response.id ?? `b-${Date.now()}`, role: 'assistant', content: response.content, detectedMode: effectiveMode, createdAt: response.createdAt }
+      const botMsg = {
+        id: response.id ?? `b-${Date.now()}`,
+        role: 'assistant',
+        content: response.content,
+        detectedMode: effectiveMode,
+        createdAt: response.createdAt,
+      }
       setMessages(prev => [...prev, botMsg])
-      // Clear attachments after sending
-      previewUrls.forEach(url => { if (url) URL.revokeObjectURL(url) })
-      setAttachedFiles([])
-      setPreviewUrls([])
-      loadUsage(); loadSessions()
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl)
+      loadUsage()
+      loadSessions()
     } catch (err) {
       setError(err.message || 'Failed to send message. Please try again.')
       setMessages(prev => prev.filter(m => m.id !== userMsg.id))
-    } finally { setIsLoading(false) }
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage() }
   }
 
-  // ── Voice transcript handler ──
   const handleVoiceTranscript = (text) => {
     setInputMessage(prev => prev ? `${prev} ${text}` : text)
     inputRef.current?.focus()
   }
 
   const handleFileSelect = (files) => {
-    const newFiles = files.filter(f => f.size <= 20 * 1024 * 1024) // 20MB limit
+    const newFiles = files.filter(f => f.size <= 20 * 1024 * 1024)
     setAttachedFiles(prev => [...prev, ...newFiles])
-    // Create preview URLs for images
-    const urls = newFiles.map(f =>
-      f.type.startsWith('image/') ? URL.createObjectURL(f) : null
-    )
+    const urls = newFiles.map(f => f.type.startsWith('image/') ? URL.createObjectURL(f) : null)
     setPreviewUrls(prev => [...prev, ...urls])
   }
 
   const removeAttachedFile = (index) => {
-    // Revoke object URL to free memory
     if (previewUrls[index]) URL.revokeObjectURL(previewUrls[index])
     setAttachedFiles(prev => prev.filter((_, i) => i !== index))
     setPreviewUrls(prev => prev.filter((_, i) => i !== index))
@@ -536,50 +482,56 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 bg-gray-50/40">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {msg.role === 'assistant' && (
-                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
-                      <SparklesIcon className="w-4 h-4 text-purple-600" />
-                    </div>
-                  )}
-                  <div className="max-w-[80%] lg:max-w-[70%]">
-                    <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-purple-600 text-white rounded-br-sm shadow-md' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'}`}>
-                      {msg.role === 'assistant' ? (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkMath]}
-                          rehypePlugins={[rehypeKatex]}
-                          components={{
-                            p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-gray-800">{children}</p>,
-                            ul: ({ children }) => <ul className="list-disc pl-4 space-y-2 my-3 text-gray-800">{children}</ul>,
-                            ol: ({ children }) => <ol className="list-decimal pl-4 space-y-2 my-3 text-gray-800">{children}</ol>,
-                            li: ({ children }) => <li className="leading-relaxed pl-1">{children}</li>,
-                            strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
-                            code: ({ inline, children }) => inline
-                              ? <code className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs font-mono border border-purple-100">{children}</code>
-                              : <div className="my-4 rounded-xl overflow-hidden border border-gray-200 shadow-sm"><pre className="bg-gray-900 p-4 text-xs overflow-x-auto text-gray-100 font-mono"><code>{children}</code></pre></div>,
-                          }}
-                        >{msg.content}</ReactMarkdown>
-                      ) : (
-                        <div>
-                          {msg.imagePreview && (
-                            <img
-                              src={msg.imagePreview}
-                              alt="Attached"
-                              className="rounded-xl mb-2 max-h-48 max-w-full object-cover border border-white/20 cursor-pointer hover:opacity-90 transition-opacity"
-                              onClick={() => window.open(msg.imagePreview, '_blank')}
-                            />
-                          )}
-                          {msg.content && <p className="whitespace-pre-wrap">{msg.content}</p>}
-                        </div>
-                      )}
-                    </div>
-                    <div className={`flex items-center gap-2 mt-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <span className="text-xs text-gray-400">{formatTime(msg.createdAt)}</span>
+              {messages.map((msg) => {
+                // ── FIX: resolve image src from blob URL (fresh) or base64 (history) ──
+                const imageSrc = resolveImageSrc(msg)
+
+                return (
+                  <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.role === 'assistant' && (
+                      <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                        <SparklesIcon className="w-4 h-4 text-purple-600" />
+                      </div>
+                    )}
+                    <div className="max-w-[80%] lg:max-w-[70%]">
+                      <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-purple-600 text-white rounded-br-sm shadow-md' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'}`}>
+                        {msg.role === 'assistant' ? (
+                          <ReactMarkdown
+                            remarkPlugins={[remarkMath]}
+                            rehypePlugins={[rehypeKatex]}
+                            components={{
+                              p:      ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed text-gray-800">{children}</p>,
+                              ul:     ({ children }) => <ul className="list-disc pl-4 space-y-2 my-3 text-gray-800">{children}</ul>,
+                              ol:     ({ children }) => <ol className="list-decimal pl-4 space-y-2 my-3 text-gray-800">{children}</ol>,
+                              li:     ({ children }) => <li className="leading-relaxed pl-1">{children}</li>,
+                              strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+                              code:   ({ inline, children }) => inline
+                                ? <code className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs font-mono border border-purple-100">{children}</code>
+                                : <div className="my-4 rounded-xl overflow-hidden border border-gray-200 shadow-sm"><pre className="bg-gray-900 p-4 text-xs overflow-x-auto text-gray-100 font-mono"><code>{children}</code></pre></div>,
+                            }}
+                          >{msg.content}</ReactMarkdown>
+                        ) : (
+                          <div>
+                            {/* ── FIX: image renders from blob URL (fresh) OR base64 data URL (history) ── */}
+                            {imageSrc && (
+                              <img
+                                src={imageSrc}
+                                alt="Attached"
+                                className="rounded-xl mb-2 max-h-48 max-w-full object-cover border border-white/20 cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => window.open(imageSrc, '_blank')}
+                              />
+                            )}
+                            {msg.content && <p className="whitespace-pre-wrap">{msg.content}</p>}
+                          </div>
+                        )}
+                      </div>
+                      <div className={`flex items-center gap-2 mt-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <span className="text-xs text-gray-400">{formatTime(msg.createdAt)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               {isLoading && <TypingIndicator />}
               <div ref={messagesEndRef} />
             </div>
@@ -601,29 +553,19 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
 
             {/* Input row */}
             <div className="px-4 py-3 border-t border-gray-100 bg-white shrink-0">
-              {/* Attached files preview strip — image thumbnail style like ChatGPT */}
               {attachedFiles.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                   {attachedFiles.map((file, idx) => (
                     <div key={idx} className="relative group">
                       {previewUrls[idx] ? (
-                        /* Image thumbnail preview */
                         <div className="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-purple-200 shadow-sm">
-                          <img
-                            src={previewUrls[idx]}
-                            alt={file.name}
-                            className="w-full h-full object-cover"
-                          />
-                          {/* Remove button */}
-                          <button
-                            onClick={() => removeAttachedFile(idx)}
-                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors"
-                          >
+                          <img src={previewUrls[idx]} alt={file.name} className="w-full h-full object-cover" />
+                          <button onClick={() => removeAttachedFile(idx)}
+                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors">
                             <XMarkIcon className="w-2.5 h-2.5 text-white" />
                           </button>
                         </div>
                       ) : (
-                        /* Non-image file chip */
                         <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1 text-xs text-purple-700 max-w-[160px]">
                           <PaperClipIcon className="w-3.5 h-3.5 shrink-0" />
                           <span className="truncate">{file.name}</span>
@@ -638,7 +580,6 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
               )}
               <div className="flex gap-2 items-end">
                 <div className="flex-1 flex items-center border border-gray-300 rounded-xl focus-within:ring-2 focus-within:ring-purple-500 bg-white px-3 py-2 gap-2">
-                  {/* ── Attachment plus button ── */}
                   <AttachmentButton
                     onFileSelect={handleFileSelect}
                     disabled={isLoading || (usage && usage.remaining === 0)}
@@ -654,7 +595,6 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                     className="flex-1 resize-none focus:outline-none bg-transparent text-sm text-gray-800 placeholder-gray-400 max-h-32 disabled:opacity-60"
                     style={{ fieldSizing: 'content' }}
                   />
-                  {/* ── Voice input button ── */}
                   <VoiceInputButton
                     onTranscript={handleVoiceTranscript}
                     disabled={isLoading || (usage && usage.remaining === 0)}

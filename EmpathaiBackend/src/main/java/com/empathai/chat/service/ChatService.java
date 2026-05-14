@@ -67,8 +67,6 @@ public class ChatService {
 
         checkDailyLimit(studentId);
 
-        // Crisis is handled entirely by Python pipeline — no early return here
-
         LocalDate weekStart = getCurrentWeekStart();
         ChatSession session = sessionRepo.findByStudentIdAndWeekStart(studentId, weekStart)
                 .orElseGet(() -> {
@@ -100,7 +98,7 @@ public class ChatService {
         Long schoolId = (user instanceof Student s) ? s.getSchoolId() : null;
         String className = (user instanceof Student s) ? s.getClassName() : null;
 
-        // ── Build enriched AI request ─────────────────────────────────────────
+        // ── Build enriched AI request ──────────────────────────────────────────
         Map<String, Object> aiRequest = new HashMap<>();
         aiRequest.put("student_name", user.getName());
         aiRequest.put("grade", grade);
@@ -114,15 +112,15 @@ public class ChatService {
             log.info("Image attached for studentId: {} mimeType: {}", studentId, imageMimeType);
         }
 
-        // ── Schedule context ──────────────────────────────────────────────────
+        // ── Schedule context ───────────────────────────────────────────────────
         aiRequest.put("today_tasks", buildTodayTasks(studentId));
         aiRequest.put("upcoming_exams", buildUpcomingExams(schoolId, className));
         aiRequest.put("active_goals", buildActiveGoals(studentId));
         aiRequest.put("preferred_study_time", getPreferredStudyTime(studentId));
         aiRequest.put("tasks_completed_this_week", getCompletedTasksCount(studentId));
         aiRequest.put("tasks_total_this_week", getTotalTasksCount(studentId));
-        aiRequest.put("latest_mood_score", null);   // TODO: connect to wellness module
-        aiRequest.put("mood_label", null);           // TODO: connect to wellness module
+        aiRequest.put("latest_mood_score", null);
+        aiRequest.put("mood_label", null);
 
         log.info("Calling AI service at: {}/chat", aiServiceUrl);
 
@@ -172,13 +170,17 @@ public class ChatService {
             }
         }
 
+        // ── Save user message WITH image so it persists across refreshes ───────
         messageRepo.save(ChatMessage.builder()
                 .sessionId(session.getId())
                 .role("user")
                 .content(message)
                 .detectedMode(detectedMode)
+                .imageBase64(imageBase64)          // ← persisted
+                .imageMimeType(imageMimeType)       // ← persisted
                 .build());
 
+        // ── Save assistant reply (no image) ───────────────────────────────────
         ChatMessage savedReply = messageRepo.save(ChatMessage.builder()
                 .sessionId(session.getId())
                 .role("assistant")
@@ -194,18 +196,13 @@ public class ChatService {
     // CONTEXT HELPER METHODS
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Builds today's task list with title, time, and completion status.
-     */
     private List<Map<String, Object>> buildTodayTasks(Long studentId) {
         try {
             String today = LocalDate.now().getDayOfWeek()
                     .getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH);
             today = today.substring(0, 1).toUpperCase() + today.substring(1).toLowerCase();
-
             List<ScheduleTask> tasks = scheduleTaskRepository
                     .findByStudentIdAndDayOfWeek(studentId, today);
-
             return tasks.stream().map(t -> {
                 Map<String, Object> map = new HashMap<>();
                 map.put("title", t.getTitle());
@@ -221,9 +218,6 @@ public class ChatService {
         }
     }
 
-    /**
-     * Builds upcoming exams with subject name, exam date, days remaining, and urgency.
-     */
     private List<Map<String, Object>> buildUpcomingExams(Long schoolId, String className) {
         try {
             if (schoolId == null || className == null) return Collections.emptyList();
@@ -249,9 +243,6 @@ public class ChatService {
         }
     }
 
-    /**
-     * Builds active goals with subject tag and target date.
-     */
     private List<Map<String, Object>> buildActiveGoals(Long studentId) {
         try {
             return studentGoalRepository.findByStudentIdAndActiveTrue(studentId)
@@ -274,9 +265,6 @@ public class ChatService {
         }
     }
 
-    /**
-     * Returns the student's preferred study time (MORNING/AFTERNOON/EVENING/NIGHT).
-     */
     private String getPreferredStudyTime(Long studentId) {
         try {
             return preferenceRepository.findByStudentId(studentId)
@@ -288,9 +276,6 @@ public class ChatService {
         }
     }
 
-    /**
-     * Returns count of completed tasks this week only.
-     */
     private int getCompletedTasksCount(Long studentId) {
         try {
             List<String> weekDays = List.of(
@@ -308,9 +293,6 @@ public class ChatService {
         }
     }
 
-    /**
-     * Returns total tasks scheduled this week only.
-     */
     private int getTotalTasksCount(Long studentId) {
         try {
             List<String> weekDays = List.of(
@@ -327,7 +309,7 @@ public class ChatService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // EXISTING METHODS — UNCHANGED
+    // EXISTING METHODS
     // ─────────────────────────────────────────────────────────────────────────
 
     public List<ChatSessionResponse> getSessions(Long studentId) {
@@ -347,7 +329,9 @@ public class ChatService {
             throw new EmpathaiException("Access denied");
         List<ChatMessageResponse> messages = messageRepo
                 .findBySessionIdOrderByCreatedAtAsc(sessionId)
-                .stream().map(this::toMessageResponse).collect(Collectors.toList());
+                .stream()
+                .map(this::toMessageResponse)
+                .collect(Collectors.toList());
         return ChatSessionResponse.builder()
                 .id(session.getId())
                 .weekStart(session.getWeekStart())
@@ -387,6 +371,10 @@ public class ChatService {
         return LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     }
 
+    /**
+     * Maps a ChatMessage entity to the response DTO.
+     * Includes image fields so history loads correctly after refresh.
+     */
     private ChatMessageResponse toMessageResponse(ChatMessage m) {
         return ChatMessageResponse.builder()
                 .id(m.getId())
@@ -394,6 +382,8 @@ public class ChatService {
                 .content(m.getContent())
                 .detectedMode(m.getDetectedMode())
                 .createdAt(m.getCreatedAt())
+                .imageBase64(m.getImageBase64())     // ← returned in history
+                .imageMimeType(m.getImageMimeType()) // ← returned in history
                 .build();
     }
 }

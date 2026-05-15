@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { fetchQuestionsByClass, createResponse } from '../../../api/Assessmentmanagement'
 import {
   ClipboardDocumentListIcon,
@@ -27,8 +27,65 @@ const emojiSequences = {
   sad:     ['😢', '💜', '🌧️'],
 }
 
+function parseBulletPoints (raw) {
+  if (!raw) return { strengths: [], improvements: [], tips: [], plain: [] }
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean)
+  const strengths    = []
+  const improvements = []
+  const tips         = []
+  const plain        = []
+  lines.forEach(line => {
+    const clean = line.replace(/^[\s•\-–—*]+/, '').trim()
+    if (clean.includes('✅') && clean.indexOf('✅') < 4) {
+      strengths.push(clean.replace(/✅\s*/, '').trim())
+    } else if (clean.includes('🔹') && clean.indexOf('🔹') < 4) {
+      improvements.push(clean.replace(/🔹\s*/, '').trim())
+    } else if (clean.includes('💡') && clean.indexOf('💡') < 4) {
+      tips.push(clean.replace(/💡\s*/, '').trim())
+    } else if (clean.length > 0) {
+      plain.push(clean)
+    }
+  })
+  return { strengths, improvements, tips, plain }
+}
+function personalise (text, studentName) {
+  if (!studentName || !text) return text
+  const firstName = studentName.split(' ')[0].trim()
+  if (!firstName || firstName.length < 2) return text
+  const lower = firstName.toLowerCase()
+  if (['you', 'your', 'they', 'their', 'he', 'she', 'his', 'her'].includes(lower)) return text
+  const escaped = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return text
+    .replace(new RegExp(`\\b${escaped}'s\\b`, 'gi'), 'your')
+    .replace(new RegExp(`\\b${escaped}\\b`, 'gi'), 'you')
+    .replace(/\bshe's\b/gi, "you're")
+    .replace(/\bhe's\b/gi, "you're")
+    .replace(/\bshe\b/gi, 'you')
+    .replace(/\bhe\b/gi, 'you')
+    .replace(/\bher\b/gi, 'your')
+    .replace(/\bhis\b/gi, 'your')
+    .replace(/\bthey're\b/gi, "you're")
+    .replace(/\bthey\b/gi, 'you')
+    .replace(/\btheir\b/gi, 'your')
+    .replace(/\bthem\b/gi, 'you')
+}
+function normalizeGroupName (raw) {
+  if (!raw) return ''
+  let s = raw.trim()
+  if (/^Class \S+ Standard$/.test(s)) return s
+  if (/^Class \S+$/.test(s)) return s + ' Standard'
+  if (/^\S+ Standard$/.test(s)) return 'Class ' + s
+  return 'Class ' + s + ' Standard'
+}
 
-
+function normalizeClassName (raw) {
+  if (!raw) return ''
+  let s = raw.trim()
+  if (/^\S+ Standard$/.test(s) && !s.startsWith('Class ')) return s
+  if (s.startsWith('Class ')) s = s.replace(/^Class\s+/, '')
+  if (!s.endsWith(' Standard')) s = s + ' Standard'
+  return s
+}
 
 export default function Questionnaire ({ user }) {
   const [currentQuestion, setCurrentQuestion]   = useState(0)
@@ -46,6 +103,23 @@ export default function Questionnaire ({ user }) {
   const [analysis, setAnalysis]                 = useState(null)
   const [analysisLoading, setAnalysisLoading]   = useState(false)
 
+  const isAnimatingRef    = useRef(false)
+  const pendingTimersRef  = useRef([])
+  const answersRef        = useRef({})
+
+  const clearPendingTimers = () => {
+    pendingTimersRef.current.forEach(clearTimeout)
+    pendingTimersRef.current = []
+  }
+
+  const safeTimeout = (fn, ms) => {
+    const id = setTimeout(fn, ms)
+    pendingTimersRef.current.push(id)
+    return id
+  }
+
+  useEffect(() => () => clearPendingTimers(), [])
+
   const gridNumbers = [3, 7, 2, 9]
 
   useEffect(() => {
@@ -57,24 +131,20 @@ export default function Questionnaire ({ user }) {
       user?.studentClass ||
       user?.classId
 
-    console.log('[Questionnaire] user keys:', user ? Object.keys(user) : 'no user')
-    console.log('[Questionnaire] user:', user, '| className:', className)
-
     if (!className) {
-      console.warn('[Questionnaire] No className found – showing defaults')
       setLoading(false)
       return
     }
 
     fetchQuestionsByClass(className)
       .then(data => {
-        console.log('[Questionnaire] Questions from DB:', data)
         if (Array.isArray(data) && data.length > 0) {
           const mapped = data.map((q, i) => ({
             id:       q.id || i + 1,
             text:     q.questions || q.questionText || '',
             groupMap: q.group_map || q.groupMap  || '',
             groupMapId: q.groupMapId || q.group_map_id || null,
+            groupClassName: q.groupClassName || q.group_class_name || q.className || '',
             options: [
               { value: 8, label: (q.option_a || q.optionA || '').trim(), emotion: detectEmotion(q.option_a || q.optionA || '') },
               { value: 6, label: (q.option_b || q.optionB || '').trim(), emotion: detectEmotion(q.option_b || q.optionB || '') },
@@ -83,8 +153,6 @@ export default function Questionnaire ({ user }) {
             ].filter(o => o.label !== '')
           }))
           setApiQuestions(mapped)
-        } else {
-          console.warn('[Questionnaire] No DB questions for class', className, '– using defaults')
         }
       })
       .catch(err => console.error('[Questionnaire] fetchQuestionsByClass error:', err))
@@ -92,13 +160,14 @@ export default function Questionnaire ({ user }) {
   }, [user])
 
   useEffect(() => {
+    clearPendingTimers()
+    isAnimatingRef.current = false
     setSelectedOption(null)
     setDisplayEmoji('')
     setEmojiOpacity(0)
     setEmojiScale(0.5)
   }, [currentQuestion])
 
-  /* ── Memory grid auto-hide ── */
   useEffect(() => {
     if (activeQuestions[currentQuestion]?.type === 'memory') {
       setShowGrid(true)
@@ -107,44 +176,10 @@ export default function Questionnaire ({ user }) {
     }
   }, [currentQuestion])
 
-  const defaultQuestions = [
-    {
-      id: 'dq1',
-      text: 'Is anything making you feel overwhelmed or confused these days? On a scale of 0–10, how would you rate your mood today?',
-      options: [
-        { value: 8, label: 'Very good (8-10)', emotion: 'happy'   },
-        { value: 6, label: 'Okay (5-7)',        emotion: 'neutral' },
-        { value: 3, label: 'Low (2-4)',          emotion: 'concern' },
-        { value: 1, label: 'Very low (0-1)',     emotion: 'sad'    }
-      ]
-    },
-    {
-      id: 'dq2',
-      text: 'What is the amount of freedom you think you have?',
-      options: [
-        { value: 8, label: 'Very good (8-10)', emotion: 'happy'   },
-        { value: 6, label: 'Okay (5-7)',        emotion: 'neutral' },
-        { value: 3, label: 'Low (2-4)',          emotion: 'concern' },
-        { value: 1, label: 'Very low (0-1)',     emotion: 'sad'    }
-      ]
-    },
-    {
-      id: 'dq3',
-      text: 'Do you feel pressured in any way by School?',
-      options: [
-        { value: 9, label: 'Almost all the time (8-10)',           emotion: 'sad'    },
-        { value: 6, label: 'Kind of [sometimes] (5-7)',            emotion: 'concern' },
-        { value: 3, label: 'A little bit [once in a while] (2-4)', emotion: 'neutral' },
-        { value: 1, label: 'Nope [not really] (0-1)',              emotion: 'happy'   }
-      ]
-    }
-  ]
-
   const activeQuestions = apiQuestions
   const currentQ        = activeQuestions[currentQuestion]
   const progress        = currentQ ? ((currentQuestion + 1) / activeQuestions.length) * 100 : 100
 
-  /* ── Save response to DB ── */
   const saveResponseToDB = async (question, selectedLabel) => {
     const savedUser = localStorage.getItem('user')
     const u = savedUser ? JSON.parse(savedUser) : user
@@ -152,13 +187,10 @@ export default function Questionnaire ({ user }) {
     const studentId   = u?.id ?? null
     const studentName = `${u?.firstName || u?.name || ''} ${u?.lastName || ''}`.trim() || 'Guest'
 
-    const resolvedClass =
-      u?.className  ||
-      u?.class_name ||
-      u?.class      ||
-      u?.grade      || ''
-
-    const groupName = (question.groupMap || '').split(',')[0].trim() || resolvedClass
+    const rawGroupName  = (question.groupMap || '').split(',')[0].trim() ||
+                          question.groupClassName || u?.className || u?.class_name || u?.class || u?.grade || ''
+    const groupName     = normalizeGroupName(rawGroupName)
+    const resolvedClass = normalizeClassName(rawGroupName)
     const groupId   = question.groupMapId ?? null
 
     const computedAge = (() => {
@@ -192,55 +224,69 @@ export default function Questionnaire ({ user }) {
       schoolName:    u?.schoolName || u?.school || u?.institutionName || null
     }
 
-    console.log('[Questionnaire] Saving response:', payload)
     try {
       await createResponse(payload)
-      console.log('[Questionnaire] Response saved ✅')
     } catch (err) {
       console.error('[Questionnaire] Failed to save response:', err)
     }
   }
 
-  /* ── Handle option click ── */
   const handleAnswerSelect = (questionId, option, index) => {
-    setAnswers(prev => ({ ...prev, [questionId]: option.value }))
+    if (isAnimatingRef.current) return
+
+    isAnimatingRef.current = true
+
+    const updatedAnswers = { ...answersRef.current, [questionId]: option.value }
+    answersRef.current = updatedAnswers
+    setAnswers(updatedAnswers)
     setSelectedOption(index)
+
     saveResponseToDB(currentQ, option.label)
 
     const sequence = emojiSequences[option.emotion] || ['😊']
-    let step = 0
     setDisplayEmoji(sequence[0])
     setEmojiOpacity(1)
     setEmojiScale(1)
 
-    const next = () => {
+    let step = 0
+
+    const playNext = () => {
       step++
       if (step < sequence.length) {
         setEmojiScale(1.2)
-        setTimeout(() => { setDisplayEmoji(sequence[step]); setEmojiScale(1) }, 150)
-        setTimeout(next, 500)
+        safeTimeout(() => { setDisplayEmoji(sequence[step]); setEmojiScale(1) }, 150)
+        safeTimeout(playNext, 500)
       } else {
-        setTimeout(() => {
+        safeTimeout(() => {
           setEmojiOpacity(0)
           setEmojiScale(0.5)
-          setTimeout(() => {
+          safeTimeout(() => {
             setDisplayEmoji('')
-            setSelectedOption(null)
-            if (currentQuestion < activeQuestions.length - 1) {
+            isAnimatingRef.current = false
+
+            const isLast = currentQuestion >= activeQuestions.length - 1
+            if (!isLast) {
               setIsTransitioning(true)
-              setTimeout(() => { setCurrentQuestion(q => q + 1); setIsTransitioning(false) }, 300)
+              safeTimeout(() => {
+                setCurrentQuestion(q => q + 1)
+                setIsTransitioning(false)
+              }, 300)
             } else {
-              setTimeout(() => setShowReport(true), 1200)
+              handleSubmit(updatedAnswers)
             }
-          }, 300)
+          }, 600)
         }, 400)
       }
     }
-    setTimeout(next, 500)
+
+    safeTimeout(playNext, 500)
   }
 
   const handleNext = () => {
+    if (isAnimatingRef.current) return
     if (currentQuestion < activeQuestions.length - 1) {
+      clearPendingTimers()
+      isAnimatingRef.current = false
       setIsTransitioning(true)
       setTimeout(() => { setCurrentQuestion(q => q + 1); setIsTransitioning(false) }, 300)
     }
@@ -248,16 +294,18 @@ export default function Questionnaire ({ user }) {
 
   const handlePrevious = () => {
     if (currentQuestion > 0) {
+      clearPendingTimers()
+      isAnimatingRef.current = false
       setIsTransitioning(true)
       setTimeout(() => { setCurrentQuestion(q => q - 1); setIsTransitioning(false) }, 300)
     }
   }
 
-  /* ── Submit & fetch analysis from backend ── */
-  const handleSubmit = async () => {
-    console.log('[Questionnaire] Assessment complete. Fetching analysis...')
-    setShowReport(true)
+  const handleSubmit = async (finalAnswers) => {
     setAnalysisLoading(true)
+    setShowReport(true)
+
+    const resolvedAnswers = finalAnswers || answersRef.current || answers
 
     try {
       const savedUser = localStorage.getItem('user')
@@ -266,42 +314,85 @@ export default function Questionnaire ({ user }) {
       const studentName = `${u?.firstName || u?.name || ''} ${u?.lastName || ''}`.trim() || 'Student'
       const token       = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
 
-      const response = await fetch('/api/analytics/analyze', {
+      const firstQ       = activeQuestions.find(q => resolvedAnswers[q.id] !== undefined)
+      const groupId      = firstQ?.groupMapId ?? null
+      const rawGroupName  = (firstQ?.groupMap || '').split(',')[0].trim() ||
+                            firstQ?.groupClassName ||
+                            u?.className || u?.class_name || u?.class || u?.grade || ''
+      const groupName     = normalizeGroupName(rawGroupName)
+      const resolvedClass = normalizeClassName(rawGroupName)
+
+      const answersArray = activeQuestions
+        .filter(q => resolvedAnswers[q.id] !== undefined)
+        .map(q => {
+          const selectedOpt = q.options.find(o => o.value === resolvedAnswers[q.id])
+          return {
+            questionId:     q.id,
+            questionText:   q.text,
+            selectedOption: selectedOpt?.label || String(resolvedAnswers[q.id])
+          }
+        })
+
+      if (studentId && groupId) {
+        try {
+          await fetch(
+            `/api/assessment/reports/student/${encodeURIComponent(studentId)}/group/${groupId}/today`,
+            { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+          )
+        } catch (e) {
+          console.warn('[Questionnaire] Cache clear skipped (non-fatal):', e.message)
+        }
+      }
+
+      const reportRes = await fetch('/api/assessment/reports/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ studentId })
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          studentId,
+          studentName,
+          groupId,
+          groupName,
+          className: resolvedClass,
+          answers:   answersArray
+        })
       })
 
-      const data = await response.json()
-      console.log('[Questionnaire] Analysis parsed:', data)
+      if (reportRes.ok) {
+        const reportData = await reportRes.json()
+        const parsed = parseBulletPoints(reportData.bulletPoints || '')
 
-      setAnalysis({
-        strengths:    data.strengths    || [],
-        improvements: data.AreastoFocus || []
-      })
-
-      // Build summary text and save to backend so admin sheet shows it
-      const summaryText = [
-        data.strengths?.length    ? 'Strengths: '      + data.strengths.join(', ')    : '',
-        data.AreastoFocus?.length ? 'Areas to Focus: ' + data.AreastoFocus.join(', ') : ''
-      ].filter(Boolean).join(' | ')
-
-      if (summaryText && studentId) {
-        fetch('/api/responses/summary', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ studentId, studentName, summary: summaryText })
-        }).catch(err => console.warn('[Questionnaire] Summary save failed:', err))
+        setAnalysis({
+          strengths:    parsed.strengths,
+          improvements: parsed.improvements,
+          tips:         parsed.tips,
+          plain:        parsed.plain,
+          summaryText:  reportData.summaryText || '',
+          studentName,
+        })
+      } else {
+        try {
+          const fallbackRes = await fetch('/api/analytics/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ studentId })
+          })
+          const data = await fallbackRes.json()
+          setAnalysis({
+            strengths:    data.strengths    || [],
+            improvements: data.AreastoFocus || [],
+            tips:         [],
+            plain:        [],
+            summaryText:  '',
+            studentName,
+          })
+        } catch {
+          setAnalysis({ strengths: [], improvements: [], tips: [], plain: [], summaryText: '', studentName })
+        }
       }
 
     } catch (err) {
       console.error('[Questionnaire] Analysis failed:', err)
+      setAnalysis({ strengths: [], improvements: [], tips: [], plain: [], summaryText: '', studentName: '' })
     } finally {
       setAnalysisLoading(false)
     }
@@ -328,16 +419,41 @@ export default function Questionnaire ({ user }) {
   }
 
   if (showReport) {
+    const sName = analysis?.studentName || ''
+
+    const hasRealData = analysis && (
+      (analysis.strengths?.length > 0) ||
+      (analysis.improvements?.length > 0) ||
+      (analysis.tips?.length > 0) ||
+      (analysis.plain?.length > 0)
+    )
+
+    const displayStrengths    = analysis?.strengths    || []
+    const displayImprovements = analysis?.improvements || []
+    const displayTips         = analysis?.tips         || []
+    const displayPlainFallback = (!hasRealData || (displayStrengths.length === 0 && displayImprovements.length === 0))
+      ? (analysis?.plain || [])
+      : []
+
+    // FIX: personalise converts "Tin Tin did X" → "You did X" so text feels
+    // directly connected to the student instead of talking about them in 3rd person.
+    const p = (text) => personalise(text, sName)
+
     return (
       <div className="font-sans max-w-5xl mx-auto px-4 py-2 min-h-screen flex flex-col">
         <div className="mb-4 mt-2 text-center">
           <h1 className="text-2xl sm:text-3xl font-bold font-serif text-[#0B1E36] tracking-tight mb-1">Assessment Complete!</h1>
           <p className="text-sm sm:text-base font-serif text-[#40607A]">Here's your personalised emotional wellness report</p>
+          {analysis?.summaryText && (
+            <p className="mt-2 text-sm italic text-gray-500 max-w-xl mx-auto">{p(analysis.summaryText)}</p>
+          )}
         </div>
 
         <div className="mb-4 max-w-4xl mx-auto w-full">
           <h3 className="text-lg font-serif font-bold text-[#0B1E36] mb-2 text-center">Key Insights</h3>
           <div className="grid md:grid-cols-2 gap-3">
+
+            {/* Strengths */}
             <div className="bg-[#dcfce7] border border-[#bbf7d0] rounded-xl p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 bg-white/60 rounded-full flex items-center justify-center shrink-0">
@@ -347,23 +463,31 @@ export default function Questionnaire ({ user }) {
               </div>
               <ul className="text-[13px] font-serif text-[#4a5568] space-y-1.5 ml-1">
                 {analysisLoading ? (
-                  <li className="text-green-500 animate-pulse">Generating your analysis...</li>
-                ) : analysis?.strengths?.length > 0 ? (
-                  analysis.strengths.map((item, i) => (
+                  <li className="flex items-center gap-2 text-green-600">
+                    <span className="inline-block w-3 h-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+                    Generating your analysis…
+                  </li>
+                ) : displayStrengths.length > 0 ? (
+                  displayStrengths.map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0 mt-1.5" />{item}
+                      <span className="w-2 h-2 rounded-full bg-green-500 shrink-0 mt-1.5" />
+                      <span>{p(item)}</span>
                     </li>
                   ))
-                ) : (
-                  ['Good emotional awareness', 'Positive self-perception', 'Strong memory skills'].map((item, i) => (
-                    <li key={i} className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />{item}
+                ) : displayPlainFallback.slice(0, 2).length > 0 ? (
+                  displayPlainFallback.slice(0, 2).map((item, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0 mt-1.5" />
+                      <span>{p(item)}</span>
                     </li>
                   ))
+                ) : !analysisLoading && (
+                  <li className="text-green-700 text-xs italic">Completing analysis…</li>
                 )}
               </ul>
             </div>
 
+            {/* Areas to Focus */}
             <div className="bg-[#ffedd5] border border-[#fed7aa] rounded-xl p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 bg-white/60 rounded-full flex items-center justify-center shrink-0">
@@ -373,19 +497,34 @@ export default function Questionnaire ({ user }) {
               </div>
               <ul className="text-[13px] font-serif text-[#4a5568] space-y-1.5 ml-1">
                 {analysisLoading ? (
-                  <li className="text-orange-500 animate-pulse">Generating your analysis...</li>
-                ) : analysis?.improvements?.length > 0 ? (
-                  analysis.improvements.map((item, i) => (
+                  <li className="flex items-center gap-2 text-orange-500">
+                    <span className="inline-block w-3 h-3 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+                    Generating your analysis…
+                  </li>
+                ) : displayImprovements.length > 0 ? (
+                  <>
+                    {displayImprovements.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0 mt-1.5" />
+                        <span>{p(item)}</span>
+                      </li>
+                    ))}
+                    {displayTips.length > 0 && (
+                      <li className="flex items-start gap-2 mt-2 pt-2 border-t border-orange-200">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mt-1.5" />
+                        <span className="text-amber-700">{p(displayTips[0])}</span>
+                      </li>
+                    )}
+                  </>
+                ) : displayPlainFallback.slice(2, 4).length > 0 ? (
+                  displayPlainFallback.slice(2, 4).map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 mt-1.5" />{item}
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 mt-1.5" />
+                      <span>{p(item)}</span>
                     </li>
                   ))
-                ) : (
-                  ['Managing school pressure', 'Building confidence', 'Stress management'].map((item, i) => (
-                    <li key={i} className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />{item}
-                    </li>
-                  ))
+                ) : !analysisLoading && (
+                  <li className="text-orange-700 text-xs italic">Completing analysis…</li>
                 )}
               </ul>
             </div>
@@ -519,17 +658,30 @@ export default function Questionnaire ({ user }) {
               return (
                 <label
                   key={index}
-                  className={`flex items-center justify-between p-4 border-2 rounded-xl cursor-pointer transition-all duration-300 group bg-white ${isSelected ? 'border-green-500 shadow-lg shadow-green-500/20 scale-[1.02]' : 'border-gray-100 hover:border-green-200 hover:bg-green-50/30 hover:shadow-md'}`}
+                  className={`flex items-center justify-between p-4 border-2 rounded-xl transition-all duration-300 group bg-white
+                    ${isAnimatingRef.current ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}
+                    ${isSelected
+                      ? 'border-green-500 shadow-lg shadow-green-500/20 scale-[1.02]'
+                      : 'border-gray-100 hover:border-green-200 hover:bg-green-50/30 hover:shadow-md'
+                    }`}
                 >
                   <div className="flex items-center gap-3">
-                    <input type="radio" name={`question-${currentQ.id}`} value={option.value} checked={false} onChange={() => handleAnswerSelect(currentQ.id, option, index)} className="sr-only" />
+                    <input
+                      type="radio"
+                      name={`question-${currentQ.id}`}
+                      value={option.value}
+                      checked={false}
+                      onChange={() => handleAnswerSelect(currentQ.id, option, index)}
+                      className="sr-only"
+                      disabled={isAnimatingRef.current}
+                    />
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${isSelected ? 'border-green-500 bg-green-500' : 'border-gray-300 group-hover:border-green-400'}`}>
                       {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                     </div>
                     <span className="font-medium text-sm text-gray-700">{option.label}</span>
                   </div>
                   <div className="w-10 h-10 flex items-center justify-center">
-                    {selectedOption === index && displayEmoji && (
+                    {isSelected && displayEmoji && (
                       <span className="text-3xl transition-all duration-300" style={{ opacity: emojiOpacity, transform: `scale(${emojiScale})` }}>{displayEmoji}</span>
                     )}
                   </div>
@@ -540,16 +692,32 @@ export default function Questionnaire ({ user }) {
         )}
 
         <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100">
-          <button onClick={handlePrevious} disabled={currentQuestion === 0} className="px-5 py-2.5 bg-black text-white rounded-full text-sm hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2" style={{ fontFamily: 'Lora, serif' }}>
+          <button
+            onClick={handlePrevious}
+            disabled={currentQuestion === 0 || isAnimatingRef.current}
+            className="px-5 py-2.5 bg-black text-white rounded-full text-sm hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            style={{ fontFamily: 'Lora, serif' }}
+          >
             <ChevronLeftIcon className="w-4 h-4" />Previous
           </button>
           {currentQuestion === activeQuestions.length - 1 ? (
-            <button onClick={handleSubmit} disabled={answers[currentQ.id] === undefined} className="px-6 py-2.5 bg-black text-white rounded-full text-sm hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2" style={{ fontFamily: 'Lora, serif' }}>
+            <button
+              onClick={handleSubmit}
+              disabled={false}
+
+              className="px-6 py-2.5 bg-black text-white rounded-full text-sm hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+              style={{ fontFamily: 'Lora, serif' }}
+            >
               Complete Assessment<CheckCircleIcon className="w-5 h-5" />
             </button>
           ) : (
-            <button onClick={handleNext} disabled={answers[currentQ.id] === undefined} className="px-6 py-2.5 bg-black text-white rounded-full text-sm hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2" style={{ fontFamily: 'Lora, serif' }}>
-              Next<ChevronRightIcon className="w-4 h-4" />
+            <button
+              onClick={handleNext}
+             disabled={false}
+          className="px-6 py-2.5 bg-black text-white rounded-full text-sm hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            style={{ fontFamily: 'Lora, serif' }}
+          >
+            Next<ChevronRightIcon className="w-4 h-4" />
             </button>
           )}
         </div>

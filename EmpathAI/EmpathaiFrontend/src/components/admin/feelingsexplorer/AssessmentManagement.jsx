@@ -17,6 +17,7 @@ import {
 
 export default function AssessmentManagement() {
     const [questions, setQuestions] = useState([])
+    const [groups, setGroups] = useState([])
 
     const calculateAgeFromDOB = (dob) => {
         if (!dob) return null
@@ -27,8 +28,6 @@ export default function AssessmentManagement() {
         if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) age--
         return age > 0 ? age : null
     }
-
-    const [groups, setGroups] = useState([])
 
     const savedUser = localStorage.getItem('user')
     const currentUser = savedUser ? JSON.parse(savedUser) : null
@@ -51,15 +50,16 @@ export default function AssessmentManagement() {
     const [dateFilter, setDateFilter] = useState('ALL')
     const [filterGender, setFilterGender] = useState('')
     const [responseSheet, setResponseSheet] = useState([])
-    const [llmSummaries, setLlmSummaries] = useState({})
 
+    const [llmSummaries, setLlmSummaries] = useState({})
+    const [insightModal, setInsightModal] = useState({ open: false, data: null, parsed: null, studentName: '' })
     const [questionFormData, setQuestionFormData] = useState({
         question: '',
         domain: '',
-        option1: '', option1OverallMeaning: '', option1Interpretation: '',
-        option2: '', option2OverallMeaning: '', option2Interpretation: '',
-        option3: '', option3OverallMeaning: '', option3Interpretation: '',
-        option4: '', option4OverallMeaning: '', option4Interpretation: '',
+        option1: '', option1OverallMeaning: '', option1Interpretation: '', option1Tag: '',
+        option2: '', option2OverallMeaning: '', option2Interpretation: '', option2Tag: '',
+        option3: '', option3OverallMeaning: '', option3Interpretation: '', option3Tag: '',
+        option4: '', option4OverallMeaning: '', option4Interpretation: '', option4Tag: '',
         groups: [],
         optionCount: 4,
     })
@@ -72,6 +72,7 @@ export default function AssessmentManagement() {
 
     const [selectedFilter, setSelectedFilter] = useState('ALL')
     const [analytics, setAnalytics] = useState(null)
+    const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false)
 
     const showResponseSheetRef = useRef(showResponseSheet)
     useEffect(() => { showResponseSheetRef.current = showResponseSheet }, [showResponseSheet])
@@ -105,12 +106,6 @@ export default function AssessmentManagement() {
     }
 
     useEffect(() => {
-        const defaultQuestions = [
-            { id: 1, text: 'How are you feeling today?', options: ['Very Happy 😊', 'Happy 🙂', 'Okay 😐', 'Sad 😢'], groups: ['Daily Check-in'] },
-            { id: 2, text: 'How well did you sleep last night?', options: ['Very Well 😴', 'Good 😌', 'Not Great 😪', 'Poorly 😫'], groups: ['Daily Check-in'] },
-            { id: 3, text: 'How confident do you feel about your studies?', options: ['Very Confident 💪', 'Confident 👍', 'Somewhat Confident 🤔', 'Not Confident 😟'], groups: ['Class 8th'] },
-        ]
-
         fetchGroups()
             .then(data => {
                 const groupList = Array.isArray(data) ? data : (data?.data || data || [])
@@ -128,7 +123,7 @@ export default function AssessmentManagement() {
                 const questionList = data?.content || data || []
                 setQuestions(questionList)
             })
-            .catch(err => { console.error('Questions fetch error:', err); setQuestions(defaultQuestions) })
+            .catch(err => { console.error('Questions fetch error:', err); setQuestions([]) })
 
         fetchResponses()
             .then(data => {
@@ -164,6 +159,15 @@ export default function AssessmentManagement() {
         { value: 'pink', label: 'Pink', class: 'bg-pink-500' },
         { value: 'indigo', label: 'Indigo', class: 'bg-indigo-500' },
         { value: 'orange', label: 'Orange', class: 'bg-orange-500' },
+    ]
+
+    const tagOptions = [
+        { value: '', label: '— None —' },
+        { value: 'Strength', label: '💪 Strength' },
+        { value: 'Weakness', label: '⚠️ Weakness' },
+        { value: 'Neutral', label: '😐 Neutral' },
+        { value: 'Risk', label: '🔴 Risk' },
+        { value: 'Growth', label: '🌱 Growth' },
     ]
 
     const getOrdinal = (n) => {
@@ -213,10 +217,10 @@ export default function AssessmentManagement() {
             setQuestionFormData({
                 question: question.questions || '',
                 domain: question.domain || '',
-                option1: opts[0] || '', option1OverallMeaning: question.option1OverallMeaning || '', option1Interpretation: question.option1Interpretation || '',
-                option2: opts[1] || '', option2OverallMeaning: question.option2OverallMeaning || '', option2Interpretation: question.option2Interpretation || '',
-                option3: opts[2] || '', option3OverallMeaning: question.option3OverallMeaning || '', option3Interpretation: question.option3Interpretation || '',
-                option4: opts[3] || '', option4OverallMeaning: question.option4OverallMeaning || '', option4Interpretation: question.option4Interpretation || '',
+                option1: opts[0] || '', option1OverallMeaning: question.option1OverallMeaning || '', option1Interpretation: question.option1Interpretation || '', option1Tag: question.option1Tag || '',
+                option2: opts[1] || '', option2OverallMeaning: question.option2OverallMeaning || '', option2Interpretation: question.option2Interpretation || '', option2Tag: question.option2Tag || '',
+                option3: opts[2] || '', option3OverallMeaning: question.option3OverallMeaning || '', option3Interpretation: question.option3Interpretation || '', option3Tag: question.option3Tag || '',
+                option4: opts[3] || '', option4OverallMeaning: question.option4OverallMeaning || '', option4Interpretation: question.option4Interpretation || '', option4Tag: question.option4Tag || '',
                 groups: grp,
                 optionCount: Math.max(filledCount, 2),
             })
@@ -225,10 +229,10 @@ export default function AssessmentManagement() {
             setQuestionFormData({
                 question: '',
                 domain: '',
-                option1: '', option1OverallMeaning: '', option1Interpretation: '',
-                option2: '', option2OverallMeaning: '', option2Interpretation: '',
-                option3: '', option3OverallMeaning: '', option3Interpretation: '',
-                option4: '', option4OverallMeaning: '', option4Interpretation: '',
+                option1: '', option1OverallMeaning: '', option1Interpretation: '', option1Tag: '',
+                option2: '', option2OverallMeaning: '', option2Interpretation: '', option2Tag: '',
+                option3: '', option3OverallMeaning: '', option3Interpretation: '', option3Tag: '',
+                option4: '', option4OverallMeaning: '', option4Interpretation: '', option4Tag: '',
                 groups: selectedGroup ? [selectedGroup] : [],
                 optionCount: 4,
             })
@@ -240,8 +244,9 @@ export default function AssessmentManagement() {
         setGroupFormData({ name: '', color: 'purple', className: '' })
         setIsGroupModalOpen(true)
     }
-
-    const handleSaveQuestion = () => {
+const handleSaveQuestion = () => {
+        if (isSubmittingQuestion) return
+        setIsSubmittingQuestion(true)
         const options = [
             questionFormData.option1,
             questionFormData.option2,
@@ -264,7 +269,6 @@ export default function AssessmentManagement() {
             options: options.join(','),
         }
 
-        // Build answer option payloads for /api/assessment/answer-options/batch
         const buildAnswerOptionPayloads = (questionId) =>
             options.map((opt, i) => {
                 const n = i + 1
@@ -273,22 +277,32 @@ export default function AssessmentManagement() {
                     optionLabel: opt,
                     overallMeaning: questionFormData[`option${n}OverallMeaning`] || '',
                     interpretation: questionFormData[`option${n}Interpretation`] || '',
-                    tag: '',
+                    tag: questionFormData[`option${n}Tag`] || '',
                     range: '',
                 }
             }).filter(p => p.optionLabel.trim())
 
         const saveAnswerOptions = (questionId) => {
-            const payloads = buildAnswerOptionPayloads(questionId)
+            if (!questionId || typeof questionId === 'object') {
+                console.error('saveAnswerOptions: invalid questionId', questionId)
+                return Promise.resolve()
+            }
+            const payloads = buildAnswerOptionPayloads(Number(questionId))
             if (payloads.length === 0) return Promise.resolve()
+            console.log('[saveAnswerOptions] Posting', payloads.length, 'options for questionId=', questionId)
             return fetch('/api/assessment/answer-options/batch', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${localStorage.getItem('access_token') || localStorage.getItem('token') || ''}`
+                    Authorization: `Bearer ${localStorage.getItem('token') || localStorage.getItem('access_token') || ''}`
                 },
                 body: JSON.stringify(payloads)
-            }).catch(err => console.error('Answer options save failed (non-blocking):', err))
+            })
+            .then(res => {
+                if (!res.ok) res.text().then(t => console.error('answer-options batch failed:', res.status, t))
+                return res
+            })
+            .catch(err => console.error('Answer options save failed:', err))
         }
 
         const refetchQuestions = () =>
@@ -315,16 +329,20 @@ export default function AssessmentManagement() {
 
             Promise.all(tasks)
                 .then(() => saveAnswerOptions(editingQuestion.id))
-                .then(() => { setIsQuestionModalOpen(false); refetchQuestions() })
-                .catch(err => { console.error('❌ Question update failed:', err); setIsQuestionModalOpen(false) })
-        } else {
+                .then(() => { setIsSubmittingQuestion(false); setIsQuestionModalOpen(false); refetchQuestions() })
+                .catch(err => { console.error('❌ Question update failed:', err); setIsSubmittingQuestion(false); setIsQuestionModalOpen(false) })}  else {
             const groupIds = questionFormData.groups.map(id => Number(id))
             Promise.all(groupIds.map(gid => createQuestion({ ...questionData, groupMapId: gid })))
-                .then(createdList =>
-                    Promise.all(createdList.map(created => saveAnswerOptions(created?.id || created)))
-                )
-                .then(() => { setIsQuestionModalOpen(false); refetchQuestions() })
-                .catch(err => { console.error('❌ Question NOT saved:', err); setIsQuestionModalOpen(false) })
+                .then(createdList => {
+                    console.log('[createQuestion] responses:', createdList)
+                    return Promise.all(createdList.map(created => {
+                        const qid = typeof created === 'number' ? created
+                            : created?.id ?? created?.data?.id ?? created?.content?.id ?? null
+                        return saveAnswerOptions(qid)
+                    }))
+                })
+                .then(() => { setIsSubmittingQuestion(false); setIsQuestionModalOpen(false); refetchQuestions() })
+                .catch(err => { console.error('❌ Question NOT saved:', err); setIsSubmittingQuestion(false); setIsQuestionModalOpen(false) })
         }
     }
 
@@ -455,53 +473,89 @@ export default function AssessmentManagement() {
     })
 
     const isStudentResponsesSelected = selectedGroup === 'Student Responses'
-    const totalAllResponses = studentResponses.length
-    const totalNegativeResponses = studentResponses.filter(r => r.emotion === 'negative').length
-    const lastQuestion = questions.length > 0 ? questions[questions.length - 1] : null
 
     const getOptionCount = (questionId, option) =>
         studentResponses.filter(r => r.questionId === questionId && r.answer === option).length
 
-    const getQuestionLabel = (questionId) => {
-        const index = questions.findIndex(q => q.id === questionId)
-        return index !== -1 ? `Q${index + 1}` : '-'
-    }
-
     const uniqueStudents = Array.from(
         new Map(studentResponses.filter(r => r.questionId).map(r => [r.studentId, r])).values()
     )
-
-    const filteredStudents = uniqueStudents.filter(student => {
-        const matchesAge = filterAge ? student.age == filterAge : true
-        const matchesClass = filterClass ? (student.className || '').toLowerCase().includes(filterClass.toLowerCase()) : true
-        const matchesGenderFilter = filterGender ? (student.gender || student.sex || '').toLowerCase().startsWith(filterGender.toLowerCase()) : true
-        return matchesAge && matchesClass && matchesGenderFilter
-    })
 
     const sheetStudents = Array.from(
         new Map((Array.isArray(responseSheet) ? responseSheet : []).map(r => [r.studentId, r])).values()
     )
     const filteredSheet = sheetStudents.filter(s => matchesGender(s) && filterByDate(s))
 
-    // ── Summary fetch helper ──────────────────────────────────────────────────
-    // Calls GET /api/responses/summary/{studentId}?groupId=X
-    // Returns summaryText + bulletPoints from AssessmentReport table
     const fetchSummaryForStudent = (studentId, groupId) => {
         const token = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
-        fetch(`/api/responses/summary/${encodeURIComponent(studentId)}?groupId=${groupId}`, {
+        fetch(`/api/assessment/reports/student/${encodeURIComponent(studentId)}/group/${groupId}`, {
             headers: { Authorization: `Bearer ${token}` }
         })
             .then(r => r.ok ? r.json() : null)
             .then(d => {
                 if (!d) return
-                const summaryText = d.summary || ''
-                const bullets = d.bulletPoints || ''
-                const combined = [summaryText, bullets].filter(Boolean).join('\n\n')
-                if (combined.trim()) {
-                    setLlmSummaries(prev => ({ ...prev, [studentId]: combined }))
+                const summaryText = (d.summaryText || '').trim()
+                const bulletPoints = (d.bulletPoints || '').trim()
+                const sessionDate = d.sessionDate || null
+                if (summaryText || bulletPoints) {
+                    setLlmSummaries(prev => ({
+                        ...prev,
+                        [studentId]: { summaryText, bulletPoints, sessionDate }
+                    }))
                 }
             })
             .catch(() => { })
+    }
+    const stripEmoji = (text) =>
+        (text || '').replace(/^[\p{Emoji}\s•\-–—*]+/u, '').trim()
+const parseBulletPoints = (raw) => {
+        if (!raw) return { strengths: [], improvements: [], tips: [], plain: [] }
+        const lines = raw.split('\n').map(l => l.trim()).filter(Boolean)
+        const strengths = []
+        const improvements = []
+        const tips = []
+        const plain = []
+        lines.forEach(line => {
+            // Strip leading bullets/spaces/dashes
+            const clean = line.replace(/^[\s•\-–—*]+/, '').trim()
+            // Use includes check — more reliable than startsWith for multi-codepoint emoji
+            if (clean.includes('✅') && clean.indexOf('✅') < 4) {
+                strengths.push(clean.replace(/✅\s*/, '').trim())
+            } else if (clean.includes('🔹') && clean.indexOf('🔹') < 4) {
+                improvements.push(clean.replace(/🔹\s*/, '').trim())
+            } else if (clean.includes('💡') && clean.indexOf('💡') < 4) {
+                tips.push(clean.replace(/💡\s*/, '').trim())
+            } else if (clean.length > 0) {
+                plain.push(clean)
+            }
+        })
+        return { strengths, improvements, tips, plain }
+    }
+    // FIX: Try multiple name formats for fetchResponseSheet because the backend
+    // may be keyed by className ("10th Standard") or group name ("Class 10th Standard").
+    // We try className first (most likely match), then fall back to the full group name.
+    const loadResponseSheet = async (groupObj) => {
+        const candidates = []
+        if (groupObj?.className) candidates.push(groupObj.className)           // "10th Standard"
+        if (groupObj?.name)      candidates.push(groupObj.name)                // "Class 10th Standard"
+        // Also try the class_name without "Standard" suffix as a fallback
+        if (groupObj?.className) candidates.push(groupObj.className.replace(' Standard', '').trim())
+
+        let sheet = []
+        for (const name of candidates) {
+            try {
+                const data = await fetchResponseSheet(name)
+                const rows = Array.isArray(data) ? data : data?.content || data || []
+                if (rows.length > 0) {
+                    sheet = rows
+                    console.log(`[ResponseSheet] Loaded ${rows.length} rows using name="${name}"`)
+                    break
+                }
+            } catch (err) {
+                console.warn(`[ResponseSheet] fetchResponseSheet("${name}") failed:`, err.message)
+            }
+        }
+        return sheet
     }
 
     return (
@@ -593,23 +647,77 @@ export default function AssessmentManagement() {
                             Questions in {groups.find(g => g.id === selectedGroup)?.name}
                         </h4>
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 setShowResponseSheet(true)
                                 setResponseSheet([])
                                 setLlmSummaries({})
                                 setFilterGender('')
                                 setDateFilter('ALL')
+
                                 const groupObj = groups.find(g => g.id === selectedGroup)
-                                const groupName = groupObj?.className || groupObj?.name || selectedGroup
-                                fetchResponseSheet(groupName)
-                                    .then(data => {
-                                        const sheet = Array.isArray(data) ? data : data?.content || data || []
-                                        setResponseSheet(sheet)
-                                        // ── FIXED: pass groupId so backend can find the report ──
-                                        const uniqueIds = [...new Set(sheet.map(r => r.studentId).filter(Boolean))]
-                                        uniqueIds.forEach(sid => fetchSummaryForStudent(sid, selectedGroup))
+                                const token = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
+
+                                // FIX: use loadResponseSheet which tries className AND name formats
+                                const sheet = await loadResponseSheet(groupObj)
+                                setResponseSheet(sheet)
+
+                                // Build unique student map and generate/fetch summaries
+                                const uniqueStudentMap = new Map()
+                                sheet.forEach(r => {
+                                    if (r.studentId && !uniqueStudentMap.has(r.studentId)) {
+                                        uniqueStudentMap.set(r.studentId, r)
+                                    }
+                                })
+
+                                uniqueStudentMap.forEach((studentRow, sid) => {
+                                    const studentAnswers = sheet
+                                        .filter(r => r.studentId === sid && (r.responseValue || r.answer))
+                                        .map(r => ({
+                                            questionId: r.questionId,
+                                            questionText: r.questionText || '',
+                                            selectedOption: r.responseValue || r.answer || ''
+                                        }))
+                                        .filter(a => a.selectedOption.trim())
+
+                                    if (studentAnswers.length === 0) {
+                                        fetchSummaryForStudent(sid, selectedGroup)
+                                        return
+                                    }
+
+                                    // Use className from the sheet row or fall back to group className
+                                    const resolvedClassName = studentRow.className ||
+                                        groupObj?.className || groupObj?.name || ''
+
+                                    fetch('/api/assessment/reports/generate', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            Authorization: `Bearer ${token}`
+                                        },
+                                        body: JSON.stringify({
+                                            studentId: sid,
+                                            studentName: studentRow.studentName || '',
+                                            groupId: selectedGroup,
+                                            groupName: groupObj?.name || '',
+                                            className: resolvedClassName,
+                                            answers: studentAnswers
+                                        })
                                     })
-                                    .catch(err => console.error('Sheet error:', err))
+                                    .then(r => r.ok ? r.json() : null)
+                                    .then(d => {
+                                        if (!d) return
+                                        const summaryText = (d.summaryText || '').trim()
+                                        const bulletPoints = (d.bulletPoints || '').trim()
+                                        if (summaryText || bulletPoints) {
+                                            setLlmSummaries(prev => ({
+                                                ...prev,
+                                                [sid]: { summaryText, bulletPoints, sessionDate: d.sessionDate }
+                                            }))
+                                        }
+                                    })
+                                    .catch(() => fetchSummaryForStudent(sid, selectedGroup))
+                                })
+
                                 loadAnalytics(selectedFilter, selectedGroup)
                             }}
                             className="flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700"
@@ -699,7 +807,7 @@ export default function AssessmentManagement() {
                 </div>
             )}
 
-            {/* Add/Edit Question Modal */}
+            {/* ── Add/Edit Question Modal ─────────────────────────────────────────────── */}
             {isQuestionModalOpen && (
                 <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
                     <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -711,7 +819,6 @@ export default function AssessmentManagement() {
                                     {editingQuestion ? 'Edit Question' : 'Add New Question'}
                                 </h3>
                                 <div className="space-y-4">
-                                    {/* Question Text */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Question Text</label>
                                         <textarea
@@ -723,7 +830,6 @@ export default function AssessmentManagement() {
                                         />
                                     </div>
 
-                                    {/* Group Selection */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Assign to Groups</label>
                                         <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-md">
@@ -750,7 +856,6 @@ export default function AssessmentManagement() {
                                         )}
                                     </div>
 
-                                    {/* Domain */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Domain <span className="text-xs font-normal text-gray-400">(e.g. Mood assessment)</span>
@@ -764,11 +869,10 @@ export default function AssessmentManagement() {
                                         />
                                     </div>
 
-                                    {/* Answer Options + Interpretation */}
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
                                             <label className="block text-sm font-medium text-gray-700">
-                                                Answer Options &amp; Interpretation
+                                                Answer Options, Interpretation &amp; Tag
                                             </label>
                                             <div className="flex items-center gap-2">
                                                 <button
@@ -779,7 +883,8 @@ export default function AssessmentManagement() {
                                                         optionCount: prev.optionCount - 1,
                                                         [`option${prev.optionCount}`]: '',
                                                         [`option${prev.optionCount}OverallMeaning`]: '',
-                                                        [`option${prev.optionCount}Interpretation`]: ''
+                                                        [`option${prev.optionCount}Interpretation`]: '',
+                                                        [`option${prev.optionCount}Tag`]: '',
                                                     }))}
                                                     className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-base font-bold"
                                                 >−</button>
@@ -807,6 +912,7 @@ export default function AssessmentManagement() {
                                                             className="flex-1 border border-gray-300 rounded-md shadow-sm py-1.5 px-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-sm bg-white"
                                                         />
                                                     </div>
+
                                                     {questionFormData[`option${num}`].trim() && (
                                                         <div className="px-3 py-3 grid grid-cols-2 gap-x-4 gap-y-3 bg-white">
                                                             <div>
@@ -819,6 +925,22 @@ export default function AssessmentManagement() {
                                                                     className="block w-full border border-gray-300 rounded-md py-1.5 px-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-xs"
                                                                 />
                                                             </div>
+
+                                                            <div>
+                                                                <label className="block text-xs font-medium text-gray-500 mb-1">
+                                                                    Tag <span className="text-gray-400 font-normal">(guides the AI)</span>
+                                                                </label>
+                                                                <select
+                                                                    value={questionFormData[`option${num}Tag`]}
+                                                                    onChange={(e) => setQuestionFormData({ ...questionFormData, [`option${num}Tag`]: e.target.value })}
+                                                                    className="block w-full border border-gray-300 rounded-md py-1.5 px-2 focus:outline-none focus:ring-purple-500 focus:border-purple-500 text-xs bg-white"
+                                                                >
+                                                                    {tagOptions.map(t => (
+                                                                        <option key={t.value} value={t.value}>{t.label}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+
                                                             <div className="col-span-2">
                                                                 <label className="block text-xs font-medium text-gray-500 mb-1">Psychological Interpretation</label>
                                                                 <textarea
@@ -834,8 +956,11 @@ export default function AssessmentManagement() {
                                                 </div>
                                             ))}
                                         </div>
+
                                         <p className="mt-2 text-xs text-gray-400">
-                                            Type an answer label first — the interpretation fields expand below it.
+                                            Fill in the Answer label first — interpretation and tag fields expand below it.
+                                            The <strong>Tag</strong> field tells the AI whether this answer is a Strength, Weakness, etc.,
+                                            so it generates more targeted and distinct bullet points.
                                         </p>
                                     </div>
                                 </div>
@@ -845,9 +970,10 @@ export default function AssessmentManagement() {
                                 <button
                                     type="button"
                                     onClick={handleSaveQuestion}
-                                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-purple-600 text-base font-medium text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 sm:col-start-2 sm:text-sm"
+                                    disabled={isSubmittingQuestion}
+                                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-purple-600 text-base font-medium text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 sm:col-start-2 sm:text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                    {editingQuestion ? 'Update' : 'Add'} Question
+                                    {isSubmittingQuestion ? 'Saving...' : (editingQuestion ? 'Update' : 'Add') + ' Question'}
                                 </button>
                                 <button
                                     type="button"
@@ -862,7 +988,7 @@ export default function AssessmentManagement() {
                 </div>
             )}
 
-            {/* Response Sheet */}
+            {/* ── Response Sheet ──────────────────────────────────────────────────────── */}
             {showResponseSheet && (
                 <div className="mt-8 bg-white border border-gray-200 rounded-lg shadow-sm p-4">
                     <div className="flex justify-between items-center mb-4">
@@ -921,31 +1047,32 @@ export default function AssessmentManagement() {
                                     <tr>
                                         <th className="border px-4 py-2 text-left">Field</th>
                                         {filteredSheet.map((student, index) => (
-                                            <th key={student.studentId || index} className="border px-4 py-2">R{index + 1}</th>
+                                            // FIX: show student name in header instead of generic "R1, R2..."
+                                            <th key={student.studentId || index} className="border px-4 py-2 text-center">
+                                                {student.studentName || `Student ${index + 1}`}
+                                            </th>
                                         ))}
                                     </tr>
                                 </thead>
                                 <tbody className="text-sm">
                                     <tr>
-                                        <td className="border px-4 py-2 font-medium">Name</td>
-                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2">{student.studentName || '-'}</td>)}
-                                    </tr>
-                                    <tr>
                                         <td className="border px-4 py-2 font-medium">Class</td>
-                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2">{student.className || '-'}</td>)}
+                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2 text-center">{student.className || '-'}</td>)}
                                     </tr>
                                     <tr>
                                         <td className="border px-4 py-2 font-medium">Gender</td>
-                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2">{student.gender || '-'}</td>)}
+                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2 text-center">{student.gender || '-'}</td>)}
                                     </tr>
                                     <tr>
                                         <td className="border px-4 py-2 font-medium">Age</td>
-                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2">{student.age || '-'}</td>)}
+                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2 text-center">{student.age || '-'}</td>)}
                                     </tr>
                                     <tr>
                                         <td className="border px-4 py-2 font-medium">School</td>
-                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2">{student.schoolName || '-'}</td>)}
+                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2 text-center">{student.schoolName || '-'}</td>)}
                                     </tr>
+
+                                    {/* Question rows */}
                                     {questions
                                         .filter(q => String(q.groupMapId) === String(selectedGroup))
                                         .map((question, qIndex) => (
@@ -965,21 +1092,44 @@ export default function AssessmentManagement() {
                                             </tr>
                                         ))}
 
-                                    {/* ── AI Summary Row ── */}
-                                    <tr className="bg-purple-50">
-                                        <td className="border px-4 py-2 font-semibold text-purple-800">AI Summary</td>
+                                    {/* AI Insights */}
+                                    <tr className="bg-indigo-50">
+                                        <td className="border px-4 py-2 font-semibold text-indigo-800">AI Insights</td>
                                         {filteredSheet.map((student, i) => {
-                                            const raw = llmSummaries[student.studentId]
+                                            const data = llmSummaries[student.studentId]
+                                            const parsed = parseBulletPoints(data?.bulletPoints)
+                                            const hasContent = data?.bulletPoints
                                             return (
-                                                <td key={i} className="border px-4 py-3 text-xs text-gray-700 align-top max-w-xs">
-                                                    {raw ? (
-                                                        <div className="space-y-1">
-                                                            {raw.split('\n').filter(line => line.trim()).map((line, li) => (
-                                                                <p key={li} className="leading-snug">{line}</p>
-                                                            ))}
+                                                <td key={i} className="border px-4 py-3 text-xs align-top max-w-xs">
+                                                    {hasContent ? (
+                                                        <div>
+                                                            {data?.summaryText && (
+                                                                <p className="text-gray-600 text-xs italic mb-1 line-clamp-2">{data.summaryText}</p>
+                                                            )}
+                                                            <div className="space-y-1 mb-2">
+                                                               {parsed.strengths.length > 0 && (
+                                                                    <p className="text-green-700 text-xs">{stripEmoji(parsed.strengths[0])}</p>
+                                                                )}
+                                                                 {parsed.improvements.length > 0 && (
+                                                                    <p className="text-blue-700 text-xs">{stripEmoji(parsed.improvements[0])}</p>
+                                                                )}
+                                                                {parsed.tips.length > 0 && (
+                                                                    <p className="text-amber-700 text-xs">{stripEmoji(parsed.tips[0])}</p>
+                                                                )}
+
+                                                                {parsed.plain.length > 0 && parsed.strengths.length === 0 && parsed.improvements.length === 0 && (
+                                                                    <p className="text-purple-700 text-xs">{parsed.plain[0]}</p>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => setInsightModal({ open: true, data, parsed, studentName: student.studentName })}
+                                                                className="text-xs px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full transition-all"
+                                                            >
+                                                                View Full ✨
+                                                            </button>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-gray-400 italic">No summary yet</span>
+                                                        <span className="text-gray-400 italic">No insights yet</span>
                                                     )}
                                                 </td>
                                             )
@@ -992,7 +1142,7 @@ export default function AssessmentManagement() {
                 </div>
             )}
 
-            {/* Create Group Modal new added */}
+            {/* Create Group Modal */}
             {isGroupModalOpen && (
                 <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="group-modal-title" role="dialog" aria-modal="true">
                     <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -1032,7 +1182,6 @@ export default function AssessmentManagement() {
                                         </div>
                                     </div>
                                 </div>
-                                
                             </div>
                             <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
                                 <button
@@ -1071,16 +1220,68 @@ export default function AssessmentManagement() {
                 </div>
             )}
 
-            {isResponseModalOpen && selectedResponse && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-                    <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-xl">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Response Submitted ✅</h3>
-                        <p className="text-sm text-gray-600 mb-6">
-                            Your answer: <span className="font-medium">{selectedResponse.answer}</span>
-                        </p>
+            {/* Full AI Insight Modal */}
+            {insightModal.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg relative max-h-[85vh] overflow-y-auto">
                         <button
-                            onClick={() => setIsResponseModalOpen(false)}
-                            className="w-full py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                            onClick={() => setInsightModal({ open: false, data: null, parsed: null, studentName: '' })}
+                            className="absolute top-3 right-3 w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-lg"
+                        >✕</button>
+                        <h3 className="text-lg font-bold text-indigo-800 mb-1">
+                            ✨ AI Insight — {insightModal.studentName}
+                        </h3>
+                       {insightModal.data?.summaryText && (
+                            <p className="text-sm text-gray-600 italic mb-4 border-b pb-3">
+                                {insightModal.data.summaryText
+                                    .replace(/\bshe's\b/gi, "they're")
+                                    .replace(/\bhe's\b/gi, "they're")
+                                    .replace(/\bshe\b/gi, 'they')
+                                    .replace(/\bhe\b/gi, 'they')
+                                    .replace(/\bher\b/gi, 'their')
+                                    .replace(/\bhis\b/gi, 'their')
+                                    .replace(/\bthey're\b/gi, "they're")
+                                    .replace(/\bthem\b/gi, 'them')}
+                            </p>
+                        )}
+                        <div className="space-y-4">
+                            {insightModal.parsed?.strengths?.length > 0 && (
+                                <div>
+                                    <p className="text-green-700 font-semibold text-sm mb-1">✅ Strengths</p>
+                                    {insightModal.parsed.strengths.map((s, i) => (
+                                        <p key={i} className="text-green-800 text-sm leading-snug ml-3 mb-1">• {stripEmoji(s)}</p>
+                                    ))}
+                                </div>
+                            )}
+                            {insightModal.parsed?.improvements?.length > 0 && (
+                                <div>
+                                    <p className="text-blue-700 font-semibold text-sm mb-1">🔹 Areas to Improve</p>
+                                    {insightModal.parsed.improvements.map((s, i) => (
+                                        <p key={i} className="text-blue-800 text-sm leading-snug ml-3 mb-1">• {stripEmoji(s)}</p>
+                                    ))}
+                                </div>
+                            )}
+                            {insightModal.parsed?.tips?.length > 0 && (
+                                <div>
+                                    <p className="text-amber-700 font-semibold text-sm mb-1">💡 Suggested Action</p>
+                                    {insightModal.parsed.tips.map((s, i) => (
+                                        <p key={i} className="text-amber-800 text-sm leading-snug ml-3 mb-1">• {stripEmoji(s)}</p>
+                                    ))}
+                                </div>
+                            )}
+                            {insightModal.parsed?.plain?.length > 0 &&
+                             insightModal.parsed?.strengths?.length === 0 &&
+                             insightModal.parsed?.improvements?.length === 0 && (
+                                <div className="space-y-1">
+                                    {insightModal.parsed.plain.map((line, li) => (
+                                        <p key={li} className="text-purple-700 text-sm leading-snug">• {line}</p>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => setInsightModal({ open: false, data: null, parsed: null, studentName: '' })}
+                            className="mt-5 w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
                         >Close</button>
                     </div>
                 </div>

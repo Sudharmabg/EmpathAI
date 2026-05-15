@@ -1,6 +1,11 @@
 package com.empathai.assessment.controller;
 
-import com.empathai.assessment.dto.*;
+import com.empathai.assessment.dto.GroupRequest;
+import com.empathai.assessment.dto.QuestionRequest;
+import com.empathai.assessment.dto.ResponseRequest;
+import com.empathai.assessment.dto.GroupResponse;
+import com.empathai.assessment.dto.QuestionResponse;
+import com.empathai.assessment.dto.ResponseDto;
 import com.empathai.assessment.service.AssessmentReportService;   // ← ADD THIS IMPORT
 import com.empathai.assessment.service.IAssessmentService;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +34,7 @@ public class AssessmentController {
     // ── Groups ────────────────────────────────────────────────────────────────
 
     @GetMapping("/groups")
-    public ResponseEntity<List<GroupResponse>> getAllGroups() {
+    public ResponseEntity<List<com.empathai.assessment.dto.GroupResponse>> getAllGroups() {
         logger.info("getAllGroups started");
         try {
             ResponseEntity<List<GroupResponse>> response = ResponseEntity.ok(assessmentService.getAllGroups());
@@ -85,7 +90,7 @@ public class AssessmentController {
     // ── Questions ─────────────────────────────────────────────────────────────
 
     @GetMapping("/questions")
-    public ResponseEntity<Page<QuestionResponse>> getQuestions(
+    public ResponseEntity<Page<com.empathai.assessment.dto.QuestionResponse>> getQuestions(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         logger.info("getQuestions started");
@@ -134,7 +139,7 @@ public class AssessmentController {
     }
 
     @GetMapping("/responses/by-class/{className}")
-    public ResponseEntity<List<ResponseDto>> getResponsesByClass(
+    public ResponseEntity<List<com.empathai.assessment.dto.ResponseDto>> getResponsesByClass(
             @PathVariable String className) {
         logger.info("getResponsesByClass started for className={}", className);
         try {
@@ -277,7 +282,7 @@ public class AssessmentController {
                 return ResponseEntity.ok(result);
             }
 
-            reportService.getReport(studentId, groupId).ifPresentOrElse(
+            reportService.getLatestReport(studentId, groupId).ifPresentOrElse(
                     report -> {
                         result.put("summary",      report.getSummaryText());
                         result.put("bulletPoints", report.getBulletPoints());

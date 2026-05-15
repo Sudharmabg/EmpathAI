@@ -1,6 +1,7 @@
 package com.empathai.assessment.service;
 
 import com.empathai.assessment.dto.AssessmentReportRequest;
+
 import com.empathai.assessment.dto.AssessmentReportResponse;
 import com.empathai.assessment.entity.AnswerOption;
 import com.empathai.assessment.entity.AssessmentReport;
@@ -14,7 +15,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
-
+import java.util.Arrays;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -38,7 +39,13 @@ public class AssessmentReportService {
     private static final String MODEL = "gpt-4o";
 
     // ── Generate or return cached report ─────────────────────────────────────
-
+    private String cleanBullets(String raw) {
+        if (raw == null) return "";
+        return Arrays.stream(raw.split("\n"))
+                .map(line -> line.replaceAll("^[•\\-\\s]+", "").trim())
+                .filter(line -> !line.isBlank())
+                .collect(Collectors.joining("\n"));
+    }
 
     @Transactional
     public AssessmentReportResponse generateReport(AssessmentReportRequest request) {
@@ -74,7 +81,7 @@ public class AssessmentReportService {
         if (allCached && !enriched.isEmpty()) {
             log.info("All bullets cached — building report from cache for student={}", request.getStudentId());
             bulletPoints = enriched.stream()
-                    .map(e -> e.cachedBullets)
+                    .map(e -> cleanBullets(e.cachedBullets))
                     .collect(Collectors.joining("\n\n"));
             summaryText = buildSummaryFromCache(enriched);
         } else {
@@ -110,20 +117,17 @@ public class AssessmentReportService {
         return toResponse(saved);
     }
 
-    /** Get existing report for a student session (for re-display) */
     public Optional<AssessmentReportResponse> getReport(String studentId, Long groupId) {
         return reportRepo
                 .findByStudentIdAndGroupIdAndSessionDate(studentId, groupId, LocalDate.now())
                 .map(this::toResponse);
     }
 
-    /** All reports for a class — teacher/psychologist dashboard */
     public List<AssessmentReportResponse> getReportsByClass(String className) {
         return reportRepo.findByClassNameOrderByCreatedAtDesc(className)
                 .stream().map(this::toResponse).collect(Collectors.toList());
     }
 
-    /** All reports for a group */
     public List<AssessmentReportResponse> getReportsByGroup(Long groupId) {
         return reportRepo.findByGroupIdOrderByCreatedAtDesc(groupId)
                 .stream().map(this::toResponse).collect(Collectors.toList());
@@ -243,17 +247,18 @@ public class AssessmentReportService {
             Format:
             {
               "summary": "2 warm supportive sentences about the student.",
-              "strengths": ["6-8 word phrase", "6-8 word phrase"],
-              "improvements": ["6-8 word phrase", "6-8 word phrase"],
-              "tip": "3-4 word action phrase"
+              "strengths": ["✅ Full 2-sentence strength referencing the student's specific answer (max 35 words)"],
+              "improvements": ["🔹 Full 2-sentence area to improve referencing the specific answer (max 35 words)"],
+              "tip": "💡 Full 1-2 sentence suggested action the student can do this week (max 25 words)"
             }
             STRICT RULES:
-            - Every item in strengths[], improvements[], and tip must be 3-6 words MAXIMUM.
-            - NO full sentences. Only short noun phrases or verb phrases.
-            - Good: "Strong self-awareness", "Needs stress strategies", "Try daily journaling"
-            - Bad: "Mimi demonstrates strong self-awareness by recognizing her thoughts"
+            - strengths[] items MUST start with ✅
+            - improvements[] items MUST start with 🔹
+            - tip MUST start with 💡
+            - Each bullet must reference the SPECIFIC answer content — no generic feedback.
+            - Use warm, age-appropriate language. No clinical terms. No disorder labels.
+            - 2 items in strengths[], 2 items in improvements[], 1 tip.
             """);
-
         return sb.toString();
     }
 
@@ -273,19 +278,21 @@ public class AssessmentReportService {
 
             String summary = (String) parsed.getOrDefault("summary", "");
 
-            // Build bullets string from strengths + improvements + tip arrays
             StringBuilder bullets = new StringBuilder();
             for (String key : new String[]{"strengths", "improvements"}) {
                 Object val = parsed.get(key);
                 if (val instanceof java.util.List<?> list) {
                     for (Object item : list) {
-                        bullets.append("• ").append(item).append("\n");
+                        String clean = item.toString().replaceAll("^[•\\-\\s]+", "").trim();
+                        if (key.equals("strengths"))    bullets.append("✅ ").append(clean).append("\n");
+                        else                            bullets.append("🔹 ").append(clean).append("\n");
                     }
                 }
             }
             Object tip = parsed.get("tip");
             if (tip != null) {
-                bullets.append("• ").append(tip).append("\n");
+                String clean = tip.toString().replaceAll("^[•\\-\\s]+", "").trim();
+                bullets.append("💡 ").append(clean).append("\n");
             }
 
             result.put("summary", summary);
@@ -405,4 +412,19 @@ public class AssessmentReportService {
         String tag;
         String cachedBullets;
     }
+    public Optional<AssessmentReportResponse> getLatestReport(String studentId, Long groupId) {
+        return reportRepo.findByStudentIdOrderByCreatedAtDesc(studentId)
+                .stream()
+                .filter(r -> r.getGroupId().equals(groupId))
+                .findFirst()
+                .map(this::toResponse);
+    }
+    @Transactional
+    public void deleteTodayReport(String studentId, Long groupId) {
+        reportRepo
+                .findByStudentIdAndGroupIdAndSessionDate(studentId, groupId, LocalDate.now())
+                .ifPresent(reportRepo::delete);
+        log.info("Deleted today's cached report for student={} group={}", studentId, groupId);
+    }
+
 }

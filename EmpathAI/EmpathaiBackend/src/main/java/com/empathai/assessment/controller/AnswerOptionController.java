@@ -1,6 +1,9 @@
 package com.empathai.assessment.controller;
 
-import com.empathai.assessment.dto.*;
+import com.empathai.assessment.dto.AnswerOptionRequest;
+import com.empathai.assessment.dto.AssessmentReportRequest;
+import com.empathai.assessment.dto.AnswerOptionResponse;
+import com.empathai.assessment.dto.AssessmentReportResponse;
 import com.empathai.assessment.service.AnswerOptionService;
 import com.empathai.assessment.service.AssessmentReportService;
 import lombok.RequiredArgsConstructor;
@@ -80,7 +83,7 @@ public class AnswerOptionController {
 
 
     @PostMapping("/reports/generate")
-    public ResponseEntity<AssessmentReportResponse> generateReport(
+    public ResponseEntity<com.empathai.assessment.dto.AssessmentReportResponse> generateReport(
             @RequestBody AssessmentReportRequest request) {
         log.info("generateReport student={} group={}", request.getStudentId(), request.getGroupId());
         try {
@@ -100,6 +103,16 @@ public class AnswerOptionController {
         return reportService.getReport(studentId, groupId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+
+    @DeleteMapping("/reports/student/{studentId}/group/{groupId}/today")
+    public ResponseEntity<Void> deleteTodayReport(
+            @PathVariable String studentId,
+            @PathVariable Long groupId) {
+        log.info("deleteTodayReport student={} group={}", studentId, groupId);
+        reportService.deleteTodayReport(studentId, groupId);
+        return ResponseEntity.noContent().build();  // 204 — always succeeds
     }
 
 
@@ -167,4 +180,5 @@ public class AnswerOptionController {
             return ResponseEntity.ok(Map.of("status", "FAIL", "error", detail));
         }
     }
+
 }

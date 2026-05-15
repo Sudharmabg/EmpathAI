@@ -10,5 +10,6 @@ public class QuestionRequest {
     private Long groupMapId;
     private String questionText;
     private String options;
+
     private String domain;
 }

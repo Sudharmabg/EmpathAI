@@ -45,9 +45,6 @@ public class AnswerOptionService {
         if (existing.isPresent()) {
             option = existing.get();
 
-            // ✅ FIX: Only invalidate cache if interpretation content actually changed.
-            // Previously @PreUpdate cleared cache on every save — including the save
-            // that stores newly generated bullets, creating an infinite wipe loop.
             interpretationChanged =
                     !Objects.equals(option.getRangeValue(),      request.getRange())       ||
                             !Objects.equals(option.getOverallMeaning(),  request.getOverallMeaning()) ||
@@ -60,7 +57,6 @@ public class AnswerOptionService {
             option.setTag(request.getTag());
 
             if (interpretationChanged) {
-                // Explicitly wipe cache — will be regenerated async below
                 option.setCachedBullets(null);
                 option.setBulletsGeneratedAt(null);
                 log.info("Interpretation changed for optionId={} — cache invalidated", option.getId());
@@ -74,13 +70,12 @@ public class AnswerOptionService {
                     .interpretation(request.getInterpretation())
                     .tag(request.getTag())
                     .build();
-            interpretationChanged = true; // new option always needs bullets
+            interpretationChanged = true;
         }
 
         AnswerOption saved = answerOptionRepo.save(option);
         log.info("Saved answer option id={} for questionId={}", saved.getId(), saved.getQuestionId());
 
-        // Trigger async bullet generation only if needed
         if (interpretationChanged || saved.getCachedBullets() == null) {
             generateBulletsAsync(saved.getId());
         }
@@ -119,7 +114,6 @@ public class AnswerOptionService {
 
     @Async
     public void generateBulletsAsync(Long optionId) {
-        // ✅ FIX: Re-fetch fresh from DB to avoid stale state
         answerOptionRepo.findById(optionId).ifPresent(option -> {
             if (option.getCachedBullets() != null && !option.getCachedBullets().isBlank()) {
                 log.debug("Bullets already cached for option id={}", optionId);
@@ -127,8 +121,7 @@ public class AnswerOptionService {
             }
             String bullets = callLlmForBullets(option);
             if (bullets != null && !bullets.isBlank()) {
-                // ✅ FIX: Use direct field set + save — @PreUpdate will NOT clear
-                // cachedBullets anymore, so this save is safe.
+
                 option.setCachedBullets(bullets);
                 option.setBulletsGeneratedAt(LocalDateTime.now());
                 answerOptionRepo.save(option);
@@ -183,33 +176,72 @@ public class AnswerOptionService {
     }
 
     private String buildBulletPrompt(AnswerOption option) {
+        String tag = option.getTag() != null && !option.getTag().isBlank()
+                ? option.getTag() : "Neutral";
+
+        // Build tag-specific instruction so the LLM produces distinct bullets per category
+        String tagInstruction = switch (tag) {
+            case "Strength" -> """
+                    This answer tag is STRENGTH — the student is doing well in this area.
+                     Highlight a specific, concrete strength this answer shows (not generic praise).
+                     Suggest one way they can build even further on this strength (growth, not concern).
+                     Give one small action to sustain or deepen this positive pattern this week.
+                    """;
+            case "Weakness" -> """
+                    This answer tag is WEAKNESS — the student needs support in this area.
+                     Find one small positive or protective factor still visible in this answer.
+                     Clearly name the specific area of concern (without clinical labels).
+                     Give one gentle, doable action the student can try this week to address it.
+                    """;
+            case "Risk" -> """
+                    This answer tag is RISK — there is a concern that may need attention.
+                     Acknowledge the student's honesty in sharing this response.
+                     Describe the specific risk this response indicates, warmly but clearly.
+                     Recommend one concrete step — ideally involving a trusted adult or routine.
+                    """;
+            case "Growth" -> """
+                    This answer tag is GROWTH — the student is improving or open to change.
+                     Celebrate the progress or openness this answer reflects.
+                     Identify one area where more growth is still possible.
+                     Give one practical habit or action to keep the momentum going.
+                    """;
+            default -> """
+                    This answer tag is NEUTRAL.
+                     Note one balanced, positive observation from this answer.
+                     Identify one area that could benefit from more attention.
+                     Suggest one simple, practical action for this week.
+                    """;
+        };
+
         return String.format("""
-                You are a compassionate educational psychologist writing feedback for a school student.
-    
-                A student selected this answer option in a psychological assessment:
-                - Option: %s
-                - Score Range: %s
-                - Overall Meaning: %s
-                - Psychological Interpretation: %s
-                - Domain Tag: %s
-    
-                Write exactly 3 bullet points:
-                ✅ One strength this answer reveals about the student.
-                🔹 One area for improvement or support needed.
-                💡 One simple, practical action they can try this week.
-    
-                Format: each bullet on its own line starting with the emoji.
-                Keep each point to 1 sentence. Be warm, supportive, age-appropriate.
-                No clinical terms. No labels like "anxiety disorder".
+                You are a compassionate educational psychologist writing personalised feedback
+                for a school student's wellbeing assessment.
+ 
+                Assessment context:
+                - Question domain: %s
+                - Student's selected answer: %s
+                - Score range: %s
+                - Overall meaning: %s
+                - Psychological interpretation: %s
+ 
+                %s
+ 
+                RULES:
+                - Write EXACTLY 3 bullet points — one starting with , one with , one with .
+                - Each bullet must be 2 sentence only (max 20 words).
+                - Every bullet must reference the SPECIFIC answer content — do NOT write generic feedback.
+                - Use warm, age-appropriate language. No clinical terms. No disorder labels.
+                - The , , and  bullets must clearly differ from each other in theme.
+                  Do NOT write three variations of the same idea.
                 """,
+                option.getTag()            != null ? option.getTag()            : "General",
                 option.getOptionLabel(),
                 option.getRangeValue()     != null ? option.getRangeValue()     : "N/A",
                 option.getOverallMeaning() != null ? option.getOverallMeaning() : "N/A",
                 option.getInterpretation() != null ? option.getInterpretation() : "N/A",
-                option.getTag()            != null ? option.getTag()            : "General"
+                tagInstruction
         );
     }
-
 
     @Transactional
     public void deleteByQuestionId(Long questionId) {

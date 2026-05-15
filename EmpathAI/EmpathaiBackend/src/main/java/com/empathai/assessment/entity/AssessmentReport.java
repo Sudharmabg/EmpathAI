@@ -4,22 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
-/**
- * Stores the pre-generated overall psychological report after a student
- * completes a full assessment session.
- *
- * Flow:
- *  1. Student submits all answers for a group.
- *  2. Backend does SQL lookup: questionId + optionLabel → AnswerOption row per answer.
- *  3. All interpretations are concatenated and sent in ONE LLM call.
- *  4. The LLM response (summary + bullet points) is stored here.
- *  5. On future views the cached report is returned — no repeated LLM calls.
- *
- * ChromaDB usage:
- *  After the report is saved, the student's full answer profile (metadata +
- *  interpreted text) is embedded and stored in ChromaDB for psychologist/teacher
- *  semantic search ("students struggling with emotional regulation").
- */
+
 @Entity
 @Table(
         name = "assessment_reports",

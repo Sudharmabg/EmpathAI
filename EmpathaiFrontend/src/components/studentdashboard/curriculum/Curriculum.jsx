@@ -64,7 +64,7 @@ function QuizSection({ quizzes }) {
     { label: 'C', text: q.optionC },
     { label: 'D', text: q.optionD },
   ].filter(o => o.text)
-  const correctLabel = ['A', 'B', 'C', 'D'][q.correctAnswer - 1]
+  const correctLabel = ['A', 'B', 'C', 'D'][q.correctAnswer]
 
   function handleSubmit() {
     if (!selected) return

@@ -64,7 +64,9 @@ function QuizSection({ quizzes }) {
     { label: 'C', text: q.optionC },
     { label: 'D', text: q.optionD },
   ].filter(o => o.text)
-  const correctLabel = ['A', 'B', 'C', 'D'][q.correctAnswer - 1]
+
+  // ← Fixed: 0-based index (no - 1)
+  const correctLabel = ['A', 'B', 'C', 'D'][q.correctAnswer]
 
   function handleSubmit() {
     if (!selected) return
@@ -88,11 +90,19 @@ function QuizSection({ quizzes }) {
       <div className="bg-white border-2 border-purple-200 rounded-xl p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">🧠 Quiz Complete!</h2>
         <div className="text-center py-6">
-          <div className={`text-5xl font-black mb-2 ${pct >= 70 ? 'text-green-600' : 'text-orange-500'}`}>{pct}%</div>
+          <div className={`text-5xl font-black mb-2 ${pct >= 70 ? 'text-green-600' : 'text-orange-500'}`}>
+            {pct}%
+          </div>
           <p className="text-gray-600 mb-1">{score} / {quizzes.length} correct</p>
           <p className="text-sm text-gray-500">{pct >= 70 ? '🌟 Great work!' : '💪 Keep practising!'}</p>
           <button
-            onClick={() => { setQIndex(0); setSelected(null); setSubmitted(false); setScore(0); setDone(false) }}
+            onClick={() => {
+              setQIndex(0)
+              setSelected(null)
+              setSubmitted(false)
+              setScore(0)
+              setDone(false)
+            }}
             className="mt-6 bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors"
           >
             Retry Quiz
@@ -103,7 +113,9 @@ function QuizSection({ quizzes }) {
   }
 
   return (
-    <div className="bg-white border-2 border-purple-200 rounded-xl p-6">
+    // ← key={qIndex} forces full remount on every question change
+    // ← this prevents previous answer from persisting to next question
+    <div key={qIndex} className="bg-white border-2 border-purple-200 rounded-xl p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-gray-900">🧠 Quick Quiz</h2>
         <span className="text-sm text-gray-500">{qIndex + 1} / {quizzes.length}</span>
@@ -205,7 +217,8 @@ function SubTopicView({ subTopic, onBack, navigateToChat }) {
           <h2 className="text-xl font-semibold text-gray-900 mb-4">🎥 Video Lesson</h2>
           <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
             <iframe
-              width="100%" height="100%"
+              width="100%"
+              height="100%"
               src={embedUrl}
               title={subTopic.title}
               frameBorder="0"
@@ -293,8 +306,12 @@ function ModuleCard({ module, index, onSelectSubTopic }) {
                     <span className="text-sm text-gray-700 group-hover:text-gray-900">{st.title}</span>
                   </div>
                   <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
-                    {st.videoUrl && <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Video</span>}
-                    {st.quizzes?.length > 0 && <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">Quiz</span>}
+                    {st.videoUrl && (
+                      <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Video</span>
+                    )}
+                    {st.quizzes?.length > 0 && (
+                      <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">Quiz</span>
+                    )}
                     <ChevronRightIcon className="w-4 h-4 text-gray-400" />
                   </div>
                 </button>
@@ -320,11 +337,16 @@ function SyllabusView({ syllabus, onBack, navigateToChat }) {
     )
   }
 
-  const totalTopics = (syllabus.modules || []).reduce((acc, m) => acc + (m.subTopics?.length || 0), 0)
+  const totalTopics = (syllabus.modules || []).reduce(
+    (acc, m) => acc + (m.subTopics?.length || 0), 0
+  )
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center space-x-2 text-purple-600 hover:text-purple-800 mb-6">
+      <button
+        onClick={onBack}
+        className="flex items-center space-x-2 text-purple-600 hover:text-purple-800 mb-6"
+      >
         <ArrowLeftIcon className="w-5 h-5" />
         <span>Back to Subjects</span>
       </button>
@@ -333,7 +355,8 @@ function SyllabusView({ syllabus, onBack, navigateToChat }) {
         <h1 className="text-3xl font-bold text-gray-900 mb-1">{syllabus.subject}</h1>
         <p className="text-gray-500">
           {syllabus.classLevel && `Class ${syllabus.classLevel} · `}
-          {syllabus.modules?.length || 0} module{syllabus.modules?.length !== 1 ? 's' : ''} · {totalTopics} topic{totalTopics !== 1 ? 's' : ''}
+          {syllabus.modules?.length || 0} module{syllabus.modules?.length !== 1 ? 's' : ''} ·{' '}
+          {totalTopics} topic{totalTopics !== 1 ? 's' : ''}
         </p>
       </div>
 
@@ -346,7 +369,12 @@ function SyllabusView({ syllabus, onBack, navigateToChat }) {
       ) : (
         <div className="space-y-4">
           {syllabus.modules.map((mod, i) => (
-            <ModuleCard key={mod.id} module={mod} index={i} onSelectSubTopic={setSelectedSubTopic} />
+            <ModuleCard
+              key={mod.id}
+              module={mod}
+              index={i}
+              onSelectSubTopic={setSelectedSubTopic}
+            />
           ))}
         </div>
       )}
@@ -425,7 +453,10 @@ export default function Curriculum({ user, setActiveTab, navigateToChat }) {
         <ExclamationCircleIcon className="w-14 h-14 text-red-400 mb-4" />
         <p className="text-gray-700 font-medium mb-2">Could not load curriculum</p>
         <p className="text-sm text-gray-500 mb-6">{error}</p>
-        <button onClick={load} className="bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors">
+        <button
+          onClick={load}
+          className="bg-black text-white px-6 py-2 rounded-lg hover:bg-gray-800 transition-colors"
+        >
           Try again
         </button>
       </div>
@@ -458,28 +489,33 @@ export default function Curriculum({ user, setActiveTab, navigateToChat }) {
 
   const totalModules = syllabi.reduce((a, s) => a + (s.modules?.length || 0), 0)
   const totalTopics = syllabi.reduce((a, s) =>
-    a + (s.modules || []).reduce((b, m) => b + (m.subTopics?.length || 0), 0), 0)
+    a + (s.modules || []).reduce((b, m) => b + (m.subTopics?.length || 0), 0), 0
+  )
 
   return (
     <div className="font-lora">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {user?.role === 'STUDENT' && user?.className
-              ? `Class ${user.className} Curriculum`
-              : 'Curriculum'}
-          </h1>
-          <p className="text-gray-600">
-            {user?.role === 'STUDENT' && user?.className
-              ? `Your Class ${user.className} learning journey · `
-              : ''}
-            {syllabi.length} subject{syllabi.length !== 1 ? 's' : ''} · {totalModules} module{totalModules !== 1 ? 's' : ''} · {totalTopics} topic{totalTopics !== 1 ? 's' : ''}
-          </p>
-        </div>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          {user?.role === 'STUDENT' && user?.className
+            ? `Class ${user.className} Curriculum`
+            : 'Curriculum'}
+        </h1>
+        <p className="text-gray-600">
+          {user?.role === 'STUDENT' && user?.className
+            ? `Your Class ${user.className} learning journey · `
+            : ''}
+          {syllabi.length} subject{syllabi.length !== 1 ? 's' : ''} ·{' '}
+          {totalModules} module{totalModules !== 1 ? 's' : ''} ·{' '}
+          {totalTopics} topic{totalTopics !== 1 ? 's' : ''}
+        </p>
+      </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {syllabi.map((syllabus, index) => {
           const mCount = syllabus.modules?.length || 0
-          const tCount = (syllabus.modules || []).reduce((a, m) => a + (m.subTopics?.length || 0), 0)
+          const tCount = (syllabus.modules || []).reduce(
+            (a, m) => a + (m.subTopics?.length || 0), 0
+          )
           const colorCls = subjectColor(index)
 
           return (

@@ -40,6 +40,9 @@ public class AssessmentQuestion {
     @Column(name = "option_d")
     private String optionD;
 
+    @Column(name = "domain", length = 200)
+    private String domain;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 

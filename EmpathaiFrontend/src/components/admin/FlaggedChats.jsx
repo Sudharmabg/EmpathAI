@@ -106,9 +106,9 @@ function TranscriptModal({ flagId, studentName, onClose }) {
                                                 rehypePlugins={[rehypeKatex]}
                                                 components={{
                                                     p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-                                                    ul: ({ children }) => <ul className="list-disc pl-4 space-y-1 my-1">{children}</ul>,
-                                                    ol: ({ children }) => <ol className="list-decimal pl-4 space-y-1 my-1">{children}</ol>,
-                                                    li: ({ children }) => <li className="leading-snug pl-1">{children}</li>,
+                                                    ul: ({ children }) => <ul className="list-disc list-inside space-y-0 my-1">{children}</ul>,
+                                                    ol: ({ children }) => <ol className="list-decimal list-inside space-y-0 my-1">{children}</ol>,
+                                                    li: ({ children }) => <li className="leading-snug">{children}</li>,
                                                     strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                                                     code: ({ inline, children }) =>
                                                         inline

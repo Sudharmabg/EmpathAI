@@ -12,6 +12,5 @@ public interface AssessmentQuestionRepository extends JpaRepository<AssessmentQu
 
     Page<AssessmentQuestion> findAll(Pageable pageable);
 
-
     List<AssessmentQuestion> findByGroupMapId(Long groupMapId);
 }

@@ -26,7 +26,6 @@ public interface IAssessmentService {
     Page<ResponseDto> getResponses(Long studentId, int page, int size);
     List<ResponseDto> getResponsesByGroup(String groupName);
     ResponseDto createResponse(ResponseRequest request);
-
     // Analytics
     Map<String, Object> getAnalyticsSummary(String filter);
     Map<String, Object> getGroupAnalytics(String groupName, String filter);

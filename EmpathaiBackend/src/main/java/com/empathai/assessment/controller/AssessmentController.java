@@ -1,6 +1,12 @@
 package com.empathai.assessment.controller;
 
-import com.empathai.assessment.dto.*;
+import com.empathai.assessment.dto.GroupRequest;
+import com.empathai.assessment.dto.QuestionRequest;
+import com.empathai.assessment.dto.ResponseRequest;
+import com.empathai.assessment.dto.GroupResponse;
+import com.empathai.assessment.dto.QuestionResponse;
+import com.empathai.assessment.dto.ResponseDto;
+import com.empathai.assessment.service.AssessmentReportService;   // ← ADD THIS IMPORT
 import com.empathai.assessment.service.IAssessmentService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -10,6 +16,7 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -22,11 +29,12 @@ public class AssessmentController {
     private static final Logger logger = LoggerFactory.getLogger(AssessmentController.class);
 
     private final IAssessmentService assessmentService;
+    private final AssessmentReportService reportService;    // ← ADD THIS FIELD
 
     // ── Groups ────────────────────────────────────────────────────────────────
 
     @GetMapping("/groups")
-    public ResponseEntity<List<GroupResponse>> getAllGroups() {
+    public ResponseEntity<List<com.empathai.assessment.dto.GroupResponse>> getAllGroups() {
         logger.info("getAllGroups started");
         try {
             ResponseEntity<List<GroupResponse>> response = ResponseEntity.ok(assessmentService.getAllGroups());
@@ -82,7 +90,7 @@ public class AssessmentController {
     // ── Questions ─────────────────────────────────────────────────────────────
 
     @GetMapping("/questions")
-    public ResponseEntity<Page<QuestionResponse>> getQuestions(
+    public ResponseEntity<Page<com.empathai.assessment.dto.QuestionResponse>> getQuestions(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         logger.info("getQuestions started");
@@ -103,14 +111,12 @@ public class AssessmentController {
         try {
             List<QuestionResponse> combinedQuestions = new ArrayList<>();
 
-            // Only fetch questions for the student's own class group
             List<GroupResponse> classGroups = assessmentService.getGroupsByClassName(className);
             for (GroupResponse group : classGroups) {
                 List<QuestionResponse> qs = assessmentService.getQuestionsByGroupMap(group.getId());
                 if (qs != null) combinedQuestions.addAll(qs);
             }
 
-            // Deduplicate by question ID
             List<QuestionResponse> finalQuestions = combinedQuestions.stream()
                     .filter(q -> q.getId() != null)
                     .collect(Collectors.collectingAndThen(
@@ -132,9 +138,8 @@ public class AssessmentController {
         }
     }
 
-    /** Fetch responses by student class name (for admin response sheet) */
     @GetMapping("/responses/by-class/{className}")
-    public ResponseEntity<List<ResponseDto>> getResponsesByClass(
+    public ResponseEntity<List<com.empathai.assessment.dto.ResponseDto>> getResponsesByClass(
             @PathVariable String className) {
         logger.info("getResponsesByClass started for className={}", className);
         try {
@@ -257,6 +262,44 @@ public class AssessmentController {
             logger.error("createResponse failed: {}", e.getMessage(), e);
             throw e;
         }
+    }
+
+    // ── AI Summary ────────────────────────────────────────────────────────────
+    // Called by the admin response sheet to show AI summary per student.
+
+
+    @GetMapping("/responses/summary/{studentId}")
+    public ResponseEntity<Map<String, Object>> getStudentSummary(
+            @PathVariable String studentId,
+            @RequestParam(required = false) Long groupId) {
+        logger.info("getStudentSummary studentId={} groupId={}", studentId, groupId);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            if (groupId == null) {
+                result.put("summary", null);
+                result.put("bulletPoints", null);
+                return ResponseEntity.ok(result);
+            }
+
+            reportService.getLatestReport(studentId, groupId).ifPresentOrElse(
+                    report -> {
+                        result.put("summary",      report.getSummaryText());
+                        result.put("bulletPoints", report.getBulletPoints());
+                        result.put("studentId",    report.getStudentId());
+                        result.put("sessionDate",  report.getSessionDate());
+                    },
+                    () -> {
+                        result.put("summary",      null);
+                        result.put("bulletPoints", null);
+                    }
+            );
+        } catch (Exception e) {
+            logger.error("getStudentSummary failed for studentId={}: {}", studentId, e.getMessage(), e);
+            result.put("summary",      null);
+            result.put("bulletPoints", null);
+        }
+        return ResponseEntity.ok(result);
     }
 
     // ── Analytics ─────────────────────────────────────────────────────────────

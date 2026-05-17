@@ -13,6 +13,7 @@ public class QuestionResponse {
     private Long groupMapId;
     private String questions;
     private String questionText;
+    private String domain;
     private String optionA;
     private String optionB;
     private String optionC;

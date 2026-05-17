@@ -20,6 +20,7 @@ public class AssessmentServiceImpl implements IAssessmentService {
     private final AssessmentGroupRepository groupRepo;
     private final AssessmentQuestionRepository questionRepo;
     private final AssessmentResponseRepository responseRepo;
+    private final com.empathai.assessment.service.AnswerOptionService answerOptionService;
 
     // ── Groups ────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ public class AssessmentServiceImpl implements IAssessmentService {
         AssessmentQuestion q = AssessmentQuestion.builder()
                 .groupMapId(request.getGroupMapId())
                 .questionText(request.getQuestionText())
+                .domain(request.getDomain())
                 .optionA(opts.length > 0 ? opts[0].trim() : null)
                 .optionB(opts.length > 1 ? opts[1].trim() : null)
                 .optionC(opts.length > 2 ? opts[2].trim() : null)
@@ -103,6 +105,7 @@ public class AssessmentServiceImpl implements IAssessmentService {
 
         if (request.getQuestionText() != null) q.setQuestionText(request.getQuestionText());
         if (request.getGroupMapId() != null) q.setGroupMapId(request.getGroupMapId());
+        if (request.getDomain() != null) q.setDomain(request.getDomain());
 
         if (request.getOptions() != null) {
             String[] opts = request.getOptions().split(",", -1);
@@ -121,6 +124,7 @@ public class AssessmentServiceImpl implements IAssessmentService {
             throw new EmpathaiException("Question not found", "NOT_FOUND");
 
         responseRepo.deleteByQuestionId(id);
+        answerOptionService.deleteByQuestionId(id);
         questionRepo.deleteById(id);
     }
 
@@ -274,6 +278,7 @@ public class AssessmentServiceImpl implements IAssessmentService {
                 .id(q.getId())
                 .groupMapId(q.getGroupMapId())
                 .questions(q.getQuestionText())
+                .domain(q.getDomain())
                 .optionA(q.getOptionA())
                 .optionB(q.getOptionB())
                 .optionC(q.getOptionC())

@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from './apiClient.js';
+import { apiGet, apiPost, apiPut, apiDelete } from './apiClient.js';
 
 // ── Students ──────────────────────────────────────────────────────────────────
 
@@ -169,17 +169,5 @@ export function getStudentDetail(schoolId, className, studentId) {
 
 export async function updateTimeSpent(userId, seconds) {
     if (!userId || seconds <= 0) return;
-    try {
-        const res = await apiRequest('/api/users/' + userId + '/time-spent', {
-            method: 'PATCH',
-            body: JSON.stringify({ seconds }),
-        });
-        if (!res.ok) {
-            console.warn('time-spent returned:', res.status);
-            return;
-        }
-        return res;
-    } catch (err) {
-        console.warn('Failed to update time spent:', err);
-    }
+    return await apiPost('/api/users/' + userId + '/time-spent', { seconds });
 }

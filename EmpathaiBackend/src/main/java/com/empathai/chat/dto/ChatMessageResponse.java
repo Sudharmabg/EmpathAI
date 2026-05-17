@@ -13,9 +13,4 @@ public class ChatMessageResponse {
     private String content;
     private String detectedMode;
     private LocalDateTime createdAt;
-
-    // ── Image fields — returned when history is loaded so image re-renders ────
-    private String imageBase64;
-    private String imageMimeType;
-    // ──────────────────────────────────────────────────────────────────────────
 }

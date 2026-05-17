@@ -19,9 +19,5 @@ public interface ScheduleTaskRepository extends JpaRepository<ScheduleTask, Long
     List<ScheduleTask> findByStudentIdAndDayOfWeekAndDetectedType(
             Long studentId, String dayOfWeek, String detectedType);
 
-    List<ScheduleTask> findByStudentIdAndDayOfWeekInAndDetectedType(
-            Long studentId, List<String> prevDays, String study);
-
-    // ── NEW: for weekly task count in ChatService ─────────────────────────────
-    List<ScheduleTask> findByStudentIdAndDayOfWeekIn(Long studentId, List<String> daysOfWeek);
+    List<ScheduleTask> findByStudentIdAndDayOfWeekInAndDetectedType(Long studentId, List<String> prevDays, String study);
 }

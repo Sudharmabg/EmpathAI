@@ -1,8 +1,4 @@
-// ============================================================
-//  Assessmentmanagement.js  –  centralised API helper
-//  All requests automatically include the JWT stored in
-//  localStorage under "access_token" or "token".
-// ============================================================
+
 
 const BASE = '/api'
 
@@ -69,11 +65,7 @@ export async function fetchQuestions (page = 0, size = 50) {
   return handleResponse(res)
 }
 
-/**
- * Fetch questions for a student by their className.
- * The backend finds all groups whose className matches,
- * then returns questions whose groupMap contains any of those group names.
- */
+
 export async function fetchQuestionsByClass (className) {
   const res = await fetch(
     `${BASE}/questions/class/${encodeURIComponent(className)}`,

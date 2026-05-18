@@ -33,7 +33,7 @@ public class AssessmentServiceImpl implements IAssessmentService {
 
     @Override
     public List<GroupResponse> getGroupsByClassName(String className) {
-        return groupRepo.findByClassName(className)
+        return groupRepo.findByClassNameIgnoreCase(className)
                 .stream()
                 .map(this::toGroupResponse)
                 .collect(Collectors.toList());
@@ -144,14 +144,15 @@ public class AssessmentServiceImpl implements IAssessmentService {
 
     @Override
     public List<ResponseDto> getResponsesByGroup(String groupName) {
-        // STEP 4 FIX: First try exact group name match
         List<AssessmentResponse> byGroup = responseRepo.findByGroupName(groupName);
-        if (!byGroup.isEmpty()) {
-            return byGroup.stream().map(this::toResponseDto).collect(Collectors.toList());
-        }
+        if (!byGroup.isEmpty()) return byGroup.stream().map(this::toResponseDto).collect(Collectors.toList());
 
-        // Fallback: try by className (handles case where class name was stored as group)
-        List<AssessmentResponse> byClass = responseRepo.findByClassName(groupName);
+        // try case-insensitive
+        List<AssessmentResponse> byGroupCI = responseRepo.findByGroupNameIgnoreCase(groupName);
+        if (!byGroupCI.isEmpty()) return byGroupCI.stream().map(this::toResponseDto).collect(Collectors.toList());
+
+        // try className
+        List<AssessmentResponse> byClass = responseRepo.findByClassNameIgnoreCase(groupName);
         return byClass.stream().map(this::toResponseDto).collect(Collectors.toList());
     }
 

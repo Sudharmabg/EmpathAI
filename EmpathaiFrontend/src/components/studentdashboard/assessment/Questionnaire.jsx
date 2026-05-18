@@ -91,9 +91,18 @@ export default function Questionnaire ({ user }) {
   const [currentQuestion, setCurrentQuestion]   = useState(0)
   const [answers, setAnswers]                   = useState({})
   const [showGrid, setShowGrid]                 = useState(true)
-  const [showReport, setShowReport]             = useState(false)
-  const [activeIntervention, setActiveIntervention] = useState(null)
-  const [isTransitioning, setIsTransitioning]   = useState(false)
+  
+ 
+  const _savedUser = localStorage.getItem('user')
+const _u = _savedUser ? JSON.parse(_savedUser) : user
+const _todayKey = `assessment_done_${_u?.id}_${new Date().toDateString()}`
+const alreadyDone = sessionStorage.getItem(_todayKey) === 'true'
+
+const [showReport, setShowReport]             = useState(alreadyDone)
+const [activeIntervention, setActiveIntervention] = useState(null)
+const [isTransitioning, setIsTransitioning]   = useState(false)
+
+
   const [displayEmoji, setDisplayEmoji]         = useState('')
   const [selectedOption, setSelectedOption]     = useState(null)
   const [emojiOpacity, setEmojiOpacity]         = useState(0)
@@ -136,7 +145,7 @@ export default function Questionnaire ({ user }) {
       return
     }
 
-    fetchQuestionsByClass(className)
+fetchQuestionsByClass(className)
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
           const mapped = data.map((q, i) => ({
@@ -158,6 +167,39 @@ export default function Questionnaire ({ user }) {
       .catch(err => console.error('[Questionnaire] fetchQuestionsByClass error:', err))
       .finally(() => setLoading(false))
   }, [user])
+
+  // ✅ NEW useEffect starts HERE — outside and after the previous one
+  useEffect(() => {
+    if (!alreadyDone || apiQuestions.length === 0) return
+    const _su = localStorage.getItem('user')
+    const _uu = _su ? JSON.parse(_su) : user
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
+    const studentId = _uu?.id ?? null
+    const firstQ = apiQuestions[0]
+    const groupId = firstQ?.groupMapId ?? null
+    if (!studentId || !groupId) { setAnalysisLoading(false); return }
+
+    setAnalysisLoading(true)
+    fetch(`/api/assessment/reports/student/${encodeURIComponent(studentId)}/group/${groupId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (d) {
+        const parsed = parseBulletPoints(d.bulletPoints || '')
+        setAnalysis({
+          strengths:    parsed.strengths,
+          improvements: parsed.improvements,
+          tips:         parsed.tips,
+          plain:        parsed.plain,
+          summaryText:  d.summaryText || '',
+          studentName:  `${_uu?.firstName || ''} ${_uu?.lastName || ''}`.trim()
+        })
+      }
+    })
+    .catch(err => console.error('[Questionnaire] Restore report failed:', err))
+    .finally(() => setAnalysisLoading(false))
+  }, [alreadyDone, apiQuestions])
 
   useEffect(() => {
     clearPendingTimers()
@@ -302,8 +344,12 @@ export default function Questionnaire ({ user }) {
   }
 
   const handleSubmit = async (finalAnswers) => {
-    setAnalysisLoading(true)
-    setShowReport(true)
+  setAnalysisLoading(true)
+setShowReport(true)
+const _su = localStorage.getItem('user')
+const _uu = _su ? JSON.parse(_su) : user
+const _key = `assessment_done_${_uu?.id}_${new Date().toDateString()}`
+sessionStorage.setItem(_key, 'true')
 
     const resolvedAnswers = finalAnswers || answersRef.current || answers
 

@@ -118,7 +118,7 @@ export default function AssessmentManagement() {
             })
             .catch(err => { console.error('Groups fetch failed:', err); setGroups([]) })
 
-        fetchQuestions(0, 50)
+        fetchQuestions(0, 200)
             .then(data => {
                 const questionList = data?.content || data || []
                 setQuestions(questionList)
@@ -256,10 +256,12 @@ const handleSaveQuestion = () => {
 
         if (!questionFormData.question || options.length < 2) {
             alert('Please provide a question and at least 2 options')
+            setIsSubmittingQuestion(false)  
             return
         }
         if (questionFormData.groups.length === 0) {
             alert('Please select at least one group')
+            setIsSubmittingQuestion(false)
             return
         }
 
@@ -306,12 +308,12 @@ const handleSaveQuestion = () => {
         }
 
         const refetchQuestions = () =>
-            fetchQuestions(0, 100)
-                .then(data => {
-                    const list = data?.content || data || []
-                    if (list.length > 0) setQuestions(list)
-                })
-                .catch(err => console.error('Refetch error:', err))
+    fetchQuestions(0, 200)
+        .then(data => {
+            const list = data?.content || data || []
+            if (list.length > 0) setQuestions(list)
+        })
+        .catch(err => console.error('Refetch error:', err))
 
         if (editingQuestion) {
             const groupIds = questionFormData.groups.map(id => Number(id))
@@ -1206,7 +1208,7 @@ const parseBulletPoints = (raw) => {
                         <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Groups Overview</h4>
                         <ul className="space-y-2">
                             {groups.map(group => {
-                                const count = getGroupQuestions(group.id).length
+                                const count = getGroupQuestions(group).length 
                                 const colors = getColorClasses(group.color)
                                 return (
                                     <li key={group.id} className="flex justify-between items-center text-sm">

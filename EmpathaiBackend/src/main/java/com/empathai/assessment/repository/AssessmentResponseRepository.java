@@ -1,5 +1,6 @@
 package com.empathai.assessment.repository;
 
+import com.empathai.assessment.entity.AssessmentGroup;
 import com.empathai.assessment.entity.AssessmentResponse;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -8,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
+
 
 @Repository
 public interface AssessmentResponseRepository extends JpaRepository<AssessmentResponse, Long> {
@@ -54,7 +56,8 @@ public interface AssessmentResponseRepository extends JpaRepository<AssessmentRe
 
     @Query("SELECT COUNT(DISTINCT CONCAT(CAST(a.studentId AS string), '-', CAST(FUNCTION('DATE', a.submittedAt) AS string))) FROM AssessmentResponse a")
     long countDistinctSubmissions();
-
+    List<AssessmentResponse> findByGroupNameIgnoreCase(String groupName);
+    List<AssessmentResponse> findByClassNameIgnoreCase(String className);
 
 
 }

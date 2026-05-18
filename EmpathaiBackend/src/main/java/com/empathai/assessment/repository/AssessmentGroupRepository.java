@@ -12,5 +12,5 @@ public interface AssessmentGroupRepository extends JpaRepository<AssessmentGroup
     Optional<AssessmentGroup> findByName(String name);
     List<AssessmentGroup> findByClassName(String className);
     List<AssessmentGroup> findByClassNameContainingIgnoreCase(String className);
-
+    List<AssessmentGroup> findByClassNameIgnoreCase(String className);
 }

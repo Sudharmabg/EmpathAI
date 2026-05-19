@@ -17,6 +17,45 @@ import NotificationsModal from './dashboard/NotificationsModal'
 
 import { getWeekTasks } from '../api/scheduleApi.js'
 
+// ─── Subject extraction helper ────────────────────────────────────────────────
+// Maps known keywords in task titles → syllabus subject names stored in the DB.
+// Add more entries here as new subjects are added.
+const SUBJECT_KEYWORD_MAP = [
+  { keywords: ['math', 'mathematics', 'maths'], subject: 'Mathematics' },
+  { keywords: ['science'], subject: 'Science' },
+  { keywords: ['english'], subject: 'English' },
+  { keywords: ['hindi'], subject: 'Hindi' },
+  { keywords: ['sst', 'social', 'social studies'], subject: 'Social Studies' },
+  { keywords: ['art', 'craft', 'art & craft'], subject: 'Art & Craft' },
+]
+
+/**
+ * Given the full tasks object (keyed by day) and a day name,
+ * returns an array of matched subject names for Study-type tasks on that day.
+ *
+ * e.g. tasks["Friday"] has "Study session — Mathematics"
+ *   → returns ["Mathematics"]
+ */
+function getScheduledSubjectsForDay(tasks, day) {
+  const dayTasks = tasks[day] || []
+  const matched = new Set()
+
+  dayTasks.forEach(task => {
+    // Only process Study-type tasks
+    const type = (task.detectedType || '').toLowerCase()
+    if (type !== 'study') return
+
+    const title = (task.title || '').toLowerCase()
+    SUBJECT_KEYWORD_MAP.forEach(({ keywords, subject }) => {
+      if (keywords.some(kw => title.includes(kw))) {
+        matched.add(subject)
+      }
+    })
+  })
+
+  return Array.from(matched)
+}
+
 export default function Dashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [activeHeaderModal, setActiveHeaderModal] = useState(null)
@@ -25,6 +64,7 @@ export default function Dashboard({ user, onLogout }) {
   const [showScheduleDropdown, setShowScheduleDropdown] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
 
+  // ── Active day (shared between Schedule and Curriculum) ───────────────────
   const [activeDay, setActiveDay] = useState(() => {
     const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     return DAYS[new Date().getDay()]
@@ -59,6 +99,10 @@ export default function Dashboard({ user, onLogout }) {
   const toggleTaskComplete = (day, taskId) =>
     setTasks(prev => ({ ...prev, [day]: prev[day].map(t => t.id === taskId ? { ...t, completed: !t.completed } : t) }))
 
+  // ── Derive scheduled subjects for the active day ───────────────────────────
+  // This is recomputed whenever tasks or activeDay changes.
+  const scheduledSubjects = getScheduledSubjectsForDay(tasks, activeDay)
+
   const sidebarItems = [
     { id: 'overview', name: 'Overview', icon: HomeIcon },
     { id: 'chatbuddy', name: 'ChatBuddy', icon: ChatBubbleLeftRightIcon },
@@ -78,10 +122,10 @@ export default function Dashboard({ user, onLogout }) {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 font-lora overflow-hidden">
+    <div className="min-h-screen bg-gray-50 font-lora">
 
       {/* ── Header ── */}
-      <header className="bg-white shadow-sm border-b border-gray-200 shrink-0">
+      <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="flex items-center justify-between px-6 py-4">
 
           {/* Logo */}
@@ -209,10 +253,10 @@ export default function Dashboard({ user, onLogout }) {
       </header>
 
       {/* ── Body ── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex">
 
         {/* Sidebar nav */}
-        <aside className="w-64 bg-white shadow-sm border-r border-gray-200 shrink-0 overflow-y-auto h-full">
+        <aside className="w-64 bg-white shadow-sm border-r border-gray-200 min-h-screen">
           <nav className="p-4 flex flex-col h-full">
             <ul className="space-y-2 flex-1">
               {sidebarItems.map(item => (
@@ -228,7 +272,7 @@ export default function Dashboard({ user, onLogout }) {
                 </li>
               ))}
             </ul>
-            <button onClick={onLogout} className="w-full flex items-center px-4 py-3 text-sm font-bold rounded-xl text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all mt-4 shrink-0">
+            <button onClick={onLogout} className="w-full flex items-center px-4 py-3 text-sm font-bold rounded-xl text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all mt-4">
               <ArrowRightOnRectangleIcon className="w-5 h-5 mr-3" />
               <span>Logout</span>
             </button>
@@ -236,7 +280,7 @@ export default function Dashboard({ user, onLogout }) {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 p-6 overflow-y-auto bg-gray-50 h-full">
+        <main className="flex-1 p-6">
           {activeTab === 'overview' && <OverviewPanel user={user} setActiveTab={setActiveTab} />}
           {activeTab === 'chatbuddy' && <ChatBuddy user={user} initialMessage={chatMessage} setChatMessage={setChatMessage} />}
           {activeTab === 'schedule' && (
@@ -252,13 +296,20 @@ export default function Dashboard({ user, onLogout }) {
             )
           )}
           {activeTab === 'questionnaire' && <Questionnaire user={user} />}
-          {activeTab === 'curriculum' && <Curriculum user={user} setActiveTab={setActiveTab} />}
+          {activeTab === 'curriculum' && (
+            <Curriculum
+              user={user}
+              setActiveTab={setActiveTab}
+              scheduledSubjects={scheduledSubjects}
+              activeDay={activeDay}
+            />
+          )}
           {activeTab === 'activities' && <Activities user={user} />}
         </main>
 
         {/* Right sidebar — overview only */}
         {activeTab === 'overview' && (
-          <aside className="w-80 bg-white border-l border-gray-200 p-6 shrink-0 overflow-y-auto h-full hidden lg:block">
+          <aside className="w-80 bg-white border-l border-gray-200 p-6">
             <RightSidebarPanel user={user} />
           </aside>
         )}

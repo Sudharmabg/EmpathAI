@@ -7,7 +7,9 @@ import {
   AcademicCapIcon,
   ChevronRightIcon,
   ChevronDownIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  CalendarIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline'
 import { getAllSyllabi, getSyllabiByClass } from '../../../api/curriculumApi'
 
@@ -64,7 +66,7 @@ function QuizSection({ quizzes }) {
     { label: 'C', text: q.optionC },
     { label: 'D', text: q.optionD },
   ].filter(o => o.text)
-  const correctLabel = ['A', 'B', 'C', 'D'][q.correctAnswer]
+  const correctLabel = ['A', 'B', 'C', 'D'][q.correctAnswer - 1]
 
   function handleSubmit() {
     if (!selected) return
@@ -354,8 +356,49 @@ function SyllabusView({ syllabus, onBack, navigateToChat }) {
   )
 }
 
+// ─── Scheduled subjects banner ─────────────────────────────────────────────────
+function ScheduleBanner({ scheduledSubjects, activeDay, syllabi, onSubjectClick }) {
+  if (!scheduledSubjects || scheduledSubjects.length === 0) return null
+
+  // Only show banner for subjects that actually exist in the loaded syllabi
+  const matchedSyllabi = syllabi.filter(s =>
+    scheduledSubjects.some(sub =>
+      s.subject.toLowerCase() === sub.toLowerCase()
+    )
+  )
+
+  if (matchedSyllabi.length === 0) return null
+
+  return (
+    <div className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200 rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-7 h-7 bg-purple-100 rounded-lg flex items-center justify-center">
+          <CalendarIcon className="w-4 h-4 text-purple-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-purple-800">Scheduled for {activeDay}</p>
+          <p className="text-xs text-purple-500">Jump straight into what you planned to study today</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {matchedSyllabi.map(syllabus => (
+          <button
+            key={syllabus.id}
+            onClick={() => onSubjectClick(syllabus)}
+            className="flex items-center gap-2 bg-white border-2 border-purple-300 hover:border-purple-500 hover:bg-purple-50 text-purple-700 font-bold text-sm px-4 py-2 rounded-xl transition-all shadow-sm"
+          >
+            <SparklesIcon className="w-4 h-4" />
+            {syllabus.subject}
+            <ChevronRightIcon className="w-3.5 h-3.5" />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Root ──────────────────────────────────────────────────────────────────────
-export default function Curriculum({ user, setActiveTab, navigateToChat }) {
+export default function Curriculum({ user, setActiveTab, navigateToChat, scheduledSubjects = [], activeDay }) {
   const [syllabi, setSyllabi] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -462,19 +505,27 @@ export default function Curriculum({ user, setActiveTab, navigateToChat }) {
 
   return (
     <div className="font-lora">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {user?.role === 'STUDENT' && user?.className
-              ? `Class ${user.className} Curriculum`
-              : 'Curriculum'}
-          </h1>
-          <p className="text-gray-600">
-            {user?.role === 'STUDENT' && user?.className
-              ? `Your Class ${user.className} learning journey · `
-              : ''}
-            {syllabi.length} subject{syllabi.length !== 1 ? 's' : ''} · {totalModules} module{totalModules !== 1 ? 's' : ''} · {totalTopics} topic{totalTopics !== 1 ? 's' : ''}
-          </p>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          {user?.role === 'STUDENT' && user?.className
+            ? `Class ${user.className} Curriculum`
+            : 'Curriculum'}
+        </h1>
+        <p className="text-gray-600">
+          {user?.role === 'STUDENT' && user?.className
+            ? `Your Class ${user.className} learning journey · `
+            : ''}
+          {syllabi.length} subject{syllabi.length !== 1 ? 's' : ''} · {totalModules} module{totalModules !== 1 ? 's' : ''} · {totalTopics} topic{totalTopics !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      {/* ── Schedule banner — shows if student has study sessions today ── */}
+      <ScheduleBanner
+        scheduledSubjects={scheduledSubjects}
+        activeDay={activeDay}
+        syllabi={syllabi}
+        onSubjectClick={setSelectedSyllabus}
+      />
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {syllabi.map((syllabus, index) => {
@@ -482,11 +533,28 @@ export default function Curriculum({ user, setActiveTab, navigateToChat }) {
           const tCount = (syllabus.modules || []).reduce((a, m) => a + (m.subTopics?.length || 0), 0)
           const colorCls = subjectColor(index)
 
+          // Highlight card if it's in today's schedule
+          const isScheduledToday = scheduledSubjects.some(
+            sub => syllabus.subject.toLowerCase() === sub.toLowerCase()
+          )
+
           return (
             <div
               key={syllabus.id}
-              className="bg-white border-2 border-purple-200 rounded-xl p-6 hover:border-purple-400 hover:shadow-lg transition-all duration-200 flex flex-col"
+              className={`border-2 rounded-xl p-6 hover:shadow-lg transition-all duration-200 flex flex-col ${isScheduledToday
+                  ? 'bg-purple-50 border-purple-400 shadow-md'
+                  : 'bg-white border-purple-200 hover:border-purple-400'
+                }`}
             >
+              {isScheduledToday && (
+                <div className="flex items-center gap-1.5 mb-3">
+                  <CalendarIcon className="w-3.5 h-3.5 text-purple-600" />
+                  <span className="text-xs font-bold text-purple-600 uppercase tracking-wide">
+                    Scheduled for {activeDay}
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-start space-x-3 mb-4">
                 <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${colorCls}`}>
                   <BookOpenIcon className="w-6 h-6" />
@@ -516,10 +584,13 @@ export default function Curriculum({ user, setActiveTab, navigateToChat }) {
 
               <button
                 onClick={() => setSelectedSyllabus(syllabus)}
-                className="mt-auto w-full bg-black text-white py-2 rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center space-x-2"
+                className={`mt-auto w-full py-2 rounded-lg transition-colors flex items-center justify-center space-x-2 ${isScheduledToday
+                    ? 'bg-purple-600 text-white hover:bg-purple-700'
+                    : 'bg-black text-white hover:bg-gray-800'
+                  }`}
               >
                 <PlayCircleIcon className="w-4 h-4" />
-                <span>Start Learning</span>
+                <span>{isScheduledToday ? 'Start Today\'s Study' : 'Start Learning'}</span>
               </button>
             </div>
           )

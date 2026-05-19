@@ -171,19 +171,8 @@ export default function RightSidebarPanel({ user }) {
                         </div>
 
                     ) : (
-                        // ── Not yet logged today — show form ──
+                        // ── Not yet logged today — show form (NO "Last" record) ──
                         <div>
-                            {latestMood && !selectedMood && (
-                                <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
-                                    <span className="text-2xl">{MOOD_EMOJI[latestMood.mood] || '😐'}</span>
-                                    <div className="flex-1">
-                                        <p className="text-xs font-bold text-gray-700 capitalize">Last: {latestMood.mood}</p>
-                                        <p className="text-[10px] text-gray-400">
-                                            {new Date(latestMood.loggedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
                             <div className="flex justify-between mb-3">
                                 {MOOD_OPTIONS.map(mood => (
                                     <button
@@ -255,20 +244,8 @@ export default function RightSidebarPanel({ user }) {
                         </div>
 
                     ) : (
-                        // ── Not yet logged today — show form ──
+                        // ── Not yet logged today — show form (NO "Last" record) ──
                         <div>
-                            {latestSleep && (
-                                <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
-                                    <span className="text-xl">🌙</span>
-                                    <div className="flex-1">
-                                        <p className="text-xs text-gray-500">Last: {latestSleep.bedtime} - {latestSleep.wakeTime}</p>
-                                        <span className={'inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold border mt-0.5 ' +
-                                            (QUALITY_COLOR[latestSleep.quality] || 'text-gray-600 bg-gray-50 border-gray-200')}>
-                                            {QUALITY_LABEL[latestSleep.quality] || latestSleep.quality}
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
                             <div className="mb-3">
                                 <div className="flex justify-between items-center mb-1">
                                     <span className="text-xs font-bold text-gray-700">Hours of sleep</span>

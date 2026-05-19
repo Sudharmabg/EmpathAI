@@ -4,6 +4,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════
+   FORCE PAGE TO FIT SCREEN — PREVENTS GAPS AT BOTTOM
+   ═══════════════════════════════════════════════════════════════ */
+
+html,
+body,
+#root {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  min-height: 100vh !important;
+  width: 100vw !important;
+  max-width: 100vw !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+}
+
+#root > div {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  width: 100% !important;
+  overflow: hidden !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+
 :root {
   --sage-green: #9CAF88;
   --warm-apricot: #F4B942;

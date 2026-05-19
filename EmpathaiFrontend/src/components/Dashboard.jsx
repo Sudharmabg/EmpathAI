@@ -212,7 +212,7 @@ export default function Dashboard({ user, onLogout }) {
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
         {/* Sidebar nav */}
-        <aside className="w-64 bg-white shadow-sm border-r border-gray-200 shrink-0 overflow-y-auto">
+        <aside className="w-64 bg-white shadow-sm border-r border-gray-200 shrink-0 overflow-y-auto h-full">
           <nav className="p-4 flex flex-col h-full">
             <ul className="space-y-2 flex-1">
               {sidebarItems.map(item => (
@@ -228,7 +228,7 @@ export default function Dashboard({ user, onLogout }) {
                 </li>
               ))}
             </ul>
-            <button onClick={onLogout} className="w-full flex items-center px-4 py-3 text-sm font-bold rounded-xl text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all mt-4">
+            <button onClick={onLogout} className="w-full flex items-center px-4 py-3 text-sm font-bold rounded-xl text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all mt-4 shrink-0">
               <ArrowRightOnRectangleIcon className="w-5 h-5 mr-3" />
               <span>Logout</span>
             </button>
@@ -236,7 +236,7 @@ export default function Dashboard({ user, onLogout }) {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 p-6 overflow-y-auto bg-gray-50">
+        <main className="flex-1 p-6 overflow-y-auto bg-gray-50 h-full">
           {activeTab === 'overview' && <OverviewPanel user={user} setActiveTab={setActiveTab} />}
           {activeTab === 'chatbuddy' && <ChatBuddy user={user} initialMessage={chatMessage} setChatMessage={setChatMessage} />}
           {activeTab === 'schedule' && (
@@ -258,7 +258,7 @@ export default function Dashboard({ user, onLogout }) {
 
         {/* Right sidebar — overview only */}
         {activeTab === 'overview' && (
-          <aside className="w-80 bg-white border-l border-gray-200 p-6 shrink-0 overflow-y-auto">
+          <aside className="w-80 bg-white border-l border-gray-200 p-6 shrink-0 overflow-y-auto h-full hidden lg:block">
             <RightSidebarPanel user={user} />
           </aside>
         )}

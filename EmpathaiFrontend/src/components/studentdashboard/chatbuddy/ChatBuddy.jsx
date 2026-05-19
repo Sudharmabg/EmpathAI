@@ -529,22 +529,22 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   )
 
   return (
-    <div className="font-lora max-w-7xl mx-auto px-4">
-      <div className="mb-6">
+    <div className="font-lora max-w-7xl mx-auto px-4 h-full flex flex-col">
+
+      {/* Header section */}
+      <div className="mb-6 shrink-0">
         <h1 className="text-3xl font-bold text-gray-900 mb-1">ChatBuddy</h1>
         <p className="text-gray-500 text-sm">
           Your AI companion for learning and emotional support · powered by GPT-4o mini
         </p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      {/* Main flex container — fills remaining space */}
+      <div className="flex flex-col lg:flex-row gap-6 items-stretch flex-1 min-h-0">
 
         {/* ── Main chat panel ───────────────────────────────────────────────── */}
-        <div className="flex-1 w-full min-w-0">
-          <div
-            className="bg-white border-2 border-purple-200 rounded-2xl shadow-lg overflow-hidden flex flex-col"
-            style={{ height: 'calc(100vh - 280px)', minHeight: 520, maxHeight: 720 }}
-          >
+        <div className="flex-1 w-full min-w-0 flex flex-col min-h-0">
+          <div className="bg-white border-2 border-purple-200 rounded-2xl shadow-lg overflow-hidden flex flex-col flex-1 min-h-0">
 
             {/* Header */}
             <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-5 py-4 border-b border-purple-100 flex items-center justify-between shrink-0">
@@ -570,7 +570,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 bg-gray-50/40">
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 bg-gray-50/40 min-h-0">
               {messages.map((msg) => {
                 const imageSrc = resolveImageSrc(msg)
                 return (
@@ -751,8 +751,8 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
             </div>
           </div>
 
-          {/* Feature cards */}
-          <div className="mt-5 grid sm:grid-cols-3 gap-4">
+          {/* Feature cards — only show if there's room */}
+          <div className="mt-5 grid sm:grid-cols-3 gap-4 shrink-0">
             {[
               { icon: '📚', title: 'Study Help',        desc: 'CBSE Class 8–10 topics explained step by step' },
               { icon: '💭', title: 'Emotional Support', desc: 'Share how you feel and get empathetic guidance' },
@@ -772,8 +772,8 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
 
         {/* ── History sidebar ───────────────────────────────────────────────── */}
         <div
-          className="w-full lg:w-72 bg-white border-2 border-gray-100 rounded-2xl shadow-md p-4 flex flex-col shrink-0"
-          style={{ maxHeight: 'calc(100vh - 280px)', minHeight: 380 }}
+          className="w-full lg:w-72 bg-white border-2 border-gray-100 rounded-2xl shadow-md p-4 flex flex-col shrink-0 lg:self-stretch"
+          style={{ minHeight: 380 }}
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-lg text-gray-900">History</h3>
@@ -797,7 +797,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+          <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
             {sessionsLoading ? (
               <div className="flex items-center justify-center h-24">
                 <ArrowPathIcon className="w-5 h-5 text-purple-400 animate-spin" />
@@ -841,7 +841,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
             )}
           </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="mt-4 pt-4 border-t border-gray-100 shrink-0">
             <div className="flex items-center gap-3 px-1">
               <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm shrink-0">
                 {(user?.firstName?.[0] ?? '?').toUpperCase()}

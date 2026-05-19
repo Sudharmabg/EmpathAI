@@ -314,9 +314,7 @@ function useAutoResize(ref, value) {
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    // Step 1: shrink to minimum so scrollHeight recalculates correctly
     el.style.height = '40px'
-    // Step 2: only grow if content needs more than 40px
     if (el.scrollHeight > 40) {
       el.style.height = Math.min(el.scrollHeight, 128) + 'px'
     }
@@ -349,10 +347,8 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   const messagesEndRef = useRef(null)
   const inputRef       = useRef(null)
 
-  // ── Auto resize textarea on ALL browsers ─────────────────────────────────
   useAutoResize(inputRef, inputMessage)
 
-  // ── Reset textarea height helper ──────────────────────────────────────────
   const resetTextareaHeight = () => {
     if (inputRef.current) {
       inputRef.current.style.height = '40px'
@@ -443,7 +439,6 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     const text = inputMessage.trim()
     if (!text || isLoading) return
 
-    // ── Reset height immediately ───────────────────────────────────────────
     resetTextareaHeight()
 
     const lower = text.toLowerCase()
@@ -548,7 +543,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
         <div className="flex-1 w-full min-w-0">
           <div
             className="bg-white border-2 border-purple-200 rounded-2xl shadow-lg overflow-hidden flex flex-col"
-            style={{ height: '70vh', minHeight: 520 }}
+            style={{ height: 'calc(100vh - 280px)', minHeight: 520, maxHeight: 720 }}
           >
 
             {/* Header */}
@@ -708,7 +703,6 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                     disabled={isLoading || (usage && usage.remaining === 0)}
                   />
 
-                  {/* ── KEY FIX: JS-driven resize, no fieldSizing ── */}
                   <textarea
                     ref={inputRef}
                     value={inputMessage}
@@ -779,7 +773,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
         {/* ── History sidebar ───────────────────────────────────────────────── */}
         <div
           className="w-full lg:w-72 bg-white border-2 border-gray-100 rounded-2xl shadow-md p-4 flex flex-col shrink-0"
-          style={{ maxHeight: '70vh', minHeight: 380 }}
+          style={{ maxHeight: 'calc(100vh - 280px)', minHeight: 380 }}
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-lg text-gray-900">History</h3>

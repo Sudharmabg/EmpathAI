@@ -78,10 +78,10 @@ export default function Dashboard({ user, onLogout }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 font-lora">
+    <div className="h-screen flex flex-col bg-gray-50 font-lora overflow-hidden">
 
       {/* ── Header ── */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-sm border-b border-gray-200 shrink-0">
         <div className="flex items-center justify-between px-6 py-4">
 
           {/* Logo */}
@@ -209,10 +209,10 @@ export default function Dashboard({ user, onLogout }) {
       </header>
 
       {/* ── Body ── */}
-      <div className="flex">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
 
         {/* Sidebar nav */}
-        <aside className="w-64 bg-white shadow-sm border-r border-gray-200 min-h-screen">
+        <aside className="w-64 bg-white shadow-sm border-r border-gray-200 shrink-0 overflow-y-auto">
           <nav className="p-4 flex flex-col h-full">
             <ul className="space-y-2 flex-1">
               {sidebarItems.map(item => (
@@ -236,7 +236,7 @@ export default function Dashboard({ user, onLogout }) {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 overflow-y-auto bg-gray-50">
           {activeTab === 'overview' && <OverviewPanel user={user} setActiveTab={setActiveTab} />}
           {activeTab === 'chatbuddy' && <ChatBuddy user={user} initialMessage={chatMessage} setChatMessage={setChatMessage} />}
           {activeTab === 'schedule' && (
@@ -258,7 +258,7 @@ export default function Dashboard({ user, onLogout }) {
 
         {/* Right sidebar — overview only */}
         {activeTab === 'overview' && (
-          <aside className="w-80 bg-white border-l border-gray-200 p-6">
+          <aside className="w-80 bg-white border-l border-gray-200 p-6 shrink-0 overflow-y-auto">
             <RightSidebarPanel user={user} />
           </aside>
         )}

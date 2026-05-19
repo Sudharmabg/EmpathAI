@@ -22,6 +22,10 @@ def _build_system_prompt(state: ChatState) -> str:
     completed_week = state.get("tasks_completed_this_week", 0)
     total_week = state.get("tasks_total_this_week", 0)
 
+    # NEW: Pull in emotional context
+    mood_pattern = state.get("mood_pattern_summary", "")
+    assessment_context = state.get("assessment_context_summary", "")
+
     tone_map = {
         "POSITIVE": "The student is in a good mood. Be encouraging, energetic, and motivating.",
         "NEUTRAL": "The student seems calm. Be helpful, clear, and friendly.",
@@ -47,6 +51,22 @@ When answering schedule questions:
 - Keep suggestions specific and actionable
 """
 
+    # NEW: Emotional context block (only for emotional intents)
+    emotional_context = ""
+    if intent == "EMOTIONAL_SUPPORT" or emotional_state in ("STRESSED", "DISTRESSED"):
+        emotional_context = f"""
+EMOTIONAL CONTEXT (use this to personalise empathy):
+Mood pattern (last 7 days): {mood_pattern}
+Latest assessment: {assessment_context}
+
+When responding to emotional messages:
+- Acknowledge their feelings first
+- If mood pattern shows recurring negative emotions, gently note you've noticed they've been having a hard week
+- If assessment shows high anxiety/stress, use grounding language
+- NEVER mention "I noticed your mood logs say..." — instead say things like "It sounds like things have been heavy lately"
+- Keep responses warm but not overly clinical
+"""
+
     system_prompt = f"""You are ChatBuddy, a warm and intelligent AI study assistant for school students on the EmpathAI platform.
 
 Student Name: {name}
@@ -57,6 +77,7 @@ Student Emotional State: {emotional_state}
 TONE INSTRUCTION:
 {tone_instruction}
 {schedule_instruction}
+{emotional_context}
 
 LANGUAGE RULES:
 - Detect the language the student is using and respond in the SAME language
@@ -101,9 +122,7 @@ def _fix_latex_delimiters(text: str) -> str:
     Converts any \\[...\\] or \\(...\\) style LaTeX the model may produce
     into the $$ / $ delimiters that remark-math / rehype-katex expects.
     """
-    # \\[ ... \\]  →  $$ ... $$
     text = re.sub(r'\\\[(.*?)\\\]', lambda m: f'$${m.group(1)}$$', text, flags=re.DOTALL)
-    # \\( ... \\)  →  $ ... $
     text = re.sub(r'\\\((.*?)\\\)', lambda m: f'${m.group(1)}$', text, flags=re.DOTALL)
     return text
 
@@ -210,6 +229,11 @@ def response_generator(state: ChatState) -> ChatState:
 
         # Fix any \[ \] or \( \) LaTeX the model produced despite instructions
         clean_reply = _fix_latex_delimiters(clean_reply)
+
+        # ── NEW: Prepend empathy prefix if validator generated one ───────────
+        if state.get("needs_empathy_prefix") and state.get("empathy_prefix"):
+            clean_reply = f"{state['empathy_prefix']}\n\n{clean_reply}"
+            logger.info("Empathy prefix prepended to response")
 
         state["reply"] = clean_reply
         state["detected_mode"] = detected_mode

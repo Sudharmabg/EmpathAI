@@ -1,6 +1,7 @@
 package com.empathai.assessment.repository;
 
 import com.empathai.assessment.entity.AssessmentReport;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,6 +24,13 @@ public interface AssessmentReportRepository extends JpaRepository<AssessmentRepo
 
     @Query("SELECT r FROM AssessmentReport r WHERE r.chromaSynced = false")
     List<AssessmentReport> findAllNotChromaSynced();
+
     boolean existsByStudentIdAndGroupIdAndSessionDate(
             String studentId, Long groupId, LocalDate sessionDate);
+
+    // ── NEW: Fetch the latest report for a student (regardless of group) ──
+    default Optional<AssessmentReport> findLatestByStudentId(String studentId) {
+        List<AssessmentReport> reports = findByStudentIdOrderByCreatedAtDesc(studentId);
+        return reports.isEmpty() ? Optional.empty() : Optional.of(reports.get(0));
+    }
 }

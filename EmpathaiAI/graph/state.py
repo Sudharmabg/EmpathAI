@@ -21,12 +21,24 @@ class ChatState(TypedDict):
     tasks_completed_this_week: int
     tasks_total_this_week: int
 
+    # ── NEW: Emotional context from backend ──────────────────────────────────
+    weekly_mood_history: List[Dict[str, Any]]
+    assessment_summary: Optional[Dict[str, Any]]
+
     # ── Intermediate node results ─────────────────────────────────────────────
     intent: Optional[str]
     emotional_state: Optional[str]
     academic_pressure: Optional[str]
     is_crisis: bool
     schedule_context_summary: Optional[str]
+
+    # ── NEW: Emotional context summaries built by context_loader ─────────────
+    mood_pattern_summary: Optional[str]
+    assessment_context_summary: Optional[str]
+
+    # ── NEW: Empathy validation result ────────────────────────────────────────
+    needs_empathy_prefix: bool
+    empathy_prefix: Optional[str]
 
     # ── Final output ──────────────────────────────────────────────────────────
     reply: str

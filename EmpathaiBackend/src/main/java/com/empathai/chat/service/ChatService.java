@@ -2,6 +2,8 @@ package com.empathai.chat.service;
 
 import com.empathai.activities.entity.StudentGoal;
 import com.empathai.activities.repository.StudentGoalRepository;
+import com.empathai.assessment.entity.AssessmentReport;
+import com.empathai.assessment.repository.AssessmentReportRepository;
 import com.empathai.chat.dto.*;
 import com.empathai.chat.entity.ChatMessage;
 import com.empathai.chat.entity.ChatSession;
@@ -17,6 +19,8 @@ import com.empathai.user.entity.Student;
 import com.empathai.user.entity.User;
 import com.empathai.user.exception.EmpathaiException;
 import com.empathai.user.repository.UserRepository;
+import com.empathai.wellness.entity.MoodEntry;
+import com.empathai.wellness.repository.MoodEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +30,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
@@ -48,6 +53,10 @@ public class ChatService {
     private final ExamDateRepository examDateRepository;
     private final StudentGoalRepository studentGoalRepository;
     private final StudentSchedulePreferenceRepository preferenceRepository;
+
+    // ── NEW: Repositories for emotional context ───────────────────────────────
+    private final MoodEntryRepository moodEntryRepository;
+    private final AssessmentReportRepository assessmentReportRepository;
 
     @Value("${app.chat.daily-limit:20}")
     private int dailyLimit;
@@ -119,8 +128,18 @@ public class ChatService {
         aiRequest.put("preferred_study_time", getPreferredStudyTime(studentId));
         aiRequest.put("tasks_completed_this_week", getCompletedTasksCount(studentId));
         aiRequest.put("tasks_total_this_week", getTotalTasksCount(studentId));
-        aiRequest.put("latest_mood_score", null);
-        aiRequest.put("mood_label", null);
+
+        // ── NEW: Emotional context (weekly mood + assessment summary) ─────────
+        aiRequest.put("weekly_mood_history", buildWeeklyMoodHistory(studentId));
+        aiRequest.put("assessment_summary", buildAssessmentSummary(studentId));
+
+        // Keep latest mood for backwards compatibility with existing nodes
+        MoodEntry latestMood = moodEntryRepository
+                .findFirstByStudentIdOrderByLoggedAtDesc(studentId)
+                .orElse(null);
+        aiRequest.put("mood_label", latestMood != null ? latestMood.getMood() : null);
+        aiRequest.put("latest_mood_score",
+                mapMoodToScore(latestMood != null ? latestMood.getMood() : null));
 
         log.info("Calling AI service at: {}/chat", aiServiceUrl);
 
@@ -176,8 +195,8 @@ public class ChatService {
                 .role("user")
                 .content(message)
                 .detectedMode(detectedMode)
-                .imageBase64(imageBase64)          // ← persisted
-                .imageMimeType(imageMimeType)       // ← persisted
+                .imageBase64(imageBase64)
+                .imageMimeType(imageMimeType)
                 .build());
 
         // ── Save assistant reply (no image) ───────────────────────────────────
@@ -309,6 +328,78 @@ public class ChatService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // NEW: EMOTIONAL CONTEXT HELPER METHODS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Fetches the student's mood logs from the past 7 days.
+     * Used by the Python emotion evaluator to detect recurring emotional patterns.
+     */
+    private List<Map<String, Object>> buildWeeklyMoodHistory(Long studentId) {
+        try {
+            LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(7);
+            List<MoodEntry> moods = moodEntryRepository
+                    .findByStudentIdAndLoggedAtAfterOrderByLoggedAtDesc(studentId, sevenDaysAgo);
+
+            return moods.stream().map(m -> {
+                Map<String, Object> map = new HashMap<>();
+                map.put("mood", m.getMood());
+                map.put("note", m.getNote());
+                map.put("loggedAt", m.getLoggedAt().toString());
+                map.put("daysAgo", ChronoUnit.DAYS.between(
+                        m.getLoggedAt().toLocalDate(), LocalDate.now()));
+                return map;
+            }).collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("Failed to fetch weekly mood history for studentId={}: {}", studentId, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Fetches the latest Feelings Explorer assessment summary for the student.
+     * Used by the Python pipeline to understand the student's mental health baseline.
+     */
+    private Map<String, Object> buildAssessmentSummary(Long studentId) {
+        try {
+            Optional<AssessmentReport> latest = assessmentReportRepository
+                    .findLatestByStudentId(String.valueOf(studentId));
+
+            if (latest.isEmpty()) return null;
+
+            AssessmentReport r = latest.get();
+            Map<String, Object> map = new HashMap<>();
+            map.put("groupName", r.getGroupName());
+            map.put("summaryText", r.getSummaryText());
+            map.put("bulletPoints", r.getBulletPoints());
+            map.put("sessionDate", r.getSessionDate() != null ? r.getSessionDate().toString() : null);
+            map.put("daysAgo", r.getSessionDate() != null
+                    ? ChronoUnit.DAYS.between(r.getSessionDate(), LocalDate.now())
+                    : null);
+            return map;
+        } catch (Exception e) {
+            log.warn("Failed to fetch assessment summary for studentId={}: {}", studentId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Maps an emotion string (e.g. "happy", "sad") to a 1-5 score for the
+     * existing rule-based fallback in emotion_evaluator.py.
+     */
+    private Integer mapMoodToScore(String mood) {
+        if (mood == null) return null;
+        return switch (mood.toLowerCase()) {
+            case "happy" -> 5;
+            case "neutral" -> 3;
+            case "sad" -> 2;
+            case "anxious" -> 2;
+            case "angry" -> 1;
+            default -> 3;
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // EXISTING METHODS
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -382,8 +473,8 @@ public class ChatService {
                 .content(m.getContent())
                 .detectedMode(m.getDetectedMode())
                 .createdAt(m.getCreatedAt())
-                .imageBase64(m.getImageBase64())     // ← returned in history
-                .imageMimeType(m.getImageMimeType()) // ← returned in history
+                .imageBase64(m.getImageBase64())
+                .imageMimeType(m.getImageMimeType())
                 .build();
     }
 }

@@ -15,7 +15,7 @@ CASUAL_INTENTS = {"GENERAL_CHAT"}
 async def chat(request: ChatRequest):
     """
     Receive a student's message along with context,
-    run through the LangGraph 7-node pipeline,
+    run through the LangGraph pipeline,
     and return the AI reply.
     """
     logger.info("Received chat request from student: %s", request.student_name)
@@ -59,12 +59,24 @@ async def chat(request: ChatRequest):
             "tasks_completed_this_week": request.tasks_completed_this_week or 0,
             "tasks_total_this_week": request.tasks_total_this_week or 0,
 
+            # NEW: Emotional context from backend
+            "weekly_mood_history": request.weekly_mood_history or [],
+            "assessment_summary": request.assessment_summary,
+
             # Intermediate fields
             "intent": None,
             "emotional_state": None,
             "academic_pressure": None,
             "is_crisis": False,
             "schedule_context_summary": None,
+
+            # NEW: Emotional context summaries (built by context_loader)
+            "mood_pattern_summary": None,
+            "assessment_context_summary": None,
+
+            # NEW: Empathy validation
+            "needs_empathy_prefix": False,
+            "empathy_prefix": None,
 
             # Output fields
             "reply": "",

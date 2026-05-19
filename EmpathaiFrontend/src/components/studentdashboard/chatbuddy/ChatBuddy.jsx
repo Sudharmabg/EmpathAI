@@ -45,11 +45,6 @@ function formatRelative(iso) {
   return diffD === 1 ? 'Yesterday' : `${diffD} days ago`
 }
 
-/**
- * Build a displayable image src from a message.
- * - Fresh messages use a blob URL (imagePreview)
- * - History-loaded messages use base64 (imageBase64 + imageMimeType)
- */
 function resolveImageSrc(msg) {
   if (msg.imagePreview) return msg.imagePreview
   if (msg.imageBase64 && msg.imageMimeType) {
@@ -84,7 +79,8 @@ function TypingIndicator() {
     <div className="flex justify-start">
       <div className="bg-gray-100 px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1">
         {[0, 1, 2].map(i => (
-          <span key={i} className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+          <span key={i} className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
+            style={{ animationDelay: `${i * 0.15}s` }} />
         ))}
       </div>
     </div>
@@ -115,10 +111,13 @@ function UsageBar({ usage }) {
     <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
       <div className="flex justify-between text-xs text-gray-500 mb-1">
         <span>Daily usage</span>
-        <span className={pct >= 90 ? 'text-red-600 font-semibold' : ''}>{usage.used} / {usage.limit} messages</span>
+        <span className={pct >= 90 ? 'text-red-600 font-semibold' : ''}>
+          {usage.used} / {usage.limit} messages
+        </span>
       </div>
       <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full transition-all duration-500 ${color}`}
+          style={{ width: `${pct}%` }} />
       </div>
     </div>
   )
@@ -266,10 +265,14 @@ function VoiceInputButton({ onTranscript, disabled }) {
               style={{ height: `${8 + (i % 3) * 4}px`, animationDelay: `${i * 0.1}s`, animationDuration: '0.6s' }} />
           ))}
         </div>
-        <button onClick={handleCancel} className="w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors" title="Cancel">
+        <button onClick={handleCancel}
+          className="w-6 h-6 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors"
+          title="Cancel">
           <XMarkIcon className="w-3.5 h-3.5" />
         </button>
-        <button onClick={handleConfirm} className="w-6 h-6 rounded-full bg-green-100 hover:bg-green-200 text-green-600 flex items-center justify-center transition-colors" title="Use this text">
+        <button onClick={handleConfirm}
+          className="w-6 h-6 rounded-full bg-green-100 hover:bg-green-200 text-green-600 flex items-center justify-center transition-colors"
+          title="Use this text">
           <CheckIcon className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -277,10 +280,24 @@ function VoiceInputButton({ onTranscript, disabled }) {
   }
 
   return (
-    <button onClick={startListening} disabled={disabled} className="text-gray-400 hover:text-purple-600 transition-colors disabled:opacity-40" title="Voice input">
+    <button onClick={startListening} disabled={disabled}
+      className="text-gray-400 hover:text-purple-600 transition-colors disabled:opacity-40"
+      title="Voice input">
       <MicrophoneIcon className="w-5 h-5" />
     </button>
   )
+}
+
+// ─── useAutoResize hook — works on ALL browsers ───────────────────────────────
+function useAutoResize(ref, value) {
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    // Reset to auto so scrollHeight recalculates correctly
+    el.style.height = 'auto'
+    // Cap at 128px (matches max-h-32)
+    el.style.height = Math.min(el.scrollHeight, 128) + 'px'
+  }, [value, ref])
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -294,39 +311,63 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
       createdAt: null,
     }
   ])
-  const [inputMessage, setInputMessage]   = useState('')
-  const [isLoading, setIsLoading]         = useState(false)
-  const [error, setError]                 = useState(null)
-  const [sessions, setSessions]           = useState([])
+  const [inputMessage, setInputMessage]       = useState('')
+  const [isLoading, setIsLoading]             = useState(false)
+  const [error, setError]                     = useState(null)
+  const [sessions, setSessions]               = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const [activeSessionId, setActiveSessionId] = useState(null)
-  const [historySearch, setHistorySearch] = useState('')
-  const [usage, setUsage]                 = useState(null)
+  const [historySearch, setHistorySearch]     = useState('')
+  const [usage, setUsage]                     = useState(null)
   const [showCrisisModal, setShowCrisisModal] = useState(false)
-  const [attachedFiles, setAttachedFiles] = useState([])
-  const [previewUrls, setPreviewUrls]     = useState([])
+  const [attachedFiles, setAttachedFiles]     = useState([])
+  const [previewUrls, setPreviewUrls]         = useState([])
+
   const messagesEndRef = useRef(null)
   const inputRef       = useRef(null)
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, isLoading])
+  // ── Auto-resize textarea on ALL browsers (replaces fieldSizing:content) ──
+  useAutoResize(inputRef, inputMessage)
+
+  // ── Reset textarea height helper ─────────────────────────────────────────
+  const resetTextareaHeight = () => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+      inputRef.current.style.height = '36px'
+    }
+  }
 
   useEffect(() => {
-    if (initialMessage) { setInputMessage(initialMessage); setChatMessage?.('') }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, isLoading])
+
+  useEffect(() => {
+    if (initialMessage) {
+      setInputMessage(initialMessage)
+      setChatMessage?.('')
+    }
   }, [initialMessage, setChatMessage])
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true)
-    try { const data = await chatService.getSessions(); setSessions(Array.isArray(data) ? data : []) }
-    catch { /* non-critical */ }
+    try {
+      const data = await chatService.getSessions()
+      setSessions(Array.isArray(data) ? data : [])
+    } catch { /* non-critical */ }
     finally { setSessionsLoading(false) }
   }, [])
 
   const loadUsage = useCallback(async () => {
-    try { const data = await chatService.getUsage(); setUsage(data) }
-    catch { /* non-critical */ }
+    try {
+      const data = await chatService.getUsage()
+      setUsage(data)
+    } catch { /* non-critical */ }
   }, [])
 
-  useEffect(() => { loadSessions(); loadUsage() }, [loadSessions, loadUsage])
+  useEffect(() => {
+    loadSessions()
+    loadUsage()
+  }, [loadSessions, loadUsage])
 
   const loadSession = async (sessionId) => {
     if (activeSessionId === sessionId) return
@@ -334,13 +375,12 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     try {
       const data = await chatService.getSessionHistory(sessionId)
       const loaded = (data.messages || []).map(m => ({
-        id:           m.id,
-        role:         m.role,
-        content:      m.content,
-        detectedMode: m.detectedMode,
-        createdAt:    m.createdAt,
-        // ── FIX: map image fields from history so they render after refresh ──
-        imageBase64:  m.imageBase64   || null,
+        id:            m.id,
+        role:          m.role,
+        content:       m.content,
+        detectedMode:  m.detectedMode,
+        createdAt:     m.createdAt,
+        imageBase64:   m.imageBase64   || null,
         imageMimeType: m.imageMimeType || null,
       }))
       setMessages(
@@ -357,6 +397,9 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   }
 
   const handleNewChat = () => {
+    // ── Reset textarea height ──────────────────────────────────────────────
+    resetTextareaHeight()
+    // ──────────────────────────────────────────────────────────────────────
     setMessages([{
       id: 'welcome', role: 'assistant',
       content: `Hi again, **${user?.firstName || 'there'}**! 😊 What would you like help with?`,
@@ -371,21 +414,28 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   const handleSendMessage = async () => {
     const text = inputMessage.trim()
     if (!text || isLoading) return
-    const lower = text.toLowerCase()
-    if (CRISIS_KEYWORDS.some(kw => lower.includes(kw))) { setShowCrisisModal(true); return }
 
-    // ── Pick only the first image file (backend saves one at a time) ──────────
-    const imageFile = attachedFiles.find(f => f.type.startsWith('image/')) || null
+    // ── Reset textarea height immediately after send ────────────────────────
+    resetTextareaHeight()
+    // ──────────────────────────────────────────────────────────────────────
+
+    const lower = text.toLowerCase()
+    if (CRISIS_KEYWORDS.some(kw => lower.includes(kw))) {
+      setShowCrisisModal(true)
+      return
+    }
+
+    const imageFile       = attachedFiles.find(f => f.type.startsWith('image/')) || null
     const imagePreviewUrl = imageFile ? URL.createObjectURL(imageFile) : null
 
     const userMsg = {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      content: text,
-      detectedMode: null,
-      createdAt: new Date().toISOString(),
-      imagePreview: imagePreviewUrl,   // blob URL — works until page refresh
-      imageBase64: null,               // not yet available; backend saves and returns on next history load
+      id:            `u-${Date.now()}`,
+      role:          'user',
+      content:       text,
+      detectedMode:  null,
+      createdAt:     new Date().toISOString(),
+      imagePreview:  imagePreviewUrl,
+      imageBase64:   null,
       imageMimeType: imageFile?.type || null,
     }
 
@@ -397,18 +447,19 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     setIsLoading(true)
 
     try {
-      // ── FIX: send first image as a File so chatService uses imageBase64 /
-      //   imageMimeType path — which the backend saves to DB ─────────────────
       const firstImageFile = filesToUpload.find(f => f.type.startsWith('image/')) || null
       const response = await chatService.sendMessage(text, firstImageFile)
 
-      const effectiveMode = response.isFlagged || response.is_flagged ? 'mental_health' : response.detectedMode
+      const effectiveMode = response.isFlagged || response.is_flagged
+        ? 'mental_health'
+        : response.detectedMode
+
       const botMsg = {
-        id: response.id ?? `b-${Date.now()}`,
-        role: 'assistant',
-        content: response.content,
+        id:           response.id ?? `b-${Date.now()}`,
+        role:         'assistant',
+        content:      response.content,
         detectedMode: effectiveMode,
-        createdAt: response.createdAt,
+        createdAt:    response.createdAt,
       }
       setMessages(prev => [...prev, botMsg])
       if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl)
@@ -424,7 +475,10 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   }
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage() }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage()
+    }
   }
 
   const handleVoiceTranscript = (text) => {
@@ -453,14 +507,18 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     <div className="font-lora max-w-7xl mx-auto px-4">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-1">ChatBuddy</h1>
-        <p className="text-gray-500 text-sm">Your AI companion for learning and emotional support · powered by GPT-4o mini</p>
+        <p className="text-gray-500 text-sm">
+          Your AI companion for learning and emotional support · powered by GPT-4o mini
+        </p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* ── Main chat panel ── */}
         <div className="flex-1 w-full min-w-0">
-          <div className="bg-white border-2 border-purple-200 rounded-2xl shadow-lg overflow-hidden flex flex-col" style={{ height: '70vh', minHeight: 520 }}>
-
+          <div
+            className="bg-white border-2 border-purple-200 rounded-2xl shadow-lg overflow-hidden flex flex-col"
+            style={{ height: '70vh', minHeight: 520 }}
+          >
             {/* Header */}
             <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-5 py-4 border-b border-purple-100 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
@@ -475,7 +533,11 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                   </p>
                 </div>
               </div>
-              <button onClick={handleNewChat} title="New Chat" className="p-2 hover:bg-white/70 rounded-lg transition-colors text-purple-600">
+              <button
+                onClick={handleNewChat}
+                title="New Chat"
+                className="p-2 hover:bg-white/70 rounded-lg transition-colors text-purple-600"
+              >
                 <PencilSquareIcon className="w-5 h-5" />
               </button>
             </div>
@@ -483,9 +545,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 bg-gray-50/40">
               {messages.map((msg) => {
-                // ── FIX: resolve image src from blob URL (fresh) or base64 (history) ──
                 const imageSrc = resolveImageSrc(msg)
-
                 return (
                   <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     {msg.role === 'assistant' && (
@@ -494,7 +554,10 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                       </div>
                     )}
                     <div className="max-w-[80%] lg:max-w-[70%]">
-                      <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-purple-600 text-white rounded-br-sm shadow-md' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'}`}>
+                      <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
+                        ? 'bg-purple-600 text-white rounded-br-sm shadow-md'
+                        : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
+                      }`}>
                         {msg.role === 'assistant' ? (
                           <ReactMarkdown
                             remarkPlugins={[remarkMath]}
@@ -507,12 +570,15 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                               strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
                               code:   ({ inline, children }) => inline
                                 ? <code className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-xs font-mono border border-purple-100">{children}</code>
-                                : <div className="my-4 rounded-xl overflow-hidden border border-gray-200 shadow-sm"><pre className="bg-gray-900 p-4 text-xs overflow-x-auto text-gray-100 font-mono"><code>{children}</code></pre></div>,
+                                : <div className="my-4 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                                    <pre className="bg-gray-900 p-4 text-xs overflow-x-auto text-gray-100 font-mono">
+                                      <code>{children}</code>
+                                    </pre>
+                                  </div>,
                             }}
                           >{msg.content}</ReactMarkdown>
                         ) : (
                           <div>
-                            {/* ── FIX: image renders from blob URL (fresh) OR base64 data URL (history) ── */}
                             {imageSrc && (
                               <img
                                 src={imageSrc}
@@ -540,8 +606,12 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
             <div className="px-5 py-2 border-t border-gray-100 bg-white shrink-0">
               <div className="flex flex-wrap gap-2">
                 {QUICK_REPLIES.map((reply) => (
-                  <button key={reply} onClick={() => setInputMessage(reply)} disabled={isLoading}
-                    className="px-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-xs hover:bg-purple-100 transition-colors disabled:opacity-50">
+                  <button
+                    key={reply}
+                    onClick={() => setInputMessage(reply)}
+                    disabled={isLoading}
+                    className="px-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-xs hover:bg-purple-100 transition-colors disabled:opacity-50"
+                  >
                     {reply}
                   </button>
                 ))}
@@ -551,8 +621,10 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
             {/* Usage bar */}
             <UsageBar usage={usage} />
 
-            {/* Input row */}
+            {/* ── Input area ── */}
             <div className="px-4 py-3 border-t border-gray-100 bg-white shrink-0">
+
+              {/* Image / file previews */}
               {attachedFiles.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                   {attachedFiles.map((file, idx) => (
@@ -560,8 +632,10 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                       {previewUrls[idx] ? (
                         <div className="relative w-16 h-16 rounded-xl overflow-hidden border-2 border-purple-200 shadow-sm">
                           <img src={previewUrls[idx]} alt={file.name} className="w-full h-full object-cover" />
-                          <button onClick={() => removeAttachedFile(idx)}
-                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors">
+                          <button
+                            onClick={() => removeAttachedFile(idx)}
+                            className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 hover:bg-red-500 rounded-full flex items-center justify-center transition-colors"
+                          >
                             <XMarkIcon className="w-2.5 h-2.5 text-white" />
                           </button>
                         </div>
@@ -569,7 +643,10 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                         <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1 text-xs text-purple-700 max-w-[160px]">
                           <PaperClipIcon className="w-3.5 h-3.5 shrink-0" />
                           <span className="truncate">{file.name}</span>
-                          <button onClick={() => removeAttachedFile(idx)} className="shrink-0 text-purple-400 hover:text-red-500 transition-colors ml-0.5">
+                          <button
+                            onClick={() => removeAttachedFile(idx)}
+                            className="shrink-0 text-purple-400 hover:text-red-500 transition-colors ml-0.5"
+                          >
                             <XMarkIcon className="w-3 h-3" />
                           </button>
                         </div>
@@ -578,12 +655,16 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                   ))}
                 </div>
               )}
-              <div className="flex gap-2 items-end">
+
+              {/* ── FIX: changed items-end → items-center on the row ── */}
+              <div className="flex gap-2 items-center">
                 <div className="flex-1 flex items-center border border-gray-300 rounded-xl focus-within:ring-2 focus-within:ring-purple-500 bg-white px-3 py-2 gap-2">
                   <AttachmentButton
                     onFileSelect={handleFileSelect}
                     disabled={isLoading || (usage && usage.remaining === 0)}
                   />
+
+                  {/* ── FIX: removed fieldSizing:content, added JS-driven height ── */}
                   <textarea
                     ref={inputRef}
                     value={inputMessage}
@@ -592,24 +673,36 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                     placeholder="Ask me anything… (Shift+Enter for new line)"
                     rows={1}
                     disabled={isLoading || (usage && usage.remaining === 0)}
-                    className="flex-1 resize-none focus:outline-none bg-transparent text-sm text-gray-800 placeholder-gray-400 max-h-32 disabled:opacity-60"
-                    style={{ fieldSizing: 'content' }}
+                    className="flex-1 resize-none focus:outline-none bg-transparent text-sm text-gray-800 placeholder-gray-400 disabled:opacity-60 overflow-y-auto"
+                    style={{
+                      height:    '36px',
+                      maxHeight: '128px',
+                      minHeight: '36px',
+                    }}
                   />
+
                   <VoiceInputButton
                     onTranscript={handleVoiceTranscript}
                     disabled={isLoading || (usage && usage.remaining === 0)}
                   />
                 </div>
+
                 <button
                   onClick={handleSendMessage}
                   disabled={isLoading || !inputMessage.trim() || (usage && usage.remaining === 0)}
                   className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl px-4 py-3 transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
                 >
-                  {isLoading ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : <PaperAirplaneIcon className="w-5 h-5" />}
+                  {isLoading
+                    ? <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                    : <PaperAirplaneIcon className="w-5 h-5" />
+                  }
                 </button>
               </div>
+
               {usage && usage.remaining === 0 && (
-                <p className="text-xs text-red-500 mt-1.5">Daily message limit reached. Come back tomorrow!</p>
+                <p className="text-xs text-red-500 mt-1.5">
+                  Daily message limit reached. Come back tomorrow!
+                </p>
               )}
             </div>
           </div>
@@ -617,9 +710,9 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
           {/* Feature cards */}
           <div className="mt-5 grid sm:grid-cols-3 gap-4">
             {[
-              { icon: '📚', title: 'Study Help', desc: 'CBSE Class 8–10 topics explained step by step' },
+              { icon: '📚', title: 'Study Help',        desc: 'CBSE Class 8–10 topics explained step by step' },
               { icon: '💭', title: 'Emotional Support', desc: 'Share how you feel and get empathetic guidance' },
-              { icon: '🎯', title: 'Motivation', desc: 'Personalised tips to keep you going every day' },
+              { icon: '🎯', title: 'Motivation',        desc: 'Personalised tips to keep you going every day' },
             ].map(({ icon, title, desc }) => (
               <div key={title} className="bg-white border border-purple-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
                 <p className="text-2xl mb-1">{icon}</p>
@@ -631,35 +724,67 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
         </div>
 
         {/* ── History sidebar ── */}
-        <div className="w-full lg:w-72 bg-white border-2 border-gray-100 rounded-2xl shadow-md p-4 flex flex-col shrink-0" style={{ maxHeight: '70vh', minHeight: 380 }}>
+        <div
+          className="w-full lg:w-72 bg-white border-2 border-gray-100 rounded-2xl shadow-md p-4 flex flex-col shrink-0"
+          style={{ maxHeight: '70vh', minHeight: 380 }}
+        >
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-lg text-gray-900">History</h3>
-            <button onClick={handleNewChat} title="New Chat" className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500">
+            <button
+              onClick={handleNewChat}
+              title="New Chat"
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
+            >
               <PencilSquareIcon className="w-5 h-5" />
             </button>
           </div>
           <div className="relative mb-4">
             <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Search sessions…" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-400" />
+            <input
+              type="text"
+              placeholder="Search sessions…"
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
+            />
           </div>
           <div className="flex-1 overflow-y-auto space-y-1 pr-1">
             {sessionsLoading ? (
-              <div className="flex items-center justify-center h-24"><ArrowPathIcon className="w-5 h-5 text-purple-400 animate-spin" /></div>
+              <div className="flex items-center justify-center h-24">
+                <ArrowPathIcon className="w-5 h-5 text-purple-400 animate-spin" />
+              </div>
             ) : filteredSessions.length === 0 ? (
               <p className="text-xs text-gray-400 text-center mt-8 px-4">
-                {sessions.length === 0 ? 'No chat history yet. Start a conversation!' : 'No sessions match your search.'}
+                {sessions.length === 0
+                  ? 'No chat history yet. Start a conversation!'
+                  : 'No sessions match your search.'}
               </p>
             ) : (
               <>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-2">Past sessions</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-2">
+                  Past sessions
+                </p>
                 {filteredSessions.map((session) => (
-                  <button key={session.id} onClick={() => loadSession(session.id)}
-                    className={`w-full flex items-start gap-3 p-3 rounded-xl transition-colors text-left group ${activeSessionId === session.id ? 'bg-purple-50 border border-purple-200' : 'hover:bg-gray-50 border border-transparent'}`}>
-                    <ChatBubbleLeftIcon className={`w-4 h-4 mt-0.5 shrink-0 group-hover:text-purple-500 ${activeSessionId === session.id ? 'text-purple-500' : 'text-gray-400'}`} />
+                  <button
+                    key={session.id}
+                    onClick={() => loadSession(session.id)}
+                    className={`w-full flex items-start gap-3 p-3 rounded-xl transition-colors text-left group ${
+                      activeSessionId === session.id
+                        ? 'bg-purple-50 border border-purple-200'
+                        : 'hover:bg-gray-50 border border-transparent'
+                    }`}
+                  >
+                    <ChatBubbleLeftIcon className={`w-4 h-4 mt-0.5 shrink-0 group-hover:text-purple-500 ${
+                      activeSessionId === session.id ? 'text-purple-500' : 'text-gray-400'
+                    }`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{formatSessionLabel(session)}</p>
-                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><ClockIcon className="w-3 h-3" />{formatRelative(session.createdAt)}</p>
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {formatSessionLabel(session)}
+                      </p>
+                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                        <ClockIcon className="w-3 h-3" />
+                        {formatRelative(session.createdAt)}
+                      </p>
                     </div>
                   </button>
                 ))}
@@ -671,7 +796,9 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
               <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-sm shrink-0">
                 {(user?.firstName?.[0] ?? '?').toUpperCase()}
               </div>
-              <span className="text-sm font-medium text-gray-700 truncate">{user?.firstName} {user?.lastName}</span>
+              <span className="text-sm font-medium text-gray-700 truncate">
+                {user?.firstName} {user?.lastName}
+              </span>
             </div>
           </div>
         </div>
@@ -681,19 +808,32 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
       {showCrisisModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white border-2 border-red-200 rounded-2xl shadow-2xl p-8 w-full max-w-md relative">
-            <button onClick={() => setShowCrisisModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+            <button
+              onClick={() => setShowCrisisModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
               <XMarkIcon className="w-5 h-5" />
             </button>
             <div className="text-center">
               <div className="text-5xl mb-4">🆘</div>
               <h3 className="text-2xl font-bold text-red-800 mb-3">We're here for you</h3>
-              <p className="text-gray-600 mb-6 text-sm">It sounds like you might be going through something really difficult. You are not alone — help is just one call away.</p>
+              <p className="text-gray-600 mb-6 text-sm">
+                It sounds like you might be going through something really difficult.
+                You are not alone — help is just one call away.
+              </p>
               <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5 mb-5">
                 <p className="text-sm font-semibold text-red-700 mb-1">iCall Helpline (India)</p>
-                <a href="tel:9152987821" className="text-3xl font-bold text-red-600 hover:text-red-800 transition-colors">9152987821</a>
-                <p className="text-xs text-gray-500 mt-1">Tap to call · Available Mon–Sat, 8am–10pm IST</p>
+                <a href="tel:9152987821"
+                  className="text-3xl font-bold text-red-600 hover:text-red-800 transition-colors">
+                  9152987821
+                </a>
+                <p className="text-xs text-gray-500 mt-1">
+                  Tap to call · Available Mon–Sat, 8am–10pm IST
+                </p>
               </div>
-              <p className="text-xs text-gray-400">You can also talk to a school counsellor anytime.</p>
+              <p className="text-xs text-gray-400">
+                You can also talk to a school counsellor anytime.
+              </p>
             </div>
           </div>
         </div>

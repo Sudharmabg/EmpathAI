@@ -561,18 +561,21 @@ function VoiceInputButton({ onTranscript, disabled }) {
 // SCHEDULE SESSION HELPERS  (localStorage persistence)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SA_SESSIONS_KEY = 'scheduleAssistant_sessions'
-const MAX_SESSIONS    = 20
+const MAX_SESSIONS = 20
 
-function loadStoredSessions() {
+function getSessionKey(userId) {
+    return `scheduleAssistant_sessions_${userId}`
+}
+
+function loadStoredSessions(userId) {
     try {
-        return JSON.parse(localStorage.getItem(SA_SESSIONS_KEY) || '[]')
+        return JSON.parse(localStorage.getItem(getSessionKey(userId)) || '[]')
     } catch { return [] }
 }
 
-function saveStoredSessions(sessions) {
+function saveStoredSessions(sessions, userId) {
     try {
-        localStorage.setItem(SA_SESSIONS_KEY, JSON.stringify(sessions.slice(0, MAX_SESSIONS)))
+        localStorage.setItem(getSessionKey(userId), JSON.stringify(sessions.slice(0, MAX_SESSIONS)))
     } catch { /* quota exceeded – silently skip */ }
 }
 
@@ -591,7 +594,7 @@ function formatSessionDate(iso) {
 // MINI CHATBUDDY
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MiniChatBuddy({ user, tasks, upcomingExams, activeDay, onClose, onTaskChanged }) {
+function MiniChatBuddy({ user, tasks, setTasks, upcomingExams, activeDay, onClose, onTaskChanged }) {
     const [messages, setMessages]           = useState([])
     const [inputMessage, setInputMessage]   = useState('')
     const [isLoading, setIsLoading]         = useState(false)
@@ -642,25 +645,22 @@ ${allTasksSummary || '  No tasks scheduled yet'}
 
 UPCOMING EXAMS:
 ${examsSummary}
-
 YOUR BEHAVIOUR:
 1. Be warm, encouraging, and concise. Use emojis sparingly.
-2. When the student wants to ADD a task, gather ALL required info before calling add_task:
-   - Task title (what subject/activity?)
-   - Day of week
-   - Start time AND end time
-   Ask one or two questions at a time if info is missing. Never assume times.
-3. If the student gives partial info like "add Math at 3pm for 1 hour on Tuesday", infer endTime = 16:00 yourself and confirm before calling.
-4. When the student wants to DELETE a task, identify it from the task list above, confirm once, then call delete_task.
-5. When the student wants to EDIT a task, ask what they want to change, confirm, then call edit_task.
-6. When marking complete, identify the task and call mark_task_complete.
-7. For queries like "what's on my schedule" or "am I on track", answer directly from the task list — no tool needed.
-8. After any action, briefly confirm what was done and offer to help further.
-9. Always use 24-hour format (HH:MM) when calling tools.
-10. Never make up task IDs — only use IDs from the task list above.
-11. Today is ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`
+2. When the student wants to ADD a task, gather title, day, start time, and end time — then IMMEDIATELY call add_task. Do NOT ask for confirmation. Do NOT say "just to confirm". Do NOT repeat the details back and ask "is that correct?". Just call the tool.
+3. If the student gives partial info like "add Math at 3pm for 1 hour on Tuesday", infer endTime = 16:00 yourself and call add_task immediately without confirming.
+4. If the student says "yes", "yes add", "proceed", "go ahead", or any affirmative — you already have all the info. CALL THE TOOL IMMEDIATELY. Never ask again.
+5. When the student wants to DELETE a task, identify it from the task list, then call delete_task immediately. No confirmation needed.
+6. When the student wants to EDIT a task, ask only what changed, then call edit_task immediately.
+7. When marking complete, identify the task and call mark_task_complete immediately.
+8. For queries like "what's on my schedule" or "am I on track", answer directly from the task list — no tool needed.
+9. IMPORTANT: If the student asks a general knowledge or subject question (e.g. "explain algebra", "what is photosynthesis", "help me with calculus"), answer it directly and helpfully as a knowledgeable tutor. Do NOT treat it as a task to add, do NOT ask for times or days, do NOT call any tool. Just answer the question naturally.
+10. After any action, briefly confirm what was done and offer to help further.
+11. Always use 24-hour format (HH:MM) when calling tools.
+12. Never make up task IDs — only use IDs from the task list above.
+13. Today is ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
+14. CRITICAL: Once you have title + day + startTime + endTime, call the tool. Period. No more questions.`
     }
-
     // ── welcome message ────────────────────────────────────────────────────────
     const buildWelcomeMessage = () => {
         const todayTasks     = tasks[activeDay] || []
@@ -690,7 +690,7 @@ YOUR BEHAVIOUR:
         agentHistoryRef.current = [{ role: 'system', content: buildSystemPrompt() }]
         setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage() }])
         // Load stored sessions
-        setSessions(loadStoredSessions())
+        setSessions(loadStoredSessions(user.id))
         inputRef.current?.focus()
     }, [])
 
@@ -707,8 +707,8 @@ YOUR BEHAVIOUR:
                     preview:   realMessages[0]?.content?.slice(0, 60) || 'Schedule session',
                     messages:  currentMessages,
                 }
-                const updated = [session, ...loadStoredSessions()]
-                saveStoredSessions(updated)
+                const updated = [session, ...loadStoredSessions(user.id)]
+saveStoredSessions(updated, user.id)
             }
         }
     }, []) // empty deps — runs cleanup only on unmount
@@ -722,37 +722,63 @@ YOUR BEHAVIOUR:
         try {
             switch (toolName) {
                 case 'add_task': {
-                    const result = await addTask(
-                        user.id,
-                        toolInput.dayOfWeek,
-                        toolInput.title,
-                        toolInput.startTime,
-                        toolInput.endTime,
-                        toolInput.notes || ''
-                    )
-                    onTaskChanged?.()
-                    return { success: true, message: `Task "${toolInput.title}" added on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
-                }
-                case 'edit_task': {
-                    const result = await editTask(
-                        toolInput.taskId,
-                        user.id,
-                        toolInput.dayOfWeek,
-                        toolInput.title,
-                        toolInput.startTime,
-                        toolInput.endTime,
-                        toolInput.notes || ''
-                    )
-                    onTaskChanged?.()
-                    return { success: true, message: `Task updated to "${toolInput.title}" on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
-                }
-                case 'delete_task': {
-                    await deleteTask(toolInput.taskId)
-                    onTaskChanged?.()
-                    return { success: true, message: `Task "${toolInput.taskTitle}" has been deleted.` }
-                }
-                case 'mark_task_complete': {
+                 const result = await addTask(
+        user.id,
+        toolInput.dayOfWeek,
+        toolInput.title,
+        toolInput.startTime,
+        toolInput.endTime,
+        toolInput.notes || ''
+    )
+    setTasks(prev => ({
+        ...prev,
+        [toolInput.dayOfWeek]: [...(prev[toolInput.dayOfWeek] || []), { ...result, completed: false }]
+    }))
+    onTaskChanged?.()
+    return { success: true, message: `Task "${toolInput.title}" added on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
+}
+case 'edit_task': {
+    const result = await editTask(
+        toolInput.taskId,
+        user.id,
+        toolInput.dayOfWeek,
+        toolInput.title,
+        toolInput.startTime,
+        toolInput.endTime,
+        toolInput.notes || ''
+    )
+    setTasks(prev => ({
+        ...prev,
+        [toolInput.dayOfWeek]: (prev[toolInput.dayOfWeek] || []).map(t =>
+            t.id === toolInput.taskId ? { ...t, ...result } : t
+        )
+    }))
+    onTaskChanged?.()
+    return { success: true, message: `Task updated to "${toolInput.title}" on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
+}
+case 'delete_task': {
+    await deleteTask(toolInput.taskId)
+    setTasks(prev => {
+        const updated = {}
+        for (const day of Object.keys(prev)) {
+            updated[day] = prev[day].filter(t => t.id !== toolInput.taskId)
+        }
+        return updated
+    })
+    onTaskChanged?.()
+    return { success: true, message: `Task "${toolInput.taskTitle}" has been deleted.` }
+}
+case 'mark_task_complete': {
                     const result = await toggleTaskComplete(toolInput.taskId)
+                    setTasks(prev => {
+                        const updated = {}
+                        for (const day of Object.keys(prev)) {
+                            updated[day] = prev[day].map(t =>
+                                t.id === toolInput.taskId ? { ...t, completed: result.completed } : t
+                            )
+                        }
+                        return updated
+                    })
                     onTaskChanged?.()
                     return { success: true, message: `Task "${toolInput.taskTitle}" completion status toggled.`, task: result }
                 }
@@ -764,6 +790,7 @@ YOUR BEHAVIOUR:
         }
     }
 
+
     // ── agentic loop (OpenAI) ──────────────────────────────────────────────────
     const runAgentLoop = async (history) => {
         let currentHistory = history
@@ -771,35 +798,42 @@ YOUR BEHAVIOUR:
 
         for (let i = 0; i < MAX_ITERATIONS; i++) {
             const response = await apiRequest('/api/openai/chat', {
-                method: 'POST',
-                body: JSON.stringify({
-                    model: 'gpt-4o',
-                    messages: currentHistory,
-                    tools: AGENT_TOOLS,
-                    tool_choice: 'auto',
-                }),
-            })
-            if (!response.ok) {
-                const errBody = await response.json().catch(() => ({}))
-                throw new Error(errBody?.error?.message || 'Agent request failed')
-            }
+    method: 'POST',
+    body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: currentHistory,
+        tools: AGENT_TOOLS,
+        tool_choice: 'auto',
+        max_tokens: 1024,
+    }),
+})
+if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}))
+    throw new Error(errBody?.error?.message || 'Agent request failed')
+}
 
-            const data    = await response.json()
+const data = await response.json().catch(() => {
+    throw new Error('Response was too large or was cut off. Please try a shorter question.')
+})
             const choice  = data.choices?.[0]
             const message = choice?.message
 
             if (message?.content?.trim()) {
-                setMessages(prev => [...prev, {
-                    id: `a-${Date.now()}-${i}`,
-                    role: 'assistant',
-                    content: message.content.trim(),
-                }])
-            }
+    setMessages(prev => [...prev, {
+        id: `a-${Date.now()}-${i}`,
+        role: 'assistant',
+        content: message.content.trim(),
+    }])
+}
 
-            if (!message?.tool_calls?.length || choice?.finish_reason === 'stop') {
-                agentHistoryRef.current = currentHistory
-                break
-            }
+if (!message?.tool_calls?.length || choice?.finish_reason === 'stop') {
+    
+    agentHistoryRef.current = [
+        ...currentHistory,
+        { role: 'assistant', content: message.content || '' }
+    ]
+    break
+}
 
             currentHistory = [
                 ...currentHistory,
@@ -864,9 +898,9 @@ YOUR BEHAVIOUR:
                 preview:   realMessages[0]?.content?.slice(0, 60) || 'Schedule session',
                 messages,
             }
-            const updated = [session, ...loadStoredSessions()]
-            saveStoredSessions(updated)
-            setSessions(updated)
+           const updated = [session, ...loadStoredSessions(user.id)]
+saveStoredSessions(updated, user.id)
+setSessions(updated)
         }
 
         // ── FIX: Clear the ref so the unmount effect doesn't double-save ──
@@ -907,7 +941,7 @@ YOUR BEHAVIOUR:
     )
 
     return (
-        <div className="fixed bottom-24 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl border-2 border-violet-200 shadow-2xl flex flex-col overflow-hidden" style={{ height: '520px' }}>
+       <div className="fixed bottom-20 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl border-2 border-violet-200 shadow-2xl flex flex-col overflow-hidden" style={{ height: '480px', maxHeight: 'calc(100vh - 100px)' }}>
 
             {/* ── Header ── */}
             <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
@@ -926,8 +960,12 @@ YOUR BEHAVIOUR:
                 <div className="flex items-center gap-1">
                     {/* History toggle */}
                     <button
-                        onClick={() => setView(v => v === 'history' ? 'chat' : 'history')}
-                        title="Chat History"
+    onClick={() => {
+        const next = view === 'history' ? 'chat' : 'history'
+        if (next === 'history') setSessions(loadStoredSessions(user.id))
+        setView(next)
+    }}
+    title="Chat History"
                         className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
                             view === 'history' ? 'bg-white/30' : 'bg-white/10 hover:bg-white/20'
                         }`}
@@ -2038,15 +2076,16 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
 
             {/* ── MiniChatBuddy ── */}
             {showMiniChat && (
-                <MiniChatBuddy
-                    user={user}
-                    tasks={tasks}
-                    upcomingExams={upcomingExams}
-                    activeDay={activeDay}
-                    onClose={() => setShowMiniChat(false)}
-                    onTaskChanged={() => setRecsTrigger(t => t + 1)}
-                />
-            )}
+    <MiniChatBuddy
+        user={user}
+        tasks={tasks}
+        setTasks={setTasks}
+        upcomingExams={upcomingExams}
+        activeDay={activeDay}
+        onClose={() => setShowMiniChat(false)}
+        onTaskChanged={() => setRecsTrigger(t => t + 1)}
+    />
+)}
         </div>
     )
 }

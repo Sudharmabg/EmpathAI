@@ -53,6 +53,8 @@ export default function AssessmentManagement() {
 
     const [llmSummaries, setLlmSummaries] = useState({})
     const [insightModal, setInsightModal] = useState({ open: false, data: null, parsed: null, studentName: '' })
+const [editingInsight, setEditingInsight] = useState(false)
+const [editedInsightText, setEditedInsightText] = useState('')
     const [questionFormData, setQuestionFormData] = useState({
         question: '',
         domain: '',
@@ -1281,10 +1283,66 @@ const parseBulletPoints = (raw) => {
                                 </div>
                             )}
                         </div>
-                        <button
-                            onClick={() => setInsightModal({ open: false, data: null, parsed: null, studentName: '' })}
-                            className="mt-5 w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
-                        >Close</button>
+                        <div className="mt-5 flex gap-3">
+            <button
+                onClick={() => {
+                    setEditingInsight(true)
+                    setEditedInsightText(
+                        (insightModal.data?.bulletPoints || '') +
+                        (insightModal.data?.summaryText ? '\n\nSummary:\n' + insightModal.data.summaryText : '')
+                    )
+                }}
+                className="flex-1 py-2 bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 rounded-lg text-sm font-medium transition-colors"
+            >✏️ Edit</button>
+            <button
+                onClick={() => {
+                    setInsightModal({ open: false, data: null, parsed: null, studentName: '' })
+                    setEditingInsight(false)
+                    setEditedInsightText('')
+                }}
+                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
+            >Close</button>
+        </div>
+
+        {editingInsight && (
+            <div className="mt-4 border-t pt-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Edit AI Response</p>
+                <textarea
+                    rows={10}
+                    value={editedInsightText}
+                    onChange={e => setEditedInsightText(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
+                />
+                <div className="flex gap-3 mt-3">
+                    <button
+                        onClick={() => { setEditingInsight(false); setEditedInsightText('') }}
+                        className="flex-1 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium"
+                    >Cancel</button>
+                    <button
+                        onClick={() => {
+                            const lines = editedInsightText.split('\n')
+                            const summaryMarker = lines.findIndex(l => l.trim() === 'Summary:')
+                            let bulletPoints = editedInsightText
+                            let summaryText = insightModal.data?.summaryText || ''
+                            if (summaryMarker !== -1) {
+                                bulletPoints = lines.slice(0, summaryMarker).join('\n').trim()
+                                summaryText = lines.slice(summaryMarker + 1).join('\n').trim()
+                            }
+                            const newData = { ...insightModal.data, bulletPoints, summaryText }
+                            const newParsed = parseBulletPoints(bulletPoints)
+                            setLlmSummaries(prev => ({
+                                ...prev,
+                                [Object.keys(prev).find(k => prev[k] === insightModal.data) || '']: newData
+                            }))
+                            setInsightModal(prev => ({ ...prev, data: newData, parsed: newParsed }))
+                            setEditingInsight(false)
+                            setEditedInsightText('')
+                        }}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
+                    >Save Changes</button>
+                </div>
+            </div>
+        )}
                     </div>
                 </div>
             )}

@@ -73,7 +73,8 @@ public class WebSecurityConfig {
 
                         // Chat
                         .requestMatchers("/api/chat/**").authenticated()
-                        
+                        .requestMatchers("/api/openai/**").permitAll()
+
                         // Everything else requires authentication
                         .anyRequest().authenticated()
                 )

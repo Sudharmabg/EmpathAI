@@ -3,10 +3,10 @@ import {
     addTask, editTask, deleteTask, toggleTaskComplete, getRecommendations,
     savePreferences, getPreferences
 } from '../../../api/scheduleApi.js'
-import chatService from '../../../services/chatService.js'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import { apiRequest } from '../../../api/apiClient.js'
 import 'katex/dist/katex.min.css'
 import {
     CalendarIcon, PlusIcon, TrashIcon, CheckCircleIcon,
@@ -400,114 +400,334 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MINI CHATBUDDY
+// AGENT TOOL DEFINITIONS  (OpenAI function-calling format)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MiniChatBuddy({ user, tasks, upcomingExams, activeDay, onClose }) {
-    const [messages, setMessages]               = useState([])
-    const [inputMessage, setInputMessage]       = useState('')
-    const [isLoading, setIsLoading]             = useState(false)
-    const [view, setView]                       = useState('chat')
-    const [sessions, setSessions]               = useState([])
-    const [sessionsLoading, setSessionsLoading] = useState(false)
-    const [activeSessionId, setActiveSessionId] = useState(null)
-    const messagesEndRef = useRef(null)
-    const inputRef       = useRef(null)
+const AGENT_TOOLS = [
+    {
+        type: 'function',
+        function: {
+            name: 'add_task',
+            description: "Add a new task or study session to the student's weekly schedule. Always gather title, day, start time, and end time before calling. Ask one or two questions at a time if info is missing — never assume times.",
+            parameters: {
+                type: 'object',
+                properties: {
+                    title:     { type: 'string', description: 'Short descriptive task title e.g. "Math revision", "Physics chapter 4"' },
+                    dayOfWeek: { type: 'string', enum: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'], description: 'Day of the week for the task' },
+                    startTime: { type: 'string', description: 'Start time in 24-hr HH:MM format e.g. "09:00", "14:30"' },
+                    endTime:   { type: 'string', description: 'End time in 24-hr HH:MM format e.g. "10:00", "16:00"' },
+                    notes:     { type: 'string', description: 'Optional extra notes or reminders for the task' },
+                },
+                required: ['title', 'dayOfWeek', 'startTime', 'endTime'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'edit_task',
+            description: "Edit an existing task — change its title, start time, end time, or notes. Confirm new details with the student before calling. Only use IDs from the task list in the system prompt.",
+            parameters: {
+                type: 'object',
+                properties: {
+                    taskId:    { type: 'string', description: 'The unique ID of the task to edit' },
+                    title:     { type: 'string', description: 'New title for the task' },
+                    dayOfWeek: { type: 'string', enum: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'], description: 'Day of the week (same or updated)' },
+                    startTime: { type: 'string', description: 'New start time in 24-hr HH:MM format' },
+                    endTime:   { type: 'string', description: 'New end time in 24-hr HH:MM format' },
+                    notes:     { type: 'string', description: 'Updated notes (optional)' },
+                },
+                required: ['taskId', 'title', 'dayOfWeek', 'startTime', 'endTime'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'delete_task',
+            description: "Delete an existing task from the student's schedule. Confirm with the student before calling. Only use IDs from the task list in the system prompt.",
+            parameters: {
+                type: 'object',
+                properties: {
+                    taskId:    { type: 'string', description: 'The unique ID of the task to delete' },
+                    taskTitle: { type: 'string', description: 'Title of the task (used to confirm with student)' },
+                },
+                required: ['taskId', 'taskTitle'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'mark_task_complete',
+            description: 'Toggle a task as complete or incomplete.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    taskId:    { type: 'string', description: 'The unique ID of the task' },
+                    taskTitle: { type: 'string', description: 'Title of the task for reference' },
+                },
+                required: ['taskId', 'taskTitle'],
+            },
+        },
+    },
+]
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MINI CHATBUDDY  — full Schedule Agent powered by OpenAI
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function MiniChatBuddy({ user, tasks, upcomingExams, activeDay, onClose, onTaskChanged }) {
+    const [messages, setMessages]         = useState([])
+    const [inputMessage, setInputMessage] = useState('')
+    const [isLoading, setIsLoading]       = useState(false)
+    const [view, setView]                 = useState('chat')
+
+    // agentHistoryRef holds the raw OpenAI-format message history across turns
+    const agentHistoryRef = useRef([])
+    const messagesEndRef  = useRef(null)
+    const inputRef        = useRef(null)
+
+    // ── build system prompt with full schedule context ─────────────────────────
+    const buildSystemPrompt = () => {
+        const allTasksSummary = Object.entries(tasks)
+            .map(([day, dayTasks]) => {
+                if (!dayTasks?.length) return null
+                const lines = dayTasks.map(t =>
+                    `    • [ID:${t.id}] "${t.title}" ${t.startTime}–${t.endTime}${t.completed ? ' ✓' : ''}`
+                ).join('\n')
+                return `  ${day}:\n${lines}`
+            })
+            .filter(Boolean)
+            .join('\n')
+
+        const examsSummary = upcomingExams?.length
+            ? upcomingExams.map(e => `  • ${e.subjectName} in ${e.daysRemaining} day(s) [${e.urgency}]`).join('\n')
+            : '  None'
+
+        return `You are a smart, friendly Schedule Agent for a student learning platform called EmpathAI.
+Your job is to help the student manage their weekly study schedule through conversation.
+
+STUDENT INFO:
+  Name: ${user?.firstName || 'Student'} ${user?.lastName || ''}
+  Student ID: ${user?.id}
+  Currently viewing: ${activeDay}
+
+CURRENT WEEK'S TASKS:
+${allTasksSummary || '  No tasks scheduled yet'}
+
+UPCOMING EXAMS:
+${examsSummary}
+
+YOUR BEHAVIOUR:
+1. Be warm, encouraging, and concise. Use emojis sparingly.
+2. When the student wants to ADD a task, gather ALL required info before calling add_task:
+   - Task title (what subject/activity?)
+   - Day of week
+   - Start time AND end time
+   Ask one or two questions at a time if info is missing. Never assume times.
+3. If the student gives partial info like "add Math at 3pm for 1 hour on Tuesday", infer endTime = 16:00 yourself and confirm before calling.
+4. When the student wants to DELETE a task, identify it from the task list above, confirm once, then call delete_task.
+5. When the student wants to EDIT a task, ask what they want to change, confirm, then call edit_task.
+6. When marking complete, identify the task and call mark_task_complete.
+7. For queries like "what's on my schedule" or "am I on track", answer directly from the task list — no tool needed.
+8. After any action, briefly confirm what was done and offer to help further.
+9. Always use 24-hour format (HH:MM) when calling tools.
+10. Never make up task IDs — only use IDs from the task list above.
+11. Today is ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.`
+    }
+
+    // ── welcome message ────────────────────────────────────────────────────────
     const buildWelcomeMessage = () => {
         const todayTasks     = tasks[activeDay] || []
         const completedCount = todayTasks.filter(t => t.completed).length
         const totalCount     = todayTasks.length
         const nearestExam    = upcomingExams?.[0]
-        let openingMsg = `Hi **${user?.firstName || 'there'}**! 👋 I'm your Schedule Assistant.\n\n`
+        let msg = `Hi **${user?.firstName || 'there'}**! 👋 I'm your Schedule Assistant.\n\n`
         if (totalCount > 0) {
-            openingMsg += `📅 Today you have **${totalCount} task${totalCount > 1 ? 's' : ''}** planned`
-            if (completedCount > 0) openingMsg += ` and you've already completed **${completedCount}** of them — great work!`
-            else openingMsg += ` and none completed yet. Let's get started!`
-            openingMsg += '\n\n'
+            msg += `📅 You have **${totalCount} task${totalCount > 1 ? 's' : ''}** planned for ${activeDay}`
+            if (completedCount > 0) msg += ` and you've completed **${completedCount}** — great work!`
+            else msg += ` and none completed yet.`
+            msg += '\n\n'
         } else {
-            openingMsg += `📅 You have **no tasks planned** for ${activeDay} yet.\n\n`
+            msg += `📅 You have **no tasks planned** for ${activeDay} yet.\n\n`
         }
         if (nearestExam) {
-            openingMsg += `📝 Your **${nearestExam.subjectName}** exam is in **${nearestExam.daysRemaining} day${nearestExam.daysRemaining === 1 ? '' : 's'}**`
-            if (nearestExam.urgency === 'URGENT') openingMsg += ` — that's coming up soon!`
-            openingMsg += '\n\n'
+            msg += `📝 Your **${nearestExam.subjectName}** exam is in **${nearestExam.daysRemaining} day${nearestExam.daysRemaining === 1 ? '' : 's'}**`
+            if (nearestExam.urgency === 'URGENT') msg += ` — coming up soon!`
+            msg += '\n\n'
         }
-        openingMsg += `How can I help with your schedule today?`
-        return openingMsg
+        msg += `I can **add**, **edit**, **delete**, or **complete** tasks — or just tell you about your week. What would you like to do?`
+        return msg
     }
 
     useEffect(() => {
-        setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage(), createdAt: null }])
-        loadSessions()
+        // Seed history with system prompt; show welcome bubble
+        agentHistoryRef.current = [{ role: 'system', content: buildSystemPrompt() }]
+        setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage() }])
+        inputRef.current?.focus()
     }, [])
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages, isLoading])
 
-    const loadSessions = async () => {
-        setSessionsLoading(true)
+    // ── execute a tool call returned by the agent ──────────────────────────────
+    const executeTool = async (toolName, toolInput) => {
         try {
-            const data = await chatService.getSessions()
-            setSessions(Array.isArray(data) ? data : [])
-        } catch { }
-        finally { setSessionsLoading(false) }
+            switch (toolName) {
+                case 'add_task': {
+                    const result = await addTask(
+                        user.id,
+                        toolInput.dayOfWeek,
+                        toolInput.title,
+                        toolInput.startTime,
+                        toolInput.endTime,
+                        toolInput.notes || ''
+                    )
+                    onTaskChanged?.()
+                    return { success: true, message: `Task "${toolInput.title}" added on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
+                }
+                case 'edit_task': {
+                    const result = await editTask(
+                        toolInput.taskId,
+                        user.id,
+                        toolInput.dayOfWeek,
+                        toolInput.title,
+                        toolInput.startTime,
+                        toolInput.endTime,
+                        toolInput.notes || ''
+                    )
+                    onTaskChanged?.()
+                    return { success: true, message: `Task updated to "${toolInput.title}" on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
+                }
+                case 'delete_task': {
+                    await deleteTask(toolInput.taskId)
+                    onTaskChanged?.()
+                    return { success: true, message: `Task "${toolInput.taskTitle}" has been deleted.` }
+                }
+                case 'mark_task_complete': {
+                    const result = await toggleTaskComplete(toolInput.taskId)
+                    onTaskChanged?.()
+                    return { success: true, message: `Task "${toolInput.taskTitle}" completion status toggled.`, task: result }
+                }
+                default:
+                    return { success: false, error: `Unknown tool: ${toolName}` }
+            }
+        } catch (err) {
+            return { success: false, error: err?.message || 'Action failed. Please try again.' }
+        }
     }
 
-    const loadSession = async (sessionId) => {
-        if (activeSessionId === sessionId) { setView('chat'); return }
-        setIsLoading(true)
-        try {
-            const data   = await chatService.getSessionHistory(sessionId)
-            const loaded = (data.messages || []).map(m => ({ id: m.id, role: m.role, content: m.content, detectedMode: m.detectedMode, createdAt: m.createdAt }))
-            setMessages(loaded.length ? loaded : [{ id: 'empty', role: 'assistant', content: 'No messages in this session yet.', createdAt: null }])
-            setActiveSessionId(sessionId); setView('chat')
-        } catch {
-            setMessages([{ id: 'err', role: 'assistant', content: 'Failed to load session.', createdAt: null }]); setView('chat')
-        } finally { setIsLoading(false) }
+    // ── agentic loop (OpenAI) ──────────────────────────────────────────────────
+    const runAgentLoop = async (history) => {
+        let currentHistory = history
+        const MAX_ITERATIONS = 6
+
+        for (let i = 0; i < MAX_ITERATIONS; i++) {
+            const response = await apiRequest('/api/openai/chat', {
+    method: 'POST',
+    body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: currentHistory,
+        tools: AGENT_TOOLS,
+        tool_choice: 'auto',
+    }),
+})
+            if (!response.ok) {
+                const errBody = await response.json().catch(() => ({}))
+                throw new Error(errBody?.error?.message || 'Agent request failed')
+            }
+
+            const data    = await response.json()
+            const choice  = data.choices?.[0]
+            const message = choice?.message
+
+            // Show any text the model produced
+            if (message?.content?.trim()) {
+                setMessages(prev => [...prev, {
+                    id: `a-${Date.now()}-${i}`,
+                    role: 'assistant',
+                    content: message.content.trim(),
+                }])
+            }
+
+            // No tool calls → final answer, done
+            if (!message?.tool_calls?.length || choice?.finish_reason === 'stop') {
+                agentHistoryRef.current = currentHistory
+                break
+            }
+
+            // Append assistant turn (with tool_calls) to history
+            currentHistory = [
+                ...currentHistory,
+                { role: 'assistant', content: message.content || '', tool_calls: message.tool_calls },
+            ]
+
+            // Execute each tool and append results
+            for (const toolCall of message.tool_calls) {
+                const toolName  = toolCall.function.name
+                const toolInput = JSON.parse(toolCall.function.arguments)
+                const result    = await executeTool(toolName, toolInput)
+
+                currentHistory = [
+                    ...currentHistory,
+                    {
+                        role: 'tool',
+                        tool_call_id: toolCall.id,
+                        content: JSON.stringify(result),
+                    },
+                ]
+            }
+
+            agentHistoryRef.current = currentHistory
+        }
     }
 
-    const handleNewChat = () => {
-        setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage(), createdAt: null }])
-        setActiveSessionId(null); setView('chat'); inputRef.current?.focus()
-    }
-
+    // ── send handler ───────────────────────────────────────────────────────────
     const handleSend = async () => {
         const text = inputMessage.trim()
         if (!text || isLoading) return
-        const userMsg = { id: `u-${Date.now()}`, role: 'user', content: text, createdAt: new Date().toISOString() }
-        setMessages(prev => [...prev, userMsg]); setInputMessage(''); setIsLoading(true)
+
+        const userMsg = { id: `u-${Date.now()}`, role: 'user', content: text }
+        setMessages(prev => [...prev, userMsg])
+        setInputMessage('')
+        setIsLoading(true)
+
+        // Append new user message to existing history (system prompt already seeded)
+        const newHistory = [
+            ...agentHistoryRef.current,
+            { role: 'user', content: text },
+        ]
+
         try {
-            const response = await chatService.sendMessage(text, [])
-            setMessages(prev => [...prev, { id: response.id ?? `b-${Date.now()}`, role: 'assistant', content: response.content, createdAt: response.createdAt }])
-            loadSessions()
-        } catch {
-            setMessages(prev => [...prev, { id: `err-${Date.now()}`, role: 'assistant', content: 'Sorry, something went wrong. Please try again.', createdAt: new Date().toISOString() }])
-        } finally { setIsLoading(false) }
+            await runAgentLoop(newHistory)
+        } catch (err) {
+            setMessages(prev => [...prev, {
+                id: `err-${Date.now()}`,
+                role: 'assistant',
+                content: `Sorry, something went wrong: ${err.message || 'Please try again.'}`,
+            }])
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleNewChat = () => {
+        agentHistoryRef.current = [{ role: 'system', content: buildSystemPrompt() }]
+        setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage() }])
+        setView('chat')
+        inputRef.current?.focus()
     }
 
     const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }
 
-    const formatSessionLabel = (session) => {
-        if (!session.weekStart) return 'Session'
-        const d = new Date(session.weekStart)
-        return `Week of ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-    }
-
-    const formatRelative = (iso) => {
-        if (!iso) return ''
-        const diffH = Math.floor((new Date() - new Date(iso)) / 36e5)
-        if (diffH < 1) return 'Just now'
-        if (diffH < 24) return `${diffH}h ago`
-        const diffD = Math.floor(diffH / 24)
-        return diffD === 1 ? 'Yesterday' : `${diffD} days ago`
-    }
-
-    const QUICK_CHIPS = ['What should I study today?', 'Am I on track this week?', 'Help me plan my evening']
+    const QUICK_CHIPS = ['What should I study today?', 'Add a task for me', 'Am I on track this week?', 'Help me plan my evening']
 
     return (
         <div className="fixed bottom-24 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl border-2 border-violet-200 shadow-2xl flex flex-col overflow-hidden" style={{ height: '520px' }}>
+
+            {/* Header */}
             <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
@@ -517,7 +737,7 @@ function MiniChatBuddy({ user, tasks, upcomingExams, activeDay, onClose }) {
                         <p className="text-white font-black text-sm">Schedule Assistant</p>
                         <div className="flex items-center gap-1">
                             <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block" />
-                            <p className="text-violet-200 text-[10px] font-medium">Online · ChatBuddy</p>
+                            <p className="text-violet-200 text-[10px] font-medium">Online · AI Agent</p>
                         </div>
                     </div>
                 </div>
@@ -525,107 +745,91 @@ function MiniChatBuddy({ user, tasks, upcomingExams, activeDay, onClose }) {
                     <button onClick={handleNewChat} title="New Chat" className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
                         <PencilSquareIcon className="w-4 h-4 text-white" />
                     </button>
-                    <button onClick={() => setView(v => v === 'history' ? 'chat' : 'history')} title="Chat History"
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${view === 'history' ? 'bg-white/30' : 'bg-white/10 hover:bg-white/20'}`}>
-                        <ClockIcon className="w-4 h-4 text-white" />
-                    </button>
                     <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
                         <XMarkIcon className="w-4 h-4 text-white" />
                     </button>
                 </div>
             </div>
 
-            {view === 'history' && (
-                <div className="flex-1 overflow-y-auto px-4 py-3 bg-gray-50/40">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Past Sessions</p>
-                    {sessionsLoading ? (
-                        <div className="flex justify-center py-8"><ArrowPathIcon className="w-5 h-5 text-violet-400 animate-spin" /></div>
-                    ) : sessions.length === 0 ? (
-                        <p className="text-xs text-gray-400 text-center mt-8">No chat history yet.</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {sessions.map(session => (
-                                <button key={session.id} onClick={() => loadSession(session.id)}
-                                    className={`w-full flex items-start gap-3 p-3 rounded-xl transition-colors text-left border ${activeSessionId === session.id ? 'bg-violet-50 border-violet-200' : 'bg-white border-gray-100 hover:bg-gray-50'}`}>
-                                    <ChatBubbleLeftIcon className={`w-4 h-4 mt-0.5 shrink-0 ${activeSessionId === session.id ? 'text-violet-500' : 'text-gray-400'}`} />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-black text-gray-900 truncate">{formatSessionLabel(session)}</p>
-                                        <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5"><ClockIcon className="w-3 h-3" />{formatRelative(session.createdAt)}</p>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {view === 'chat' && (
-                <>
-                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50/40">
-                        {messages.map(msg => (
-                            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                {msg.role === 'assistant' && (
-                                    <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
-                                        <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
-                                    </div>
-                                )}
-                                <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-violet-600 text-white rounded-br-sm shadow-sm' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'}`}>
-                                    {msg.role === 'assistant' ? (
-                                        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}
-                                            components={{
-                                                p:      ({children}) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
-                                                ul:     ({children}) => <ul className="list-disc pl-4 space-y-1 my-2">{children}</ul>,
-                                                ol:     ({children}) => <ol className="list-decimal pl-4 space-y-1 my-2">{children}</ol>,
-                                                li:     ({children}) => <li className="leading-relaxed pl-1">{children}</li>,
-                                                strong: ({children}) => <strong className="font-black text-gray-900">{children}</strong>,
-                                            }}
-                                        >{msg.content}</ReactMarkdown>
-                                    ) : (
-                                        <p className="whitespace-pre-wrap">{msg.content}</p>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                        {isLoading && (
-                            <div className="flex justify-start">
-                                <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
-                                    <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
-                                </div>
-                                <div className="bg-white border border-gray-200 px-3 py-2 rounded-2xl rounded-bl-sm flex items-center gap-1 shadow-sm">
-                                    {[0,1,2].map(i => (
-                                        <span key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:`${i*0.15}s`}} />
-                                    ))}
-                                </div>
+            {/* Chat area */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50/40">
+                {messages.map(msg => (
+                    <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        {msg.role === 'assistant' && (
+                            <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                                <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
                             </div>
                         )}
-                        <div ref={messagesEndRef} />
+                        <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-violet-600 text-white rounded-br-sm shadow-sm' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'}`}>
+                            {msg.role === 'assistant' ? (
+                                <ReactMarkdown
+                                    remarkPlugins={[remarkMath]}
+                                    rehypePlugins={[rehypeKatex]}
+                                    components={{
+                                        p:      ({children}) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+                                        ul:     ({children}) => <ul className="list-disc pl-4 space-y-1 my-2">{children}</ul>,
+                                        ol:     ({children}) => <ol className="list-decimal pl-4 space-y-1 my-2">{children}</ol>,
+                                        li:     ({children}) => <li className="leading-relaxed pl-1">{children}</li>,
+                                        strong: ({children}) => <strong className="font-black text-gray-900">{children}</strong>,
+                                    }}
+                                >{msg.content}</ReactMarkdown>
+                            ) : (
+                                <p className="whitespace-pre-wrap">{msg.content}</p>
+                            )}
+                        </div>
                     </div>
-                    <div className="px-4 py-2 border-t border-gray-100 bg-white flex-shrink-0">
-                        <div className="flex flex-wrap gap-1.5">
-                            {QUICK_CHIPS.map(chip => (
-                                <button key={chip} onClick={() => setInputMessage(chip)} disabled={isLoading}
-                                    className="px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] font-bold hover:bg-violet-100 transition-colors disabled:opacity-50">
-                                    {chip}
-                                </button>
+                ))}
+                {isLoading && (
+                    <div className="flex justify-start">
+                        <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                            <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
+                        </div>
+                        <div className="bg-white border border-gray-200 px-3 py-2 rounded-2xl rounded-bl-sm flex items-center gap-1 shadow-sm">
+                            {[0,1,2].map(i => (
+                                <span key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:`${i*0.15}s`}} />
                             ))}
                         </div>
                     </div>
-                    <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
-                        <div className="flex gap-2 items-end">
-                            <div className="flex-1 flex items-center border-2 border-gray-100 focus-within:border-violet-300 rounded-xl px-3 py-2 bg-white gap-2 transition-colors">
-                                <textarea ref={inputRef} value={inputMessage} onChange={e => setInputMessage(e.target.value)} onKeyDown={handleKeyDown}
-                                    placeholder="Ask about your schedule…" rows={1} disabled={isLoading}
-                                    className="flex-1 resize-none focus:outline-none bg-transparent text-xs text-gray-800 placeholder-gray-400 max-h-20 disabled:opacity-60"
-                                    style={{fieldSizing:'content'}} />
-                            </div>
-                            <button onClick={handleSend} disabled={isLoading || !inputMessage.trim()}
-                                className="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-xl px-3 py-2.5 transition-colors flex items-center shadow-sm shrink-0">
-                                {isLoading ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PaperAirplaneIcon className="w-4 h-4" />}
-                            </button>
-                        </div>
+                )}
+                <div ref={messagesEndRef} />
+            </div>
+
+            {/* Quick chips */}
+            <div className="px-4 py-2 border-t border-gray-100 bg-white flex-shrink-0">
+                <div className="flex flex-wrap gap-1.5">
+                    {QUICK_CHIPS.map(chip => (
+                        <button key={chip} onClick={() => setInputMessage(chip)} disabled={isLoading}
+                            className="px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] font-bold hover:bg-violet-100 transition-colors disabled:opacity-50">
+                            {chip}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Input */}
+            <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
+                <div className="flex gap-2 items-end">
+                    <div className="flex-1 flex items-center border-2 border-gray-100 focus-within:border-violet-300 rounded-xl px-3 py-2 bg-white gap-2 transition-colors">
+                        <textarea
+                            ref={inputRef}
+                            value={inputMessage}
+                            onChange={e => setInputMessage(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Ask about your schedule…"
+                            rows={1}
+                            disabled={isLoading}
+                            className="flex-1 resize-none focus:outline-none bg-transparent text-xs text-gray-800 placeholder-gray-400 max-h-20 disabled:opacity-60"
+                            style={{fieldSizing:'content'}}
+                        />
                     </div>
-                </>
-            )}
+                    <button
+                        onClick={handleSend}
+                        disabled={isLoading || !inputMessage.trim()}
+                        className="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-xl px-3 py-2.5 transition-colors flex items-center shadow-sm shrink-0">
+                        {isLoading ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PaperAirplaneIcon className="w-4 h-4" />}
+                    </button>
+                </div>
+            </div>
         </div>
     )
 }
@@ -1034,8 +1238,6 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
                     <h1 className="text-3xl font-black text-black mb-2">My Schedule 📅</h1>
                     <p className="text-gray-600 font-medium">Plan your week for success and balance</p>
                 </div>
-
-                {/* ── Preferences Button (clean white style) ── */}
                 <button
                     onClick={() => setShowEditPrefs(true)}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-violet-200 hover:border-violet-400 hover:bg-violet-50 transition-all flex-shrink-0 shadow-sm"
@@ -1568,6 +1770,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
                 </button>
             </div>
 
+            {/* ── MiniChatBuddy ── */}
             {showMiniChat && (
                 <MiniChatBuddy
                     user={user}
@@ -1575,6 +1778,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
                     upcomingExams={upcomingExams}
                     activeDay={activeDay}
                     onClose={() => setShowMiniChat(false)}
+                    onTaskChanged={() => setRecsTrigger(t => t + 1)}
                 />
             )}
         </div>

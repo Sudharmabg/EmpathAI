@@ -15,6 +15,7 @@ import {
     ClockIcon, AcademicCapIcon, SparklesIcon,
     XMarkIcon, ArrowPathIcon, PaperAirplaneIcon,
     PencilSquareIcon, ChatBubbleLeftIcon, Cog6ToothIcon,
+    MicrophoneIcon, CheckIcon, MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -474,19 +475,142 @@ const AGENT_TOOLS = [
 ]
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MINI CHATBUDDY  — full Schedule Agent powered by OpenAI
+// VOICE INPUT BUTTON
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function VoiceInputButton({ onTranscript, disabled }) {
+    const [isListening, setIsListening] = useState(false)
+    const [transcript, setTranscript]   = useState('')
+    const [unsupported, setUnsupported] = useState(false)
+    const recognitionRef                = useRef(null)
+
+    const startListening = () => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+        if (!SpeechRecognition) { setUnsupported(true); return }
+        const recognition = new SpeechRecognition()
+        recognition.lang = 'en-IN'
+        recognition.interimResults = true
+        recognition.continuous = false
+        recognition.onresult = (e) => {
+            const current = Array.from(e.results).map(r => r[0].transcript).join('')
+            setTranscript(current)
+        }
+        recognition.onerror = () => { setIsListening(false); setTranscript('') }
+        recognitionRef.current = recognition
+        recognition.start()
+        setIsListening(true)
+        setTranscript('')
+    }
+
+    const handleConfirm = () => {
+        if (transcript.trim()) onTranscript(transcript.trim())
+        handleCancel()
+    }
+
+    const handleCancel = () => {
+        recognitionRef.current?.stop()
+        setIsListening(false)
+        setTranscript('')
+    }
+
+    if (unsupported) return <span className="text-[10px] text-gray-400 px-1">Voice N/A</span>
+
+    if (isListening) {
+        return (
+            <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-0.5 px-1">
+                    {[0,1,2,3,4].map(i => (
+                        <span
+                            key={i}
+                            className="w-0.5 bg-violet-500 rounded-full animate-pulse"
+                            style={{ height: `${8 + (i % 3) * 4}px`, animationDelay: `${i * 0.1}s`, animationDuration: '0.6s' }}
+                        />
+                    ))}
+                </div>
+                <button
+                    onClick={handleCancel}
+                    className="w-5 h-5 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors"
+                    title="Cancel"
+                >
+                    <XMarkIcon className="w-3 h-3" />
+                </button>
+                <button
+                    onClick={handleConfirm}
+                    className="w-5 h-5 rounded-full bg-green-100 hover:bg-green-200 text-green-600 flex items-center justify-center transition-colors"
+                    title="Use this text"
+                >
+                    <CheckIcon className="w-3 h-3" />
+                </button>
+            </div>
+        )
+    }
+
+    return (
+        <button
+            onClick={startListening}
+            disabled={disabled}
+            className="text-gray-400 hover:text-violet-600 transition-colors disabled:opacity-40 flex-shrink-0"
+            title="Voice input"
+        >
+            <MicrophoneIcon className="w-4 h-4" />
+        </button>
+    )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCHEDULE SESSION HELPERS  (localStorage persistence)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SA_SESSIONS_KEY = 'scheduleAssistant_sessions'
+const MAX_SESSIONS    = 20
+
+function loadStoredSessions() {
+    try {
+        return JSON.parse(localStorage.getItem(SA_SESSIONS_KEY) || '[]')
+    } catch { return [] }
+}
+
+function saveStoredSessions(sessions) {
+    try {
+        localStorage.setItem(SA_SESSIONS_KEY, JSON.stringify(sessions.slice(0, MAX_SESSIONS)))
+    } catch { /* quota exceeded – silently skip */ }
+}
+
+function formatSessionDate(iso) {
+    if (!iso) return 'Session'
+    const d = new Date(iso)
+    const now = new Date()
+    const diffD = Math.floor((now - d) / 864e5)
+    if (diffD === 0) return 'Today'
+    if (diffD === 1) return 'Yesterday'
+    if (diffD < 7)  return `${diffD} days ago`
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MINI CHATBUDDY
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function MiniChatBuddy({ user, tasks, upcomingExams, activeDay, onClose, onTaskChanged }) {
-    const [messages, setMessages]         = useState([])
-    const [inputMessage, setInputMessage] = useState('')
-    const [isLoading, setIsLoading]       = useState(false)
-    const [view, setView]                 = useState('chat')
+    const [messages, setMessages]           = useState([])
+    const [inputMessage, setInputMessage]   = useState('')
+    const [isLoading, setIsLoading]         = useState(false)
+    const [view, setView]                   = useState('chat')       // 'chat' | 'history'
+    const [sessions, setSessions]           = useState([])
+    const [historySearch, setHistorySearch] = useState('')
 
     // agentHistoryRef holds the raw OpenAI-format message history across turns
     const agentHistoryRef = useRef([])
     const messagesEndRef  = useRef(null)
     const inputRef        = useRef(null)
+
+    // ── FIX: ref that always holds the latest messages for the unmount handler ──
+    const messagesRef = useRef([])
+
+    // Keep messagesRef in sync with state on every render
+    useEffect(() => {
+        messagesRef.current = messages
+    }, [messages])
 
     // ── build system prompt with full schedule context ─────────────────────────
     const buildSystemPrompt = () => {
@@ -565,8 +689,29 @@ YOUR BEHAVIOUR:
         // Seed history with system prompt; show welcome bubble
         agentHistoryRef.current = [{ role: 'system', content: buildSystemPrompt() }]
         setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage() }])
+        // Load stored sessions
+        setSessions(loadStoredSessions())
         inputRef.current?.focus()
     }, [])
+
+    // ── FIX: Save session to localStorage when component unmounts ─────────────
+    useEffect(() => {
+        return () => {
+            const currentMessages = messagesRef.current
+            const realMessages = currentMessages.filter(m => m.id !== 'welcome')
+            // Only save if there's actual conversation content
+            if (realMessages.length > 0) {
+                const session = {
+                    id:        Date.now(),
+                    startedAt: new Date().toISOString(),
+                    preview:   realMessages[0]?.content?.slice(0, 60) || 'Schedule session',
+                    messages:  currentMessages,
+                }
+                const updated = [session, ...loadStoredSessions()]
+                saveStoredSessions(updated)
+            }
+        }
+    }, []) // empty deps — runs cleanup only on unmount
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -626,14 +771,14 @@ YOUR BEHAVIOUR:
 
         for (let i = 0; i < MAX_ITERATIONS; i++) {
             const response = await apiRequest('/api/openai/chat', {
-    method: 'POST',
-    body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: currentHistory,
-        tools: AGENT_TOOLS,
-        tool_choice: 'auto',
-    }),
-})
+                method: 'POST',
+                body: JSON.stringify({
+                    model: 'gpt-4o',
+                    messages: currentHistory,
+                    tools: AGENT_TOOLS,
+                    tool_choice: 'auto',
+                }),
+            })
             if (!response.ok) {
                 const errBody = await response.json().catch(() => ({}))
                 throw new Error(errBody?.error?.message || 'Agent request failed')
@@ -643,7 +788,6 @@ YOUR BEHAVIOUR:
             const choice  = data.choices?.[0]
             const message = choice?.message
 
-            // Show any text the model produced
             if (message?.content?.trim()) {
                 setMessages(prev => [...prev, {
                     id: `a-${Date.now()}-${i}`,
@@ -652,19 +796,16 @@ YOUR BEHAVIOUR:
                 }])
             }
 
-            // No tool calls → final answer, done
             if (!message?.tool_calls?.length || choice?.finish_reason === 'stop') {
                 agentHistoryRef.current = currentHistory
                 break
             }
 
-            // Append assistant turn (with tool_calls) to history
             currentHistory = [
                 ...currentHistory,
                 { role: 'assistant', content: message.content || '', tool_calls: message.tool_calls },
             ]
 
-            // Execute each tool and append results
             for (const toolCall of message.tool_calls) {
                 const toolName  = toolCall.function.name
                 const toolInput = JSON.parse(toolCall.function.arguments)
@@ -694,7 +835,6 @@ YOUR BEHAVIOUR:
         setInputMessage('')
         setIsLoading(true)
 
-        // Append new user message to existing history (system prompt already seeded)
         const newHistory = [
             ...agentHistoryRef.current,
             { role: 'user', content: text },
@@ -713,10 +853,46 @@ YOUR BEHAVIOUR:
         }
     }
 
+    // ── save current session to localStorage, then start fresh ────────────────
     const handleNewChat = () => {
+        // Only save if there's real conversation (more than just the welcome msg)
+        const realMessages = messages.filter(m => m.id !== 'welcome')
+        if (realMessages.length > 0) {
+            const session = {
+                id:        Date.now(),
+                startedAt: new Date().toISOString(),
+                preview:   realMessages[0]?.content?.slice(0, 60) || 'Schedule session',
+                messages,
+            }
+            const updated = [session, ...loadStoredSessions()]
+            saveStoredSessions(updated)
+            setSessions(updated)
+        }
+
+        // ── FIX: Clear the ref so the unmount effect doesn't double-save ──
+        messagesRef.current = []
+
         agentHistoryRef.current = [{ role: 'system', content: buildSystemPrompt() }]
         setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage() }])
         setView('chat')
+        inputRef.current?.focus()
+    }
+
+    // ── restore a past session ─────────────────────────────────────────────────
+    const handleLoadSession = (session) => {
+        setMessages(session.messages || [])
+        // Rebuild agent history from restored messages (system prompt + restored exchanges)
+        agentHistoryRef.current = [
+            { role: 'system', content: buildSystemPrompt() },
+            ...session.messages
+                .filter(m => m.id !== 'welcome')
+                .map(m => ({ role: m.role, content: m.content })),
+        ]
+        setView('chat')
+    }
+
+    const handleVoiceTranscript = (text) => {
+        setInputMessage(prev => prev ? `${prev} ${text}` : text)
         inputRef.current?.focus()
     }
 
@@ -724,10 +900,16 @@ YOUR BEHAVIOUR:
 
     const QUICK_CHIPS = ['What should I study today?', 'Add a task for me', 'Am I on track this week?', 'Help me plan my evening']
 
+    const filteredSessions = sessions.filter(s =>
+        !historySearch ||
+        (s.preview || '').toLowerCase().includes(historySearch.toLowerCase()) ||
+        formatSessionDate(s.startedAt).toLowerCase().includes(historySearch.toLowerCase())
+    )
+
     return (
         <div className="fixed bottom-24 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl border-2 border-violet-200 shadow-2xl flex flex-col overflow-hidden" style={{ height: '520px' }}>
 
-            {/* Header */}
+            {/* ── Header ── */}
             <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
@@ -742,6 +924,16 @@ YOUR BEHAVIOUR:
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
+                    {/* History toggle */}
+                    <button
+                        onClick={() => setView(v => v === 'history' ? 'chat' : 'history')}
+                        title="Chat History"
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                            view === 'history' ? 'bg-white/30' : 'bg-white/10 hover:bg-white/20'
+                        }`}
+                    >
+                        <ChatBubbleLeftIcon className="w-4 h-4 text-white" />
+                    </button>
                     <button onClick={handleNewChat} title="New Chat" className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
                         <PencilSquareIcon className="w-4 h-4 text-white" />
                     </button>
@@ -751,85 +943,159 @@ YOUR BEHAVIOUR:
                 </div>
             </div>
 
-            {/* Chat area */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50/40">
-                {messages.map(msg => (
-                    <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        {msg.role === 'assistant' && (
-                            <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
-                                <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
-                            </div>
-                        )}
-                        <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-violet-600 text-white rounded-br-sm shadow-sm' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'}`}>
-                            {msg.role === 'assistant' ? (
-                                <ReactMarkdown
-                                    remarkPlugins={[remarkMath]}
-                                    rehypePlugins={[rehypeKatex]}
-                                    components={{
-                                        p:      ({children}) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
-                                        ul:     ({children}) => <ul className="list-disc pl-4 space-y-1 my-2">{children}</ul>,
-                                        ol:     ({children}) => <ol className="list-decimal pl-4 space-y-1 my-2">{children}</ol>,
-                                        li:     ({children}) => <li className="leading-relaxed pl-1">{children}</li>,
-                                        strong: ({children}) => <strong className="font-black text-gray-900">{children}</strong>,
-                                    }}
-                                >{msg.content}</ReactMarkdown>
-                            ) : (
-                                <p className="whitespace-pre-wrap">{msg.content}</p>
-                            )}
+            {/* ── HISTORY VIEW ── */}
+            {view === 'history' && (
+                <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                    {/* Search */}
+                    <div className="px-4 pt-3 pb-2 border-b border-gray-100 flex-shrink-0">
+                        <div className="relative">
+                            <MagnifyingGlassIcon className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search sessions…"
+                                value={historySearch}
+                                onChange={e => setHistorySearch(e.target.value)}
+                                className="w-full pl-8 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-violet-400 font-medium"
+                            />
                         </div>
                     </div>
-                ))}
-                {isLoading && (
-                    <div className="flex justify-start">
-                        <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
-                            <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
-                        </div>
-                        <div className="bg-white border border-gray-200 px-3 py-2 rounded-2xl rounded-bl-sm flex items-center gap-1 shadow-sm">
-                            {[0,1,2].map(i => (
-                                <span key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:`${i*0.15}s`}} />
+
+                    {/* Session list */}
+                    <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+                        {filteredSessions.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-40 text-center">
+                                <ChatBubbleLeftIcon className="w-8 h-8 text-gray-200 mb-2" />
+                                <p className="text-xs text-gray-400 font-medium">
+                                    {sessions.length === 0
+                                        ? 'No history yet — start chatting!'
+                                        : 'No sessions match your search.'}
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-2 pb-1">Past Sessions</p>
+                                {filteredSessions.map(session => (
+                                    <button
+                                        key={session.id}
+                                        onClick={() => handleLoadSession(session)}
+                                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-violet-50 border border-transparent hover:border-violet-100 transition-colors text-left group"
+                                    >
+                                        <ChatBubbleLeftIcon className="w-4 h-4 mt-0.5 text-gray-300 group-hover:text-violet-500 flex-shrink-0 transition-colors" />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-bold text-gray-800 truncate">
+                                                {session.preview || 'Schedule session'}
+                                            </p>
+                                            <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
+                                                <ClockIcon className="w-3 h-3" />
+                                                {formatSessionDate(session.startedAt)}
+                                            </p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </>
+                        )}
+                    </div>
+
+                    {/* Footer: back to chat */}
+                    <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0">
+                        <button
+                            onClick={() => setView('chat')}
+                            className="w-full py-2 rounded-xl text-xs font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 transition-colors"
+                        >
+                            ← Back to Chat
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── CHAT VIEW ── */}
+            {view === 'chat' && (
+                <>
+                    {/* Chat area */}
+                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50/40">
+                        {messages.map(msg => (
+                            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                {msg.role === 'assistant' && (
+                                    <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                                        <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
+                                    </div>
+                                )}
+                                <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-violet-600 text-white rounded-br-sm shadow-sm' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'}`}>
+                                    {msg.role === 'assistant' ? (
+                                        <ReactMarkdown
+                                            remarkPlugins={[remarkMath]}
+                                            rehypePlugins={[rehypeKatex]}
+                                            components={{
+                                                p:      ({children}) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+                                                ul:     ({children}) => <ul className="list-disc pl-4 space-y-1 my-2">{children}</ul>,
+                                                ol:     ({children}) => <ol className="list-decimal pl-4 space-y-1 my-2">{children}</ol>,
+                                                li:     ({children}) => <li className="leading-relaxed pl-1">{children}</li>,
+                                                strong: ({children}) => <strong className="font-black text-gray-900">{children}</strong>,
+                                            }}
+                                        >{msg.content}</ReactMarkdown>
+                                    ) : (
+                                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {isLoading && (
+                            <div className="flex justify-start">
+                                <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                                    <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
+                                </div>
+                                <div className="bg-white border border-gray-200 px-3 py-2 rounded-2xl rounded-bl-sm flex items-center gap-1 shadow-sm">
+                                    {[0,1,2].map(i => (
+                                        <span key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:`${i*0.15}s`}} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
+
+                    {/* Quick chips */}
+                    <div className="px-4 py-2 border-t border-gray-100 bg-white flex-shrink-0">
+                        <div className="flex flex-wrap gap-1.5">
+                            {QUICK_CHIPS.map(chip => (
+                                <button key={chip} onClick={() => setInputMessage(chip)} disabled={isLoading}
+                                    className="px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] font-bold hover:bg-violet-100 transition-colors disabled:opacity-50">
+                                    {chip}
+                                </button>
                             ))}
                         </div>
                     </div>
-                )}
-                <div ref={messagesEndRef} />
-            </div>
 
-            {/* Quick chips */}
-            <div className="px-4 py-2 border-t border-gray-100 bg-white flex-shrink-0">
-                <div className="flex flex-wrap gap-1.5">
-                    {QUICK_CHIPS.map(chip => (
-                        <button key={chip} onClick={() => setInputMessage(chip)} disabled={isLoading}
-                            className="px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] font-bold hover:bg-violet-100 transition-colors disabled:opacity-50">
-                            {chip}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Input */}
-            <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
-                <div className="flex gap-2 items-end">
-                    <div className="flex-1 flex items-center border-2 border-gray-100 focus-within:border-violet-300 rounded-xl px-3 py-2 bg-white gap-2 transition-colors">
-                        <textarea
-                            ref={inputRef}
-                            value={inputMessage}
-                            onChange={e => setInputMessage(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            placeholder="Ask about your schedule…"
-                            rows={1}
-                            disabled={isLoading}
-                            className="flex-1 resize-none focus:outline-none bg-transparent text-xs text-gray-800 placeholder-gray-400 max-h-20 disabled:opacity-60"
-                            style={{fieldSizing:'content'}}
-                        />
+                    {/* Input */}
+                    <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
+                        <div className="flex gap-2 items-end">
+                            <div className="flex-1 flex items-center border-2 border-gray-100 focus-within:border-violet-300 rounded-xl px-3 py-2 bg-white gap-2 transition-colors">
+                                <textarea
+                                    ref={inputRef}
+                                    value={inputMessage}
+                                    onChange={e => setInputMessage(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Ask about your schedule…"
+                                    rows={1}
+                                    disabled={isLoading}
+                                    className="flex-1 resize-none focus:outline-none bg-transparent text-xs text-gray-800 placeholder-gray-400 max-h-20 disabled:opacity-60"
+                                    style={{fieldSizing:'content'}}
+                                />
+                                <VoiceInputButton
+                                    onTranscript={handleVoiceTranscript}
+                                    disabled={isLoading}
+                                />
+                            </div>
+                            <button
+                                onClick={handleSend}
+                                disabled={isLoading || !inputMessage.trim()}
+                                className="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-xl px-3 py-2.5 transition-colors flex items-center shadow-sm shrink-0">
+                                {isLoading ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PaperAirplaneIcon className="w-4 h-4" />}
+                            </button>
+                        </div>
                     </div>
-                    <button
-                        onClick={handleSend}
-                        disabled={isLoading || !inputMessage.trim()}
-                        className="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-xl px-3 py-2.5 transition-colors flex items-center shadow-sm shrink-0">
-                        {isLoading ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PaperAirplaneIcon className="w-4 h-4" />}
-                    </button>
-                </div>
-            </div>
+                </>
+            )}
         </div>
     )
 }

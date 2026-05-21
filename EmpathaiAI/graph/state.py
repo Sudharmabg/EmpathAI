@@ -1,12 +1,13 @@
 from typing import TypedDict, List, Optional, Dict, Any
+from langgraph.graph import MessagesState
 
 
 class ChatState(TypedDict):
     # ── Input from Spring Boot ────────────────────────────────────────────────
+    student_id: str                          # ✅ NEW — used as thread_id
     student_name: str
     grade: str
     message: str
-    history: List[Dict[str, str]]
     images: List[str]
     image_base64: Optional[str]
     image_mime_type: Optional[str]
@@ -21,7 +22,7 @@ class ChatState(TypedDict):
     tasks_completed_this_week: int
     tasks_total_this_week: int
 
-    # ── NEW: Emotional context from backend ──────────────────────────────────
+    # ── Emotional context ─────────────────────────────────────────────────────
     weekly_mood_history: List[Dict[str, Any]]
     assessment_summary: Optional[Dict[str, Any]]
 
@@ -32,13 +33,18 @@ class ChatState(TypedDict):
     is_crisis: bool
     schedule_context_summary: Optional[str]
 
-    # ── NEW: Emotional context summaries built by context_loader ─────────────
+    # ── Emotional context summaries ───────────────────────────────────────────
     mood_pattern_summary: Optional[str]
     assessment_context_summary: Optional[str]
 
-    # ── NEW: Empathy validation result ────────────────────────────────────────
+    # ── Empathy validation ────────────────────────────────────────────────────
     needs_empathy_prefix: bool
     empathy_prefix: Optional[str]
+
+    # ── Conversation history (managed by LangGraph checkpointer) ─────────────
+    # ✅ This replaces the old manual `history` field
+    # LangGraph stores and loads this automatically per thread_id
+    chat_history: List[Dict[str, str]]
 
     # ── Final output ──────────────────────────────────────────────────────────
     reply: str

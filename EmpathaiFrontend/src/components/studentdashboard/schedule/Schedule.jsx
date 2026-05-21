@@ -17,6 +17,7 @@ import {
     PencilSquareIcon, ChatBubbleLeftIcon, Cog6ToothIcon,
     MicrophoneIcon, CheckIcon, MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline'
+import chatService from '../../../services/chatService'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TIME SELECT
@@ -558,64 +559,25 @@ function VoiceInputButton({ onTranscript, disabled }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SCHEDULE SESSION HELPERS  (localStorage persistence)
+// MINI CHATBUDDY  (no localStorage — history stored via backend)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const MAX_SESSIONS = 20
+function MiniChatBuddy({ user, tasks, setTasks, upcomingExams, activeDay, onClose, onTaskChanged, onOpenChatBuddy }) {
+    const CRISIS_KEYWORDS = [
+    'suicide', 'kill myself', 'end my life', 'want to die',
+    'self harm', 'self-harm', 'hurt myself', 'no reason to live',
+    'want to disappear', 'better off dead', 'cant go on', "can't go on",
+    'give up on life', 'not worth living', 'ending it all',
+]
+    const [messages, setMessages]         = useState([])
+    const [inputMessage, setInputMessage] = useState('')
+    const [isLoading, setIsLoading]       = useState(false)
 
-function getSessionKey(userId) {
-    return `scheduleAssistant_sessions_${userId}`
-}
-
-function loadStoredSessions(userId) {
-    try {
-        return JSON.parse(localStorage.getItem(getSessionKey(userId)) || '[]')
-    } catch { return [] }
-}
-
-function saveStoredSessions(sessions, userId) {
-    try {
-        localStorage.setItem(getSessionKey(userId), JSON.stringify(sessions.slice(0, MAX_SESSIONS)))
-    } catch { /* quota exceeded – silently skip */ }
-}
-
-function formatSessionDate(iso) {
-    if (!iso) return 'Session'
-    const d = new Date(iso)
-    const now = new Date()
-    const diffD = Math.floor((now - d) / 864e5)
-    if (diffD === 0) return 'Today'
-    if (diffD === 1) return 'Yesterday'
-    if (diffD < 7)  return `${diffD} days ago`
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MINI CHATBUDDY
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function MiniChatBuddy({ user, tasks, setTasks, upcomingExams, activeDay, onClose, onTaskChanged }) {
-    const [messages, setMessages]           = useState([])
-    const [inputMessage, setInputMessage]   = useState('')
-    const [isLoading, setIsLoading]         = useState(false)
-    const [view, setView]                   = useState('chat')       // 'chat' | 'history'
-    const [sessions, setSessions]           = useState([])
-    const [historySearch, setHistorySearch] = useState('')
-
-    // agentHistoryRef holds the raw OpenAI-format message history across turns
     const agentHistoryRef = useRef([])
     const messagesEndRef  = useRef(null)
     const inputRef        = useRef(null)
 
-    // ── FIX: ref that always holds the latest messages for the unmount handler ──
-    const messagesRef = useRef([])
-
-    // Keep messagesRef in sync with state on every render
-    useEffect(() => {
-        messagesRef.current = messages
-    }, [messages])
-
-    // ── build system prompt with full schedule context ─────────────────────────
+    // ── Build system prompt ────────────────────────────────────────────────────
     const buildSystemPrompt = () => {
         const allTasksSummary = Object.entries(tasks)
             .map(([day, dayTasks]) => {
@@ -629,7 +591,9 @@ function MiniChatBuddy({ user, tasks, setTasks, upcomingExams, activeDay, onClos
             .join('\n')
 
         const examsSummary = upcomingExams?.length
-            ? upcomingExams.map(e => `  • ${e.subjectName} in ${e.daysRemaining} day(s) [${e.urgency}]`).join('\n')
+            ? upcomingExams.map(e =>
+                `  • ${e.subjectName} in ${e.daysRemaining} day(s) [${e.urgency}]`
+              ).join('\n')
             : '  None'
 
         return `You are a smart, friendly Schedule Agent for a student learning platform called EmpathAI.
@@ -645,6 +609,7 @@ ${allTasksSummary || '  No tasks scheduled yet'}
 
 UPCOMING EXAMS:
 ${examsSummary}
+
 YOUR BEHAVIOUR:
 1. Be warm, encouraging, and concise. Use emojis sparingly.
 2. When the student wants to ADD a task, gather title, day, start time, and end time — then IMMEDIATELY call add_task. Do NOT ask for confirmation. Do NOT say "just to confirm". Do NOT repeat the details back and ask "is that correct?". Just call the tool.
@@ -654,20 +619,26 @@ YOUR BEHAVIOUR:
 6. When the student wants to EDIT a task, ask only what changed, then call edit_task immediately.
 7. When marking complete, identify the task and call mark_task_complete immediately.
 8. For queries like "what's on my schedule" or "am I on track", answer directly from the task list — no tool needed.
-9. IMPORTANT: If the student asks a general knowledge or subject question (e.g. "explain algebra", "what is photosynthesis", "help me with calculus"), answer it directly and helpfully as a knowledgeable tutor. Do NOT treat it as a task to add, do NOT ask for times or days, do NOT call any tool. Just answer the question naturally.
-10. After any action, briefly confirm what was done and offer to help further.
-11. Always use 24-hour format (HH:MM) when calling tools.
-12. Never make up task IDs — only use IDs from the task list above.
-13. Today is ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
-14. CRITICAL: Once you have title + day + startTime + endTime, call the tool. Period. No more questions.`
+9. For queries like "what's on my schedule" or "am I on track", answer directly from the task list — no tool needed.
+10. IMPORTANT: If the student sends ANY emotional message, expresses stress, sadness, anxiety, loneliness, crisis, or any personal or mental health concern — DO NOT engage with it. Simply say: "I'm only able to help with your schedule here 😊 Please head over to ChatBuddy for support — opening it for you now! 💙" and stop. The app will automatically open ChatBuddy.
+11. IMPORTANT: If the student asks any general knowledge or subject question — DO NOT answer it. Say: "That's a great question! Head over to ChatBuddy for subject help — I only manage your schedule here 😊"
+12. NEVER provide emotional support, crisis response, mental health advice, or academic tutoring. Always redirect non-schedule topics to ChatBuddy.
+13. After any schedule action, briefly confirm what was done and offer to help further.
+14. Always use 24-hour format (HH:MM) when calling tools.
+15. Never make up task IDs — only use IDs from the task list above.
+16. Today is ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
+17. CRITICAL: Once you have title + day + startTime + endTime, call the tool. Period. No more questions.`
     }
-    // ── welcome message ────────────────────────────────────────────────────────
+
+    // ── Build welcome message ──────────────────────────────────────────────────
     const buildWelcomeMessage = () => {
         const todayTasks     = tasks[activeDay] || []
         const completedCount = todayTasks.filter(t => t.completed).length
         const totalCount     = todayTasks.length
         const nearestExam    = upcomingExams?.[0]
+
         let msg = `Hi **${user?.firstName || 'there'}**! 👋 I'm your Schedule Assistant.\n\n`
+
         if (totalCount > 0) {
             msg += `📅 You have **${totalCount} task${totalCount > 1 ? 's' : ''}** planned for ${activeDay}`
             if (completedCount > 0) msg += ` and you've completed **${completedCount}** — great work!`
@@ -676,111 +647,122 @@ YOUR BEHAVIOUR:
         } else {
             msg += `📅 You have **no tasks planned** for ${activeDay} yet.\n\n`
         }
+
         if (nearestExam) {
             msg += `📝 Your **${nearestExam.subjectName}** exam is in **${nearestExam.daysRemaining} day${nearestExam.daysRemaining === 1 ? '' : 's'}**`
             if (nearestExam.urgency === 'URGENT') msg += ` — coming up soon!`
             msg += '\n\n'
         }
+
         msg += `I can **add**, **edit**, **delete**, or **complete** tasks — or just tell you about your week. What would you like to do?`
         return msg
     }
 
+    // ── Init ───────────────────────────────────────────────────────────────────
     useEffect(() => {
-        // Seed history with system prompt; show welcome bubble
         agentHistoryRef.current = [{ role: 'system', content: buildSystemPrompt() }]
         setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage() }])
-        // Load stored sessions
-        setSessions(loadStoredSessions(user.id))
         inputRef.current?.focus()
     }, [])
 
-    // ── FIX: Save session to localStorage when component unmounts ─────────────
-    useEffect(() => {
-        return () => {
-            const currentMessages = messagesRef.current
-            const realMessages = currentMessages.filter(m => m.id !== 'welcome')
-            // Only save if there's actual conversation content
-            if (realMessages.length > 0) {
-                const session = {
-                    id:        Date.now(),
-                    startedAt: new Date().toISOString(),
-                    preview:   realMessages[0]?.content?.slice(0, 60) || 'Schedule session',
-                    messages:  currentMessages,
-                }
-                const updated = [session, ...loadStoredSessions(user.id)]
-saveStoredSessions(updated, user.id)
-            }
-        }
-    }, []) // empty deps — runs cleanup only on unmount
-
+    // ── Auto-scroll ────────────────────────────────────────────────────────────
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages, isLoading])
 
-    // ── execute a tool call returned by the agent ──────────────────────────────
+    // ── Log a turn to backend (fire-and-forget) ───────────────────────────────
+    const logTurnToBackend = useCallback(async (userText, assistantText) => {
+        try {
+            await chatService.logScheduleMessage(userText, assistantText)
+        } catch (err) {
+            console.warn('Schedule Assistant: failed to log message:', err.message)
+        }
+    }, [])
+
+    // ── Execute tool call ──────────────────────────────────────────────────────
     const executeTool = async (toolName, toolInput) => {
         try {
             switch (toolName) {
                 case 'add_task': {
-                 const result = await addTask(
-        user.id,
-        toolInput.dayOfWeek,
-        toolInput.title,
-        toolInput.startTime,
-        toolInput.endTime,
-        toolInput.notes || ''
-    )
-    setTasks(prev => ({
-        ...prev,
-        [toolInput.dayOfWeek]: [...(prev[toolInput.dayOfWeek] || []), { ...result, completed: false }]
-    }))
-    onTaskChanged?.()
-    return { success: true, message: `Task "${toolInput.title}" added on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
-}
-case 'edit_task': {
-    const result = await editTask(
-        toolInput.taskId,
-        user.id,
-        toolInput.dayOfWeek,
-        toolInput.title,
-        toolInput.startTime,
-        toolInput.endTime,
-        toolInput.notes || ''
-    )
-    setTasks(prev => ({
-        ...prev,
-        [toolInput.dayOfWeek]: (prev[toolInput.dayOfWeek] || []).map(t =>
-            t.id === toolInput.taskId ? { ...t, ...result } : t
-        )
-    }))
-    onTaskChanged?.()
-    return { success: true, message: `Task updated to "${toolInput.title}" on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
-}
-case 'delete_task': {
-    await deleteTask(toolInput.taskId)
-    setTasks(prev => {
-        const updated = {}
-        for (const day of Object.keys(prev)) {
-            updated[day] = prev[day].filter(t => t.id !== toolInput.taskId)
-        }
-        return updated
-    })
-    onTaskChanged?.()
-    return { success: true, message: `Task "${toolInput.taskTitle}" has been deleted.` }
-}
-case 'mark_task_complete': {
+                    const result = await addTask(
+                        user.id,
+                        toolInput.dayOfWeek,
+                        toolInput.title,
+                        toolInput.startTime,
+                        toolInput.endTime,
+                        toolInput.notes || ''
+                    )
+                    setTasks(prev => ({
+                        ...prev,
+                        [toolInput.dayOfWeek]: [
+                            ...(prev[toolInput.dayOfWeek] || []),
+                            { ...result, completed: false }
+                        ]
+                    }))
+                    onTaskChanged?.()
+                    return {
+                        success: true,
+                        message: `Task "${toolInput.title}" added on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`,
+                        task: result
+                    }
+                }
+                case 'edit_task': {
+                    const result = await editTask(
+                        toolInput.taskId,
+                        user.id,
+                        toolInput.dayOfWeek,
+                        toolInput.title,
+                        toolInput.startTime,
+                        toolInput.endTime,
+                        toolInput.notes || ''
+                    )
+                    setTasks(prev => ({
+                        ...prev,
+                        [toolInput.dayOfWeek]: (prev[toolInput.dayOfWeek] || []).map(t =>
+                            t.id === toolInput.taskId ? { ...t, ...result } : t
+                        )
+                    }))
+                    onTaskChanged?.()
+                    return {
+                        success: true,
+                        message: `Task updated to "${toolInput.title}" on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`,
+                        task: result
+                    }
+                }
+                case 'delete_task': {
+                    await deleteTask(toolInput.taskId)
+                    setTasks(prev => {
+                        const updated = {}
+                        for (const day of Object.keys(prev)) {
+                            updated[day] = prev[day].filter(t => t.id !== toolInput.taskId)
+                        }
+                        return updated
+                    })
+                    onTaskChanged?.()
+                    return {
+                        success: true,
+                        message: `Task "${toolInput.taskTitle}" has been deleted.`
+                    }
+                }
+                case 'mark_task_complete': {
                     const result = await toggleTaskComplete(toolInput.taskId)
                     setTasks(prev => {
                         const updated = {}
                         for (const day of Object.keys(prev)) {
                             updated[day] = prev[day].map(t =>
-                                t.id === toolInput.taskId ? { ...t, completed: result.completed } : t
+                                t.id === toolInput.taskId
+                                    ? { ...t, completed: result.completed }
+                                    : t
                             )
                         }
                         return updated
                     })
                     onTaskChanged?.()
-                    return { success: true, message: `Task "${toolInput.taskTitle}" completion status toggled.`, task: result }
+                    return {
+                        success: true,
+                        message: `Task "${toolInput.taskTitle}" completion status toggled.`,
+                        task: result
+                    }
                 }
                 default:
                     return { success: false, error: `Unknown tool: ${toolName}` }
@@ -790,54 +772,64 @@ case 'mark_task_complete': {
         }
     }
 
-
-    // ── agentic loop (OpenAI) ──────────────────────────────────────────────────
-    const runAgentLoop = async (history) => {
-        let currentHistory = history
-        const MAX_ITERATIONS = 6
+    // ── Agentic loop ───────────────────────────────────────────────────────────
+    const runAgentLoop = async (history, userText) => {
+        let currentHistory    = history
+        const MAX_ITERATIONS  = 6
+        let lastAssistantText = ''
 
         for (let i = 0; i < MAX_ITERATIONS; i++) {
             const response = await apiRequest('/api/openai/chat', {
-    method: 'POST',
-    body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: currentHistory,
-        tools: AGENT_TOOLS,
-        tool_choice: 'auto',
-        max_tokens: 1024,
-    }),
-})
-if (!response.ok) {
-    const errBody = await response.json().catch(() => ({}))
-    throw new Error(errBody?.error?.message || 'Agent request failed')
-}
+                method: 'POST',
+                body: JSON.stringify({
+                    model:       'gpt-4o',
+                    messages:    currentHistory,
+                    tools:       AGENT_TOOLS,
+                    tool_choice: 'auto',
+                    max_tokens:  1024,
+                }),
+            })
 
-const data = await response.json().catch(() => {
-    throw new Error('Response was too large or was cut off. Please try a shorter question.')
-})
+            if (!response.ok) {
+                const errBody = await response.json().catch(() => ({}))
+                throw new Error(errBody?.error?.message || 'Agent request failed')
+            }
+
+            const data = await response.json().catch(() => {
+                throw new Error('Response was too large or was cut off. Please try a shorter question.')
+            })
+
             const choice  = data.choices?.[0]
             const message = choice?.message
 
             if (message?.content?.trim()) {
-    setMessages(prev => [...prev, {
-        id: `a-${Date.now()}-${i}`,
-        role: 'assistant',
-        content: message.content.trim(),
-    }])
-}
+                lastAssistantText = message.content.trim()
+                setMessages(prev => [...prev, {
+                    id:      `a-${Date.now()}-${i}`,
+                    role:    'assistant',
+                    content: lastAssistantText,
+                }])
+            }
 
-if (!message?.tool_calls?.length || choice?.finish_reason === 'stop') {
-    
-    agentHistoryRef.current = [
-        ...currentHistory,
-        { role: 'assistant', content: message.content || '' }
-    ]
-    break
-}
+            if (!message?.tool_calls?.length || choice?.finish_reason === 'stop') {
+                agentHistoryRef.current = [
+                    ...currentHistory,
+                    { role: 'assistant', content: message.content || '' }
+                ]
+                // ── Persist this turn to backend ───────────────────────────────
+                if (lastAssistantText) {
+                    logTurnToBackend(userText, lastAssistantText)
+                }
+                break
+            }
 
             currentHistory = [
                 ...currentHistory,
-                { role: 'assistant', content: message.content || '', tool_calls: message.tool_calls },
+                {
+                    role:       'assistant',
+                    content:    message.content || '',
+                    tool_calls: message.tool_calls,
+                },
             ]
 
             for (const toolCall of message.tool_calls) {
@@ -848,9 +840,9 @@ if (!message?.tool_calls?.length || choice?.finish_reason === 'stop') {
                 currentHistory = [
                     ...currentHistory,
                     {
-                        role: 'tool',
+                        role:         'tool',
                         tool_call_id: toolCall.id,
-                        content: JSON.stringify(result),
+                        content:      JSON.stringify(result),
                     },
                 ]
             }
@@ -859,70 +851,50 @@ if (!message?.tool_calls?.length || choice?.finish_reason === 'stop') {
         }
     }
 
-    // ── send handler ───────────────────────────────────────────────────────────
+    // ── Send handler ───────────────────────────────────────────────────────────
     const handleSend = async () => {
-        const text = inputMessage.trim()
-        if (!text || isLoading) return
+    const text = inputMessage.trim()
+    if (!text || isLoading) return
 
-        const userMsg = { id: `u-${Date.now()}`, role: 'user', content: text }
-        setMessages(prev => [...prev, userMsg])
+    // ── Crisis detection — open ChatBuddy immediately ──────────────────────
+    const lower = text.toLowerCase()
+    const isCrisis = CRISIS_KEYWORDS.some(kw => lower.includes(kw))
+    if (isCrisis) {
         setInputMessage('')
-        setIsLoading(true)
-
-        const newHistory = [
-            ...agentHistoryRef.current,
-            { role: 'user', content: text },
-        ]
-
-        try {
-            await runAgentLoop(newHistory)
-        } catch (err) {
-            setMessages(prev => [...prev, {
-                id: `err-${Date.now()}`,
-                role: 'assistant',
-                content: `Sorry, something went wrong: ${err.message || 'Please try again.'}`,
-            }])
-        } finally {
-            setIsLoading(false)
-        }
+        onClose()
+        onOpenChatBuddy?.()
+        return
     }
 
-    // ── save current session to localStorage, then start fresh ────────────────
-    const handleNewChat = () => {
-        // Only save if there's real conversation (more than just the welcome msg)
-        const realMessages = messages.filter(m => m.id !== 'welcome')
-        if (realMessages.length > 0) {
-            const session = {
-                id:        Date.now(),
-                startedAt: new Date().toISOString(),
-                preview:   realMessages[0]?.content?.slice(0, 60) || 'Schedule session',
-                messages,
-            }
-           const updated = [session, ...loadStoredSessions(user.id)]
-saveStoredSessions(updated, user.id)
-setSessions(updated)
-        }
+    // ── Normal agent loop ──────────────────────────────────────────────────
+    const userMsg = { id: `u-${Date.now()}`, role: 'user', content: text }
+    setMessages(prev => [...prev, userMsg])
+    setInputMessage('')
+    setIsLoading(true)
 
-        // ── FIX: Clear the ref so the unmount effect doesn't double-save ──
-        messagesRef.current = []
+    const newHistory = [
+        ...agentHistoryRef.current,
+        { role: 'user', content: text },
+    ]
 
-        agentHistoryRef.current = [{ role: 'system', content: buildSystemPrompt() }]
-        setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage() }])
-        setView('chat')
-        inputRef.current?.focus()
+    try {
+        await runAgentLoop(newHistory, text)
+    } catch (err) {
+        setMessages(prev => [...prev, {
+            id:      `err-${Date.now()}`,
+            role:    'assistant',
+            content: `Sorry, something went wrong: ${err.message || 'Please try again.'}`,
+        }])
+    } finally {
+        setIsLoading(false)
     }
+}
 
-    // ── restore a past session ─────────────────────────────────────────────────
-    const handleLoadSession = (session) => {
-        setMessages(session.messages || [])
-        // Rebuild agent history from restored messages (system prompt + restored exchanges)
-        agentHistoryRef.current = [
-            { role: 'system', content: buildSystemPrompt() },
-            ...session.messages
-                .filter(m => m.id !== 'welcome')
-                .map(m => ({ role: m.role, content: m.content })),
-        ]
-        setView('chat')
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            handleSend()
+        }
     }
 
     const handleVoiceTranscript = (text) => {
@@ -930,19 +902,18 @@ setSessions(updated)
         inputRef.current?.focus()
     }
 
-    const handleKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }
-
-    const QUICK_CHIPS = ['What should I study today?', 'Add a task for me', 'Am I on track this week?', 'Help me plan my evening']
-
-    const filteredSessions = sessions.filter(s =>
-        !historySearch ||
-        (s.preview || '').toLowerCase().includes(historySearch.toLowerCase()) ||
-        formatSessionDate(s.startedAt).toLowerCase().includes(historySearch.toLowerCase())
-    )
+    const QUICK_CHIPS = [
+        'What should I study today?',
+        'Add a task for me',
+        'Am I on track this week?',
+        'Help me plan my evening',
+    ]
 
     return (
-       <div className="fixed bottom-20 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl border-2 border-violet-200 shadow-2xl flex flex-col overflow-hidden" style={{ height: '480px', maxHeight: 'calc(100vh - 100px)' }}>
-
+        <div
+            className="fixed bottom-20 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl border-2 border-violet-200 shadow-2xl flex flex-col overflow-hidden"
+            style={{ height: '480px', maxHeight: 'calc(100vh - 100px)' }}
+        >
             {/* ── Header ── */}
             <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2.5">
@@ -957,183 +928,117 @@ setSessions(updated)
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-1">
-                    {/* History toggle */}
-                    <button
-    onClick={() => {
-        const next = view === 'history' ? 'chat' : 'history'
-        if (next === 'history') setSessions(loadStoredSessions(user.id))
-        setView(next)
-    }}
-    title="Chat History"
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                            view === 'history' ? 'bg-white/30' : 'bg-white/10 hover:bg-white/20'
-                        }`}
-                    >
-                        <ChatBubbleLeftIcon className="w-4 h-4 text-white" />
-                    </button>
-                    <button onClick={handleNewChat} title="New Chat" className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                        <PencilSquareIcon className="w-4 h-4 text-white" />
-                    </button>
-                    <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-                        <XMarkIcon className="w-4 h-4 text-white" />
-                    </button>
-                </div>
+                <button
+                    onClick={onClose}
+                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                    <XMarkIcon className="w-4 h-4 text-white" />
+                </button>
             </div>
 
-            {/* ── HISTORY VIEW ── */}
-            {view === 'history' && (
-                <div className="flex-1 flex flex-col overflow-hidden bg-white">
-                    {/* Search */}
-                    <div className="px-4 pt-3 pb-2 border-b border-gray-100 flex-shrink-0">
-                        <div className="relative">
-                            <MagnifyingGlassIcon className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Search sessions…"
-                                value={historySearch}
-                                onChange={e => setHistorySearch(e.target.value)}
-                                className="w-full pl-8 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-violet-400 font-medium"
-                            />
+            {/* ── Chat area ── */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50/40">
+                {messages.map(msg => (
+                    <div
+                        key={msg.id}
+                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                        {msg.role === 'assistant' && (
+                            <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                                <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
+                            </div>
+                        )}
+                        <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                            msg.role === 'user'
+                                ? 'bg-violet-600 text-white rounded-br-sm shadow-sm'
+                                : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'
+                        }`}>
+                            {msg.role === 'assistant' ? (
+                                <ReactMarkdown
+                                    remarkPlugins={[remarkMath]}
+                                    rehypePlugins={[rehypeKatex]}
+                                    components={{
+                                        p:      ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+                                        ul:     ({ children }) => <ul className="list-disc pl-4 space-y-1 my-2">{children}</ul>,
+                                        ol:     ({ children }) => <ol className="list-decimal pl-4 space-y-1 my-2">{children}</ol>,
+                                        li:     ({ children }) => <li className="leading-relaxed pl-1">{children}</li>,
+                                        strong: ({ children }) => <strong className="font-black text-gray-900">{children}</strong>,
+                                    }}
+                                >{msg.content}</ReactMarkdown>
+                            ) : (
+                                <p className="whitespace-pre-wrap">{msg.content}</p>
+                            )}
                         </div>
                     </div>
+                ))}
 
-                    {/* Session list */}
-                    <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-                        {filteredSessions.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-40 text-center">
-                                <ChatBubbleLeftIcon className="w-8 h-8 text-gray-200 mb-2" />
-                                <p className="text-xs text-gray-400 font-medium">
-                                    {sessions.length === 0
-                                        ? 'No history yet — start chatting!'
-                                        : 'No sessions match your search.'}
-                                </p>
-                            </div>
-                        ) : (
-                            <>
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-2 pb-1">Past Sessions</p>
-                                {filteredSessions.map(session => (
-                                    <button
-                                        key={session.id}
-                                        onClick={() => handleLoadSession(session)}
-                                        className="w-full flex items-start gap-3 p-3 rounded-xl hover:bg-violet-50 border border-transparent hover:border-violet-100 transition-colors text-left group"
-                                    >
-                                        <ChatBubbleLeftIcon className="w-4 h-4 mt-0.5 text-gray-300 group-hover:text-violet-500 flex-shrink-0 transition-colors" />
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-bold text-gray-800 truncate">
-                                                {session.preview || 'Schedule session'}
-                                            </p>
-                                            <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
-                                                <ClockIcon className="w-3 h-3" />
-                                                {formatSessionDate(session.startedAt)}
-                                            </p>
-                                        </div>
-                                    </button>
-                                ))}
-                            </>
-                        )}
-                    </div>
-
-                    {/* Footer: back to chat */}
-                    <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0">
-                        <button
-                            onClick={() => setView('chat')}
-                            className="w-full py-2 rounded-xl text-xs font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 transition-colors"
-                        >
-                            ← Back to Chat
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* ── CHAT VIEW ── */}
-            {view === 'chat' && (
-                <>
-                    {/* Chat area */}
-                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50/40">
-                        {messages.map(msg => (
-                            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                {msg.role === 'assistant' && (
-                                    <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
-                                        <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
-                                    </div>
-                                )}
-                                <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${msg.role === 'user' ? 'bg-violet-600 text-white rounded-br-sm shadow-sm' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm'}`}>
-                                    {msg.role === 'assistant' ? (
-                                        <ReactMarkdown
-                                            remarkPlugins={[remarkMath]}
-                                            rehypePlugins={[rehypeKatex]}
-                                            components={{
-                                                p:      ({children}) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
-                                                ul:     ({children}) => <ul className="list-disc pl-4 space-y-1 my-2">{children}</ul>,
-                                                ol:     ({children}) => <ol className="list-decimal pl-4 space-y-1 my-2">{children}</ol>,
-                                                li:     ({children}) => <li className="leading-relaxed pl-1">{children}</li>,
-                                                strong: ({children}) => <strong className="font-black text-gray-900">{children}</strong>,
-                                            }}
-                                        >{msg.content}</ReactMarkdown>
-                                    ) : (
-                                        <p className="whitespace-pre-wrap">{msg.content}</p>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                        {isLoading && (
-                            <div className="flex justify-start">
-                                <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
-                                    <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
-                                </div>
-                                <div className="bg-white border border-gray-200 px-3 py-2 rounded-2xl rounded-bl-sm flex items-center gap-1 shadow-sm">
-                                    {[0,1,2].map(i => (
-                                        <span key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:`${i*0.15}s`}} />
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        <div ref={messagesEndRef} />
-                    </div>
-
-                    {/* Quick chips */}
-                    <div className="px-4 py-2 border-t border-gray-100 bg-white flex-shrink-0">
-                        <div className="flex flex-wrap gap-1.5">
-                            {QUICK_CHIPS.map(chip => (
-                                <button key={chip} onClick={() => setInputMessage(chip)} disabled={isLoading}
-                                    className="px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] font-bold hover:bg-violet-100 transition-colors disabled:opacity-50">
-                                    {chip}
-                                </button>
+                {isLoading && (
+                    <div className="flex justify-start">
+                        <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
+                            <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
+                        </div>
+                        <div className="bg-white border border-gray-200 px-3 py-2 rounded-2xl rounded-bl-sm flex items-center gap-1 shadow-sm">
+                            {[0, 1, 2].map(i => (
+                                <span
+                                    key={i}
+                                    className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce"
+                                    style={{ animationDelay: `${i * 0.15}s` }}
+                                />
                             ))}
                         </div>
                     </div>
+                )}
+                <div ref={messagesEndRef} />
+            </div>
 
-                    {/* Input */}
-                    <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
-                        <div className="flex gap-2 items-end">
-                            <div className="flex-1 flex items-center border-2 border-gray-100 focus-within:border-violet-300 rounded-xl px-3 py-2 bg-white gap-2 transition-colors">
-                                <textarea
-                                    ref={inputRef}
-                                    value={inputMessage}
-                                    onChange={e => setInputMessage(e.target.value)}
-                                    onKeyDown={handleKeyDown}
-                                    placeholder="Ask about your schedule…"
-                                    rows={1}
-                                    disabled={isLoading}
-                                    className="flex-1 resize-none focus:outline-none bg-transparent text-xs text-gray-800 placeholder-gray-400 max-h-20 disabled:opacity-60"
-                                    style={{fieldSizing:'content'}}
-                                />
-                                <VoiceInputButton
-                                    onTranscript={handleVoiceTranscript}
-                                    disabled={isLoading}
-                                />
-                            </div>
-                            <button
-                                onClick={handleSend}
-                                disabled={isLoading || !inputMessage.trim()}
-                                className="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-xl px-3 py-2.5 transition-colors flex items-center shadow-sm shrink-0">
-                                {isLoading ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <PaperAirplaneIcon className="w-4 h-4" />}
-                            </button>
-                        </div>
+            {/* ── Quick chips ── */}
+            <div className="px-4 py-2 border-t border-gray-100 bg-white flex-shrink-0">
+                <div className="flex flex-wrap gap-1.5">
+                    {QUICK_CHIPS.map(chip => (
+                        <button
+                            key={chip}
+                            onClick={() => setInputMessage(chip)}
+                            disabled={isLoading}
+                            className="px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-full text-[10px] font-bold hover:bg-violet-100 transition-colors disabled:opacity-50"
+                        >
+                            {chip}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* ── Input ── */}
+            <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
+                <div className="flex gap-2 items-end">
+                    <div className="flex-1 flex items-center border-2 border-gray-100 focus-within:border-violet-300 rounded-xl px-3 py-2 bg-white gap-2 transition-colors">
+                        <textarea
+                            ref={inputRef}
+                            value={inputMessage}
+                            onChange={e => setInputMessage(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Ask about your schedule…"
+                            rows={1}
+                            disabled={isLoading}
+                            className="flex-1 resize-none focus:outline-none bg-transparent text-xs text-gray-800 placeholder-gray-400 max-h-20 disabled:opacity-60"
+                            style={{ fieldSizing: 'content' }}
+                        />
+                        <VoiceInputButton
+                            onTranscript={handleVoiceTranscript}
+                            disabled={isLoading}
+                        />
                     </div>
-                </>
-            )}
+                    <button
+                        onClick={handleSend}
+                        disabled={isLoading || !inputMessage.trim()}
+                        className="bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-xl px-3 py-2.5 transition-colors flex items-center shadow-sm shrink-0"
+                    >
+                        {isLoading
+                            ? <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                            : <PaperAirplaneIcon className="w-4 h-4" />
+                        }
+                    </button>
+                </div>
+            </div>
         </div>
     )
 }
@@ -1146,7 +1051,7 @@ const jsToWeekIdx     = (jsDay) => (jsDay === 0 ? 6 : jsDay - 1)
 const weekIdx         = (day)   => DAYS.indexOf(day)
 const getTodayWeekIdx = ()      => jsToWeekIdx(new Date().getDay())
 
-export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, user }) {
+export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, user, onOpenChatBuddy }) {
 
     const [showAddTask, setShowAddTask]               = useState(false)
     const [newTask, setNewTask]                       = useState({ startTime: '09:00', endTime: '10:00', title: '', notes: '' })
@@ -2084,6 +1989,10 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         activeDay={activeDay}
         onClose={() => setShowMiniChat(false)}
         onTaskChanged={() => setRecsTrigger(t => t + 1)}
+        onOpenChatBuddy={() => {
+            setShowMiniChat(false)
+            onOpenChatBuddy?.()
+        }}
     />
 )}
         </div>

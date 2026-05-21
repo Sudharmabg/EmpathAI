@@ -827,9 +827,16 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                       activeSessionId === session.id ? 'text-purple-500' : 'text-gray-400'
                     }`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {formatSessionLabel(session)}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {formatSessionLabel(session)}
+                        </p>
+                        {session.source === 'SCHEDULE' && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 border border-violet-200 shrink-0 whitespace-nowrap">
+                            🗓 Schedule
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                         <ClockIcon className="w-3 h-3" />
                         {formatRelative(session.createdAt)}

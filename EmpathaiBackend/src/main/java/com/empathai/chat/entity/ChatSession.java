@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "chat_sessions",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"student_id", "week_start"}))
+        uniqueConstraints = @UniqueConstraint(columnNames = {"student_id", "week_start", "source"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,6 +25,11 @@ public class ChatSession {
 
     @Column(name = "week_start", nullable = false)
     private LocalDate weekStart;
+
+    // ✅ NEW — "CHAT" for ChatBuddy, "SCHEDULE" for Schedule Assistant
+    @Column(name = "source", nullable = false)
+    @Builder.Default
+    private String source = "CHAT";
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

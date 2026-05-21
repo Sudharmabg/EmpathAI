@@ -12,24 +12,22 @@ logger = logging.getLogger("response_generator")
 
 
 def _build_system_prompt(state: ChatState) -> str:
-    name = state.get("student_name", "Student")
-    grade = state.get("grade", "8th Standard")
-    intent = state.get("intent", "CURRICULUM")
-    emotional_state = state.get("emotional_state", "NEUTRAL")
-    academic_pressure = state.get("academic_pressure", "LOW")
-    schedule_summary = state.get("schedule_context_summary", "No schedule data")
-    preferred_study_time = state.get("preferred_study_time", "Not set")
-    completed_week = state.get("tasks_completed_this_week", 0)
-    total_week = state.get("tasks_total_this_week", 0)
-
-    # NEW: Pull in emotional context
-    mood_pattern = state.get("mood_pattern_summary", "")
-    assessment_context = state.get("assessment_context_summary", "")
+    name                = state.get("student_name", "Student")
+    grade               = state.get("grade", "8th Standard")
+    intent              = state.get("intent", "CURRICULUM")
+    emotional_state     = state.get("emotional_state", "NEUTRAL")
+    academic_pressure   = state.get("academic_pressure", "LOW")
+    schedule_summary    = state.get("schedule_context_summary", "No schedule data")
+    preferred_study_time= state.get("preferred_study_time", "Not set")
+    completed_week      = state.get("tasks_completed_this_week", 0)
+    total_week          = state.get("tasks_total_this_week", 0)
+    mood_pattern        = state.get("mood_pattern_summary", "")
+    assessment_context  = state.get("assessment_context_summary", "")
 
     tone_map = {
-        "POSITIVE": "The student is in a good mood. Be encouraging, energetic, and motivating.",
-        "NEUTRAL": "The student seems calm. Be helpful, clear, and friendly.",
-        "STRESSED": "The student seems stressed. Be gentle, supportive, and patient. Acknowledge feelings first.",
+        "POSITIVE":   "The student is in a good mood. Be encouraging, energetic, and motivating.",
+        "NEUTRAL":    "The student seems calm. Be helpful, clear, and friendly.",
+        "STRESSED":   "The student seems stressed. Be gentle, supportive, and patient. Acknowledge feelings first.",
         "DISTRESSED": "The student is distressed. Prioritise empathy FIRST before any academic content.",
     }
     tone_instruction = tone_map.get(emotional_state, "Be helpful and friendly.")
@@ -51,7 +49,6 @@ When answering schedule questions:
 - Keep suggestions specific and actionable
 """
 
-    # NEW: Emotional context block (only for emotional intents)
     emotional_context = ""
     if intent == "EMOTIONAL_SUPPORT" or emotional_state in ("STRESSED", "DISTRESSED"):
         emotional_context = f"""
@@ -118,12 +115,8 @@ Always append both MODE and FLAG tags on the very last line. Never write the wor
 
 
 def _fix_latex_delimiters(text: str) -> str:
-    """
-    Converts any \\[...\\] or \\(...\\) style LaTeX the model may produce
-    into the $$ / $ delimiters that remark-math / rehype-katex expects.
-    """
     text = re.sub(r'\\\[(.*?)\\\]', lambda m: f'$${m.group(1)}$$', text, flags=re.DOTALL)
-    text = re.sub(r'\\\((.*?)\\\)', lambda m: f'${m.group(1)}$', text, flags=re.DOTALL)
+    text = re.sub(r'\\\((.*?)\\\)', lambda m: f'${m.group(1)}$',   text, flags=re.DOTALL)
     return text
 
 
@@ -141,24 +134,21 @@ def _parse_flags(raw_reply: str) -> dict:
     if not flag_match or flag_match.group(1).lower() != "true":
         return result
     result["is_flagged"] = True
-    reason_match = re.search(r'\[FLAG_REASON:([^\]]+)\]', raw_reply)
-    if reason_match:
-        result["flag_reason"] = reason_match.group(1).strip()
-    sentiment_match = re.search(r'\[SENTIMENT:([^\]]+)\]', raw_reply)
-    if sentiment_match:
-        result["sentiment"] = sentiment_match.group(1).strip()
+    reason_match   = re.search(r'\[FLAG_REASON:([^\]]+)\]', raw_reply)
+    sentiment_match= re.search(r'\[SENTIMENT:([^\]]+)\]',   raw_reply)
     severity_match = re.search(r'\[SEVERITY:(critical|high|medium)\]', raw_reply, re.IGNORECASE)
-    if severity_match:
-        result["severity"] = severity_match.group(1).lower()
+    if reason_match:    result["flag_reason"] = reason_match.group(1).strip()
+    if sentiment_match: result["sentiment"]   = sentiment_match.group(1).strip()
+    if severity_match:  result["severity"]    = severity_match.group(1).lower()
     return result
 
 
 def _strip_all_tags(text: str) -> str:
-    text = re.sub(r'\[MODE:[^\]]*\]', '', text)
-    text = re.sub(r'\[FLAG:[^\]]*\]', '', text)
-    text = re.sub(r'\[FLAG_REASON:[^\]]*\]', '', text)
-    text = re.sub(r'\[SENTIMENT:[^\]]*\]', '', text)
-    text = re.sub(r'\[SEVERITY:[^\]]*\]', '', text)
+    text = re.sub(r'\[MODE:[^\]]*\]',       '', text)
+    text = re.sub(r'\[FLAG:[^\]]*\]',       '', text)
+    text = re.sub(r'\[FLAG_REASON:[^\]]*\]','', text)
+    text = re.sub(r'\[SENTIMENT:[^\]]*\]',  '', text)
+    text = re.sub(r'\[SEVERITY:[^\]]*\]',   '', text)
     return text.strip()
 
 
@@ -170,18 +160,21 @@ def response_generator(state: ChatState) -> ChatState:
     try:
         system_prompt = _build_system_prompt(state)
 
+        # ── Build message list ─────────────────────────────────────────────────
         messages = [SystemMessage(content=system_prompt)]
 
-        for msg in state.get("history", []):
-            role = msg.get("role") if isinstance(msg, dict) else msg.role
+        # ✅ Use chat_history from LangGraph checkpointer (replaces old manual history)
+        for msg in state.get("chat_history", []):
+            role    = msg.get("role")    if isinstance(msg, dict) else msg.role
             content = msg.get("content") if isinstance(msg, dict) else msg.content
             if role == "user":
                 messages.append(HumanMessage(content=content))
             else:
                 messages.append(AIMessage(content=content))
 
-        user_content = []
-        message_text = state.get("message", "")
+        # ── Build current user message (with optional images) ─────────────────
+        user_content   = []
+        message_text   = state.get("message", "")
         if message_text:
             user_content.append({"type": "text", "text": message_text})
 
@@ -189,17 +182,17 @@ def response_generator(state: ChatState) -> ChatState:
         for img in images:
             url = img if img.startswith("data:") else f"data:image/jpeg;base64,{img}"
             user_content.append({
-                "type": "image_url",
+                "type":      "image_url",
                 "image_url": {"url": url, "detail": "high"}
             })
 
-        image_base64 = state.get("image_base64")
-        image_mime_type = state.get("image_mime_type")
+        image_base64     = state.get("image_base64")
+        image_mime_type  = state.get("image_mime_type")
         if image_base64 and image_mime_type:
             user_content.append({
-                "type": "image_url",
+                "type":      "image_url",
                 "image_url": {
-                    "url": f"data:{image_mime_type};base64,{image_base64}",
+                    "url":    f"data:{image_mime_type};base64,{image_base64}",
                     "detail": "high"
                 }
             })
@@ -214,46 +207,58 @@ def response_generator(state: ChatState) -> ChatState:
         model_name = "gpt-4o" if has_images else "gpt-4o-mini"
 
         llm = ChatOpenAI(
-            model=model_name,
+            model=      model_name,
             temperature=0.5,
-            api_key=os.getenv("OPENAI_API_KEY"),
-            max_tokens=2048,
+            api_key=    os.getenv("OPENAI_API_KEY"),
+            max_tokens= 2048,
         )
 
-        response = llm.invoke(messages)
+        response  = llm.invoke(messages)
         raw_reply = response.content.strip()
 
-        flag_data = _parse_flags(raw_reply)
-        raw_no_flags = _strip_all_tags(raw_reply)
+        flag_data     = _parse_flags(raw_reply)
+        raw_no_flags  = _strip_all_tags(raw_reply)
         clean_reply, detected_mode = _parse_mode(raw_no_flags)
 
-        # Fix any \[ \] or \( \) LaTeX the model produced despite instructions
         clean_reply = _fix_latex_delimiters(clean_reply)
 
-        # ── NEW: Prepend empathy prefix if validator generated one ───────────
+        # ── Prepend empathy prefix if validator added one ──────────────────────
         if state.get("needs_empathy_prefix") and state.get("empathy_prefix"):
             clean_reply = f"{state['empathy_prefix']}\n\n{clean_reply}"
             logger.info("Empathy prefix prepended to response")
 
-        state["reply"] = clean_reply
+        # ✅ Update chat_history with this turn so checkpointer saves it
+        updated_history = list(state.get("chat_history", []))
+        updated_history.append({"role": "user",      "content": message_text})
+        updated_history.append({"role": "assistant",  "content": clean_reply})
+
+        # Keep only last 20 messages (10 turns) to avoid token overflow
+        if len(updated_history) > 20:
+            updated_history = updated_history[-20:]
+
+        state["chat_history"]  = updated_history
+        state["reply"]         = clean_reply
         state["detected_mode"] = detected_mode
-        state["is_flagged"] = flag_data["is_flagged"]
-        state["flag_reason"] = flag_data["flag_reason"]
-        state["sentiment"] = flag_data["sentiment"]
-        state["severity"] = flag_data["severity"]
+        state["is_flagged"]    = flag_data["is_flagged"]
+        state["flag_reason"]   = flag_data["flag_reason"]
+        state["sentiment"]     = flag_data["sentiment"]
+        state["severity"]      = flag_data["severity"]
 
         logger.info(
-            "Response generated | mode=%s | flagged=%s | model=%s",
-            detected_mode, flag_data["is_flagged"], model_name
+            "Response generated | mode=%s | flagged=%s | model=%s | history_turns=%d",
+            detected_mode,
+            flag_data["is_flagged"],
+            model_name,
+            len(updated_history) // 2
         )
 
     except Exception as e:
         logger.error("Response generation failed: %s", str(e), exc_info=True)
-        state["reply"] = (
+        state["reply"]        = (
             "I'm sorry, I'm having a little trouble right now. "
             "Please try again in a moment!"
         )
         state["detected_mode"] = "curriculum"
-        state["is_flagged"] = False
+        state["is_flagged"]    = False
 
     return state

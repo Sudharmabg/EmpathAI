@@ -292,7 +292,14 @@ export default function Dashboard({ user, onLogout }) {
             ) : tasksError ? (
               <div className="bg-red-50 border-2 border-red-200 rounded-2xl px-6 py-4 text-red-600 font-medium text-sm text-center">{tasksError}</div>
             ) : (
-              <Schedule user={user} tasks={tasks} setTasks={setTasks} activeDay={activeDay} setActiveDay={setActiveDay} />
+              <Schedule
+    user={user}
+    tasks={tasks}
+    setTasks={setTasks}
+    activeDay={activeDay}
+    setActiveDay={setActiveDay}
+    onOpenChatBuddy={() => setActiveTab('chatbuddy')}
+/>
             )
           )}
           {activeTab === 'questionnaire' && <Questionnaire user={user} />}

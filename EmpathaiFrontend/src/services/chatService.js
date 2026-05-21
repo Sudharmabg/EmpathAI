@@ -2,29 +2,27 @@ import { apiGet, apiPost } from '../api/apiClient';
 
 /**
  * Chat Buddy Service
- * Communicates with the Spring Boot chat controller → Python LLM.
  *
  * POST /api/chat/message   { message, imageBase64?, imageMimeType? }
  *   → { id, role, content, detectedMode, createdAt }
  *
+ * POST /api/chat/log       { userMessage, assistantMessage, source }
+ *   → 200 OK (no body) — logs Schedule Assistant turn without calling LLM
+ *
  * GET  /api/chat/sessions
- *   → [{ id, weekStart, createdAt }]
+ *   → [{ id, weekStart, createdAt, source }]
  *
  * GET  /api/chat/session/:id
- *   → { id, weekStart, createdAt, messages: [...] }
+ *   → { id, weekStart, createdAt, source, messages: [...] }
  *
  * GET  /api/chat/usage
  *   → { used, limit, remaining }
  */
 
-/**
- * Convert a File object to a base64 string (data stripped, raw base64 only).
- */
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
-      // result is "data:image/png;base64,XXXX..." — strip the prefix
       const base64 = reader.result.split(',')[1]
       resolve(base64)
     }
@@ -35,9 +33,8 @@ function fileToBase64(file) {
 
 const chatService = {
   /**
-   * Send a student message with optional image attachment(s).
-   * @param {string} message - Text message
-   * @param {File|string[]|null} imagesOrFile - Single image File or array of base64 strings
+   * Send a student message with optional image attachment.
+   * Goes through the Python LangGraph pipeline.
    */
   sendMessage: async (message, imagesOrFile = []) => {
     const payload = { message }
@@ -46,12 +43,23 @@ const chatService = {
       payload.images = imagesOrFile
     } else if (imagesOrFile instanceof File) {
       const base64 = await fileToBase64(imagesOrFile)
-      payload.imageBase64 = base64
+      payload.imageBase64   = base64
       payload.imageMimeType = imagesOrFile.type
     }
 
     return apiPost('/api/chat/message', payload)
   },
+
+  /**
+   * Log a Schedule Assistant conversation turn directly to the DB.
+   * Does NOT call the Python LLM — just stores the messages.
+   */
+  logScheduleMessage: (userMessage, assistantMessage) =>
+    apiPost('/api/chat/log', {
+      userMessage,
+      assistantMessage,
+      source: 'SCHEDULE',
+    }),
 
   /** All sessions for the current student — no message bodies */
   getSessions: () => apiGet('/api/chat/sessions'),

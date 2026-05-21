@@ -283,7 +283,10 @@ public class AssessmentReportService {
                 Object val = parsed.get(key);
                 if (val instanceof java.util.List<?> list) {
                     for (Object item : list) {
-                        String clean = item.toString().replaceAll("^[•\\-\\s]+", "").trim();
+                        String clean = item.toString()
+                                .replaceAll("^[•\\-\\s]+", "")   // strip bullets/dashes
+                                .replaceAll("^[✅🔹💡\\s]+", "")  // strip any leading emoji
+                                .trim();
                         if (key.equals("strengths"))    bullets.append("✅ ").append(clean).append("\n");
                         else                            bullets.append("🔹 ").append(clean).append("\n");
                     }
@@ -291,8 +294,12 @@ public class AssessmentReportService {
             }
             Object tip = parsed.get("tip");
             if (tip != null) {
-                String clean = tip.toString().replaceAll("^[•\\-\\s]+", "").trim();
+                String clean = tip.toString()
+                        .replaceAll("^[•\\-\\s]+", "")
+                        .replaceAll("^[✅🔹💡\\s]+", "")
+                        .trim();
                 bullets.append("💡 ").append(clean).append("\n");
+
             }
 
             result.put("summary", summary);

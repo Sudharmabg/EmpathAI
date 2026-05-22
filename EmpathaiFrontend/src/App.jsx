@@ -131,9 +131,9 @@ function AppShell() {
         }
       />
 
-      {/* Admin panel */}
+      {/* Admin panel — note the /* for nested routes */}
       <Route
-        path="/admin"
+        path="/admin/*"
         element={
           <ProtectedRoute roles={ADMIN_ROLES}>
             <ErrorBoundary>

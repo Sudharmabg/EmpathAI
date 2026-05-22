@@ -19,6 +19,7 @@ import FlaggedChats from './FlaggedChats'
 import AnalyticsDashboard from './AnalyticsDashboard'
 import Rewards from './Rewards'
 import SchedulePlanner from './SchedulePlanner'
+import NotFound from '../NotFound'
 
 export default function AdminPanel({ user, onLogout }) {
   const navigate = useNavigate()
@@ -66,6 +67,18 @@ export default function AdminPanel({ user, onLogout }) {
   // ── Find current active tab from URL ─────────────────────────────────────
   const currentPath = location.pathname.replace('/admin/', '').split('/')[0]
   const activeItem = filteredMenuItems.find(item => item.path === currentPath)
+
+  // ── Check if URL is an invalid admin sub-route ───────────────────────────
+  const validAdminPaths = menuItems.map(item => item.path)
+  const isInvalidAdminPath = currentPath &&
+    !validAdminPaths.includes(currentPath) &&
+    location.pathname !== '/admin' &&
+    location.pathname !== '/admin/'
+
+  // ── If invalid path → show 404 page ──────────────────────────────────────
+  if (isInvalidAdminPath) {
+    return <NotFound />
+  }
 
   const getSubtitle = () => {
     if (!activeItem) return ''
@@ -173,23 +186,26 @@ export default function AdminPanel({ user, onLogout }) {
 
             {/* ── URL-based routing ────────────────────────────────────── */}
             <Routes>
-              <Route path="users/*"          element={<UserManagement user={user} />} />
-              <Route path="assessments/*"    element={<AssessmentManagement />} />
+              <Route path="users/*"            element={<UserManagement user={user} />} />
+              <Route path="assessments/*"      element={<AssessmentManagement />} />
               <Route path="schedule-planner/*" element={<SchedulePlanner user={user} />} />
-              <Route path="curriculum/*"     element={<CurriculumManagement />} />
-              <Route path="flagged-chats/*"  element={<FlaggedChats />} />
-              <Route path="analytics"        element={<AnalyticsDashboard />} />
-              <Route path="rewards"          element={<Rewards />} />
+              <Route path="curriculum/*"       element={<CurriculumManagement />} />
+              <Route path="flagged-chats/*"    element={<FlaggedChats />} />
+              <Route path="analytics"          element={<AnalyticsDashboard />} />
+              <Route path="rewards"            element={<Rewards />} />
 
-              {/* Default redirect */}
+              {/* Empty path → redirect to first available tab */}
               <Route
-                path="*"
+                index
                 element={
                   filteredMenuItems.length > 0
                     ? <Navigate to={filteredMenuItems[0].path} replace />
                     : <div className="p-8 text-center text-gray-500">No modules available for your role.</div>
                 }
               />
+
+              {/* Invalid sub-path → 404 page */}
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
         </main>

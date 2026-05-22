@@ -38,10 +38,14 @@ function formatSessionLabel(session) {
 
 function formatRelative(iso) {
   if (!iso) return ''
-  const diffH = Math.floor((new Date() - new Date(iso)) / 36e5)
-  if (diffH < 1) return 'Just now'
+  const diffMs = new Date() - new Date(iso)
+  const diffM  = Math.floor(diffMs / 60000)
+  const diffH  = Math.floor(diffMs / 36e5)
+  const diffD  = Math.floor(diffH / 24)
+
+  if (diffM < 1)  return 'Just now'
+  if (diffM < 60) return `${diffM}m ago`
   if (diffH < 24) return `${diffH}h ago`
-  const diffD = Math.floor(diffH / 24)
   return diffD === 1 ? 'Yesterday' : `${diffD} days ago`
 }
 
@@ -363,6 +367,11 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     if (initialMessage) {
       setInputMessage(initialMessage)
       setChatMessage?.('')
+      // Auto-send the message after a short delay
+      setTimeout(() => {
+        const sendBtn = document.querySelector('[data-send-btn]')
+        if (sendBtn) sendBtn.click()
+      }, 300)
     }
   }, [initialMessage, setChatMessage])
 
@@ -732,10 +741,11 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                 </div>
 
                 <button
-                  onClick={handleSendMessage}
-                  disabled={isLoading || !inputMessage.trim() || (usage && usage.remaining === 0)}
-                  className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl px-4 py-3 transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
-                >
+    data-send-btn
+    onClick={handleSendMessage}
+    disabled={isLoading || !inputMessage.trim() || (usage && usage.remaining === 0)}
+    className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl px-4 py-3 transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
+>
                   {isLoading
                     ? <ArrowPathIcon className="w-5 h-5 animate-spin" />
                     : <PaperAirplaneIcon className="w-5 h-5" />
@@ -831,11 +841,15 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                         <p className="text-sm font-medium text-gray-900 truncate">
                           {formatSessionLabel(session)}
                         </p>
-                        {session.source === 'SCHEDULE' && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 border border-violet-200 shrink-0 whitespace-nowrap">
-                            🗓 Schedule
-                          </span>
-                        )}
+                        {session.source === 'SCHEDULE' ? (
+    <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 border border-violet-200 shrink-0 whitespace-nowrap">
+        🗓 Schedule
+    </span>
+) : (
+    <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600 border border-purple-200 shrink-0 whitespace-nowrap">
+        💬 ChatBuddy
+    </span>
+)}
                       </div>
                       <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                         <ClockIcon className="w-3 h-3" />

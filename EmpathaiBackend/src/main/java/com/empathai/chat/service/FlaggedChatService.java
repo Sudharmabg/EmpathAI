@@ -18,8 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.TemporalAdjusters;
-import java.time.DayOfWeek;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -70,7 +68,9 @@ public class FlaggedChatService {
         }
 
         // Truncate message if needed
-        String truncated = message.length() > 1000 ? message.substring(0, 997) + "..." : message;
+        String truncated = message.length() > 1000
+                ? message.substring(0, 997) + "..."
+                : message;
 
         FlaggedChat flag = FlaggedChat.builder()
                 .sessionId(sessionId)
@@ -83,7 +83,8 @@ public class FlaggedChatService {
                 .build();
 
         flaggedChatRepository.save(flag);
-        log.info("Flag created: studentId={} severity={} reason={}", studentId, severity, flagReason);
+        log.info("Flag created: studentId={} severity={} reason={}",
+                studentId, severity, flagReason);
     }
 
     // ── List with Filters ─────────────────────────────────────────────────────
@@ -94,8 +95,10 @@ public class FlaggedChatService {
             int page,
             int size
     ) {
-        Severity severity = severityStr != null ? Severity.valueOf(severityStr.toUpperCase()) : null;
-        FlagStatus status = statusStr  != null ? FlagStatus.valueOf(statusStr.toUpperCase())  : null;
+        Severity severity = severityStr != null
+                ? Severity.valueOf(severityStr.toUpperCase()) : null;
+        FlagStatus status = statusStr != null
+                ? FlagStatus.valueOf(statusStr.toUpperCase()) : null;
 
         return flaggedChatRepository
                 .findAllWithFilters(severity, status, PageRequest.of(page, size))
@@ -108,15 +111,18 @@ public class FlaggedChatService {
         LocalDateTime startOfDay  = LocalDate.now().atStartOfDay();
         LocalDateTime startOfHour = LocalDateTime.now().minusHours(1);
 
-        long totalToday    = flaggedChatRepository.countCreatedSince(startOfDay);
-        long lastHour      = flaggedChatRepository.countCreatedSince(startOfHour);
-        long critPending   = flaggedChatRepository.countBySeverityAndStatus(Severity.CRITICAL, FlagStatus.PENDING);
-        long total         = flaggedChatRepository.count();
-        long actioned      = flaggedChatRepository.countByStatusNot(FlagStatus.PENDING);
+        long totalToday  = flaggedChatRepository.countCreatedSince(startOfDay);
+        long lastHour    = flaggedChatRepository.countCreatedSince(startOfHour);
+        long critPending = flaggedChatRepository.countBySeverityAndStatus(
+                Severity.CRITICAL, FlagStatus.PENDING);
+        long total    = flaggedChatRepository.count();
+        long actioned = flaggedChatRepository.countByStatusNot(FlagStatus.PENDING);
 
-        double resolvedPct = total == 0 ? 0.0 : Math.round((actioned * 100.0 / total) * 10) / 10.0;
+        double resolvedPct = total == 0
+                ? 0.0
+                : Math.round((actioned * 100.0 / total) * 10) / 10.0;
 
-        // Average response time: placeholder (14 min default, can be computed from DB later)
+        // Average response time: placeholder
         double avgResponse = 14.0;
 
         return FlaggedChatStatsResponse.builder()
@@ -131,19 +137,25 @@ public class FlaggedChatService {
     // ── Transcript View ───────────────────────────────────────────────────────
 
     /**
-     * Returns the full message history for the week in which this flag was created.
+     * Returns the full message history for the session in which this flag
+     * was created. Works for both CHAT and SCHEDULE sessions.
      * Restricted to authorised roles — enforced at controller level.
      */
     public ChatSessionResponse getTranscript(Long flagId) {
         FlaggedChat flag = flaggedChatRepository.findById(flagId)
-                .orElseThrow(() -> new EmpathaiException("Flagged chat not found: " + flagId));
+                .orElseThrow(() -> new EmpathaiException(
+                        "Flagged chat not found: " + flagId));
 
-        // Find the session for the week this flag was raised
-        LocalDate weekStart = flag.getCreatedAt().toLocalDate()
-                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        // ✅ Use sessionId directly from the flag — works for both CHAT and SCHEDULE
+        ChatSession session = sessionRepo.findById(flag.getSessionId())
+                .orElseThrow(() -> new EmpathaiException(
+                        "No session found for this flag"));
 
-        ChatSession session = sessionRepo.findByStudentIdAndWeekStart(flag.getStudentId(), weekStart)
-                .orElseThrow(() -> new EmpathaiException("No session found for this flag's week"));
+        // Security check — session must belong to the flagged student
+        if (!session.getStudentId().equals(flag.getStudentId())) {
+            throw new EmpathaiException(
+                    "Session does not belong to flagged student");
+        }
 
         List<ChatMessageResponse> messages = messageRepo
                 .findBySessionIdOrderByCreatedAtAsc(session.getId())
@@ -161,6 +173,7 @@ public class FlaggedChatService {
                 .id(session.getId())
                 .weekStart(session.getWeekStart())
                 .createdAt(session.getCreatedAt())
+                .source(session.getSource())         // ✅ includes CHAT or SCHEDULE
                 .messages(messages)
                 .build();
     }
@@ -170,11 +183,13 @@ public class FlaggedChatService {
     @Transactional
     public FlaggedChatResponse assign(Long flagId, AssignRequest request) {
         FlaggedChat flag = flaggedChatRepository.findById(flagId)
-                .orElseThrow(() -> new EmpathaiException("Flagged chat not found: " + flagId));
+                .orElseThrow(() -> new EmpathaiException(
+                        "Flagged chat not found: " + flagId));
 
         // Validate psychologist exists
         userRepository.findById(request.getPsychologistId())
-                .orElseThrow(() -> new EmpathaiException("Psychologist not found: " + request.getPsychologistId()));
+                .orElseThrow(() -> new EmpathaiException(
+                        "Psychologist not found: " + request.getPsychologistId()));
 
         flag.setAssignedPsychologistId(request.getPsychologistId());
         flag.setStatus(FlagStatus.ASSIGNED);
@@ -187,7 +202,8 @@ public class FlaggedChatService {
     @Transactional
     public FlaggedChatResponse updateStatus(Long flagId, UpdateStatusRequest request) {
         FlaggedChat flag = flaggedChatRepository.findById(flagId)
-                .orElseThrow(() -> new EmpathaiException("Flagged chat not found: " + flagId));
+                .orElseThrow(() -> new EmpathaiException(
+                        "Flagged chat not found: " + flagId));
 
         flag.setStatus(request.getStatus());
         return toResponse(flaggedChatRepository.save(flag));
@@ -196,25 +212,27 @@ public class FlaggedChatService {
     // ── Mapper ────────────────────────────────────────────────────────────────
 
     private FlaggedChatResponse toResponse(FlaggedChat flag) {
-        FlaggedChatResponse.FlaggedChatResponseBuilder builder = FlaggedChatResponse.builder()
-                .id(flag.getId())
-                .sessionId(flag.getSessionId())
-                .studentId(flag.getStudentId())
-                .lastMessage(flag.getLastMessage())
-                .flagReason(flag.getFlagReason())
-                .sentiment(flag.getSentiment())
-                .severity(flag.getSeverity())
-                .status(flag.getStatus())
-                .assignedPsychologistId(flag.getAssignedPsychologistId())
-                .createdAt(flag.getCreatedAt())
-                .updatedAt(flag.getUpdatedAt());
+        FlaggedChatResponse.FlaggedChatResponseBuilder builder =
+                FlaggedChatResponse.builder()
+                        .id(flag.getId())
+                        .sessionId(flag.getSessionId())
+                        .studentId(flag.getStudentId())
+                        .lastMessage(flag.getLastMessage())
+                        .flagReason(flag.getFlagReason())
+                        .sentiment(flag.getSentiment())
+                        .severity(flag.getSeverity())
+                        .status(flag.getStatus())
+                        .assignedPsychologistId(flag.getAssignedPsychologistId())
+                        .createdAt(flag.getCreatedAt())
+                        .updatedAt(flag.getUpdatedAt());
 
         // Enrich with student info
         userRepository.findById(flag.getStudentId()).ifPresent(user -> {
             builder.studentName(user.getName());
             if (user instanceof Student s) {
                 builder.studentClass(s.getClassName());
-                builder.school(s.getSchoolId() != null ? String.valueOf(s.getSchoolId()) : null);
+                builder.school(s.getSchoolId() != null
+                        ? String.valueOf(s.getSchoolId()) : null);
             }
         });
 

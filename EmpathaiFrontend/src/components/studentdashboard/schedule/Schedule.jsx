@@ -860,11 +860,11 @@ YOUR BEHAVIOUR:
     const lower = text.toLowerCase()
     const isCrisis = CRISIS_KEYWORDS.some(kw => lower.includes(kw))
     if (isCrisis) {
-        setInputMessage('')
-        onClose()
-        onOpenChatBuddy?.()
-        return
-    }
+    setInputMessage('')
+    onClose()
+    onOpenChatBuddy?.(text)
+    return
+}
 
     // ── Normal agent loop ──────────────────────────────────────────────────
     const userMsg = { id: `u-${Date.now()}`, role: 'user', content: text }
@@ -1989,10 +1989,10 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         activeDay={activeDay}
         onClose={() => setShowMiniChat(false)}
         onTaskChanged={() => setRecsTrigger(t => t + 1)}
-        onOpenChatBuddy={() => {
-            setShowMiniChat(false)
-            onOpenChatBuddy?.()
-        }}
+        onOpenChatBuddy={(message) => {
+    setShowMiniChat(false)
+    onOpenChatBuddy?.(message)
+}}
     />
 )}
         </div>

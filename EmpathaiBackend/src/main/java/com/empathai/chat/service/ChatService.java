@@ -194,7 +194,7 @@ public class ChatService {
             }
         }
 
-        // ── Save user message to MySQL (for ChatBuddy sidebar history) ─────────
+        // ── Save user message to MySQL ─────────────────────────────────────────
         messageRepo.save(ChatMessage.builder()
                 .sessionId(session.getId())
                 .role("user")
@@ -218,7 +218,6 @@ public class ChatService {
 
     // ─────────────────────────────────────────────────────────────────────────
     // LOG SCHEDULE MESSAGE (Schedule Assistant — no Python LLM call)
-    // Stores Schedule Assistant conversations in MySQL for ChatBuddy sidebar
     // ─────────────────────────────────────────────────────────────────────────
 
     @Transactional
@@ -263,20 +262,45 @@ public class ChatService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // GET OR CREATE SCHEDULE SESSION ID (used by CrisisCheckController)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Transactional
+    public Long getOrCreateScheduleSessionId(Long studentId, LocalDate weekStart) {
+        return sessionRepo
+                .findByStudentIdAndWeekStartAndSource(studentId, weekStart, "SCHEDULE")
+                .orElseGet(() -> sessionRepo.save(ChatSession.builder()
+                        .studentId(studentId)
+                        .weekStart(weekStart)
+                        .source("SCHEDULE")
+                        .build()))
+                .getId();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // SESSIONS & USAGE
     // ─────────────────────────────────────────────────────────────────────────
 
     public List<ChatSessionResponse> getSessions(Long studentId) {
         return sessionRepo.findByStudentIdOrderByWeekStartDesc(studentId).stream()
-                .map(s -> ChatSessionResponse.builder()
-                        .id(s.getId())
-                        .weekStart(s.getWeekStart())
-                        .createdAt(s.getCreatedAt())
-                        .source(s.getSource())          // ✅ included for sidebar badge
-                        .build())
+                .map(s -> {
+                    // ✅ Use latest message time instead of session creation time
+                    LocalDateTime lastMessageAt = messageRepo
+                            .findTopBySessionIdOrderByCreatedAtDesc(s.getId())
+                            .map(ChatMessage::getCreatedAt)
+                            .orElse(s.getCreatedAt());
+
+                    return ChatSessionResponse.builder()
+                            .id(s.getId())
+                            .weekStart(s.getWeekStart())
+                            .createdAt(lastMessageAt)
+                            .source(s.getSource())
+                            .build();
+                })
+                // ✅ Sort by latest message time — most recent chat on top
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .collect(Collectors.toList());
     }
-
     public ChatSessionResponse getSessionMessages(Long sessionId, Long studentId) {
         ChatSession session = sessionRepo.findById(sessionId)
                 .orElseThrow(() -> new EmpathaiException("Session not found"));
@@ -294,7 +318,7 @@ public class ChatService {
                 .id(session.getId())
                 .weekStart(session.getWeekStart())
                 .createdAt(session.getCreatedAt())
-                .source(session.getSource())             // ✅ included
+                .source(session.getSource())
                 .messages(messages)
                 .build();
     }

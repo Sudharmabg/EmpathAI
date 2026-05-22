@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
   MagnifyingGlassIcon, BellIcon, CalendarIcon, GiftIcon, HomeIcon,
   ChatBubbleLeftRightIcon, BookOpenIcon, ClipboardDocumentListIcon,
@@ -17,9 +18,10 @@ import NotificationsModal from './dashboard/NotificationsModal'
 
 import { getWeekTasks } from '../api/scheduleApi.js'
 
+// ─── Valid tab IDs ─────────────────────────────────────────────────────────────
+const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities']
+
 // ─── Subject extraction helper ────────────────────────────────────────────────
-// Maps known keywords in task titles → syllabus subject names stored in the DB.
-// Add more entries here as new subjects are added.
 const SUBJECT_KEYWORD_MAP = [
   { keywords: ['math', 'mathematics', 'maths'], subject: 'Mathematics' },
   { keywords: ['science'], subject: 'Science' },
@@ -29,19 +31,11 @@ const SUBJECT_KEYWORD_MAP = [
   { keywords: ['art', 'craft', 'art & craft'], subject: 'Art & Craft' },
 ]
 
-/**
- * Given the full tasks object (keyed by day) and a day name,
- * returns an array of matched subject names for Study-type tasks on that day.
- *
- * e.g. tasks["Friday"] has "Study session — Mathematics"
- *   → returns ["Mathematics"]
- */
 function getScheduledSubjectsForDay(tasks, day) {
   const dayTasks = tasks[day] || []
   const matched = new Set()
 
   dayTasks.forEach(task => {
-    // Only process Study-type tasks
     const type = (task.detectedType || '').toLowerCase()
     if (type !== 'study') return
 
@@ -57,14 +51,24 @@ function getScheduledSubjectsForDay(tasks, day) {
 }
 
 export default function Dashboard({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState('overview')
+  // ── URL-driven tab state ──────────────────────────────────────────────────
+  const { tab } = useParams()
+  const navigate = useNavigate()
+
+  // Normalise: if the URL has an unknown tab, fall back to overview
+  const activeTab = VALID_TABS.includes(tab) ? tab : 'overview'
+
+  // This replaces every `setActiveTab(id)` call across the whole file.
+  // Navigating to /student/:id updates the URL, which re-renders with the new tab.
+  const setActiveTab = (id) => navigate(`/student/${id}`)
+
+  // ── Everything below is unchanged ────────────────────────────────────────
   const [activeHeaderModal, setActiveHeaderModal] = useState(null)
   const [chatMessage, setChatMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [showScheduleDropdown, setShowScheduleDropdown] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
 
-  // ── Active day (shared between Schedule and Curriculum) ───────────────────
   const [activeDay, setActiveDay] = useState(() => {
     const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     return DAYS[new Date().getDay()]
@@ -99,8 +103,6 @@ export default function Dashboard({ user, onLogout }) {
   const toggleTaskComplete = (day, taskId) =>
     setTasks(prev => ({ ...prev, [day]: prev[day].map(t => t.id === taskId ? { ...t, completed: !t.completed } : t) }))
 
-  // ── Derive scheduled subjects for the active day ───────────────────────────
-  // This is recomputed whenever tasks or activeDay changes.
   const scheduledSubjects = getScheduledSubjectsForDay(tasks, activeDay)
 
   const sidebarItems = [
@@ -195,7 +197,10 @@ export default function Dashboard({ user, onLogout }) {
                     ))}
                   </div>
                 )}
-                <button onClick={() => { setActiveTab('schedule'); setActiveDay(todayDayName); setShowScheduleDropdown(false) }} className="w-full mt-3 bg-black text-white text-xs font-bold py-2 rounded-lg hover:bg-gray-800 transition-colors">
+                <button
+                  onClick={() => { setActiveTab('schedule'); setActiveDay(todayDayName); setShowScheduleDropdown(false) }}
+                  className="w-full mt-3 bg-black text-white text-xs font-bold py-2 rounded-lg hover:bg-gray-800 transition-colors"
+                >
                   View Full Schedule
                 </button>
               </div>
@@ -292,14 +297,7 @@ export default function Dashboard({ user, onLogout }) {
             ) : tasksError ? (
               <div className="bg-red-50 border-2 border-red-200 rounded-2xl px-6 py-4 text-red-600 font-medium text-sm text-center">{tasksError}</div>
             ) : (
-              <Schedule
-    user={user}
-    tasks={tasks}
-    setTasks={setTasks}
-    activeDay={activeDay}
-    setActiveDay={setActiveDay}
-    onOpenChatBuddy={() => setActiveTab('chatbuddy')}
-/>
+              <Schedule user={user} tasks={tasks} setTasks={setTasks} activeDay={activeDay} setActiveDay={setActiveDay} />
             )
           )}
           {activeTab === 'questionnaire' && <Questionnaire user={user} />}

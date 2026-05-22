@@ -9,10 +9,10 @@ class HistoryMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     # ── Core input ───────────────────────────────────────────────────────────
+    student_id: str                                    # ✅ NEW — used as LangGraph thread_id
     student_name: str
     grade: str
     message: str
-    history: List[HistoryMessage] = Field(default_factory=list)
     images: Optional[List[str]] = Field(default_factory=list)
     image_base64: Optional[str] = None
     image_mime_type: Optional[str] = None
@@ -29,7 +29,7 @@ class ChatRequest(BaseModel):
     latest_mood_score: Optional[int] = None
     mood_label: Optional[str] = None
 
-    # ── NEW: Emotional context for LangGraph emotional support ──────────────
+    # ── Emotional context ────────────────────────────────────────────────────
     weekly_mood_history: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     assessment_summary: Optional[Dict[str, Any]] = None
 

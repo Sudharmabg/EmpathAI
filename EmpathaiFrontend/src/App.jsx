@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom'
 
 import Header from './components/pagelayout/Header'
 import Hero from './components/pagelayout/Hero'
@@ -12,6 +12,7 @@ import AdminPanel from './components/admin/AdminPanel'
 import Auth from './components/Auth'
 import SetPassword from './components/SetPassword'
 import ProtectedRoute from './components/ProtectedRoute'
+import NotFound from './components/NotFound'
 import ErrorBoundary from './components/ErrorBoundary'
 
 import { getCurrentUser, logout as authLogout } from './api/authApi.js'
@@ -20,9 +21,25 @@ import useTimeTracker from './api/useTimeTracker'
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PSYCHOLOGIST', 'CONTENT_ADMIN', 'TEACHER']
 
+// ── All valid student tabs ─────────────────────────────────────────────────────
+const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities']
+
 function isAdmin(user) {
   if (!user) return false
   return ADMIN_ROLES.includes(user.role)
+}
+
+// ── Guard: renders Dashboard only for known tabs, 404 for everything else ──────
+function StudentRoute({ user, onLogout }) {
+  const { tab } = useParams()
+  if (!VALID_TABS.includes(tab)) return <NotFound />
+  return (
+    <ProtectedRoute>
+      <ErrorBoundary>
+        <Dashboard user={user} onLogout={onLogout} />
+      </ErrorBoundary>
+    </ProtectedRoute>
+  )
 }
 
 // ─── Home page (landing) ──────────────────────────────────────────────────────
@@ -43,7 +60,7 @@ function HomePage({ user, onLogin, onLogout }) {
   const handleLogin = (userData) => {
     onLogin(userData)
     setShowLoginModal(false)
-    navigate(isAdmin(userData) ? '/admin' : '/dashboard')
+    navigate(isAdmin(userData) ? '/admin' : '/student/overview')
   }
 
   return (
@@ -69,7 +86,6 @@ function AppShell() {
   const [user, setUser] = useState(() => getCurrentUser())
   const navigate = useNavigate()
 
-  // ── Single time tracking instance for the entire app ──────────────────────
   const studentId = user && !isAdmin(user) ? user.id : null
   useTimeTracker(studentId)
 
@@ -82,9 +98,7 @@ function AppShell() {
     return () => window.removeEventListener('auth:logout', handleAuthLogout)
   }, [navigate])
 
-  const handleLogin = (userData) => {
-    setUser(userData)
-  }
+  const handleLogin = (userData) => setUser(userData)
 
   const handleLogout = async () => {
     authLogout()
@@ -95,17 +109,17 @@ function AppShell() {
 
   return (
     <Routes>
-      {/* Landing page — redirect to dashboard/admin if already logged in */}
+      {/* Landing */}
       <Route
         path="/"
         element={
           user
-            ? <Navigate to={isAdmin(user) ? '/admin' : '/dashboard'} replace />
+            ? <Navigate to={isAdmin(user) ? '/admin' : '/student/overview'} replace />
             : <HomePage user={user} onLogin={handleLogin} onLogout={handleLogout} />
         }
       />
 
-      {/* Auth page */}
+      {/* Auth */}
       <Route
         path="/auth"
         element={
@@ -113,27 +127,24 @@ function AppShell() {
             onBackToHome={() => navigate('/')}
             onLoginSuccess={(u) => {
               handleLogin(u)
-              navigate(isAdmin(u) ? '/admin' : '/dashboard')
+              navigate(isAdmin(u) ? '/admin' : '/student/overview')
             }}
           />
         }
       />
 
-      {/* Student dashboard */}
+      {/* Student dashboard — invalid :tab shows 404 inside StudentRoute */}
       <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <ErrorBoundary>
-              <Dashboard user={user} onLogout={handleLogout} />
-            </ErrorBoundary>
-          </ProtectedRoute>
-        }
+        path="/student/:tab"
+        element={<StudentRoute user={user} onLogout={handleLogout} />}
       />
 
-      {/* Admin panel */}
+      {/* Old /dashboard bookmark redirect */}
+      <Route path="/dashboard" element={<Navigate to="/student/overview" replace />} />
+
+      {/* Admin panel — note the /* for nested routes */}
       <Route
-        path="/admin"
+        path="/admin/*"
         element={
           <ProtectedRoute roles={ADMIN_ROLES}>
             <ErrorBoundary>
@@ -143,11 +154,11 @@ function AppShell() {
         }
       />
 
-      {/* Set password (public) */}
+      {/* Set password */}
       <Route path="/set-password" element={<SetPassword />} />
 
-      {/* Catch-all */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Catch-all — completely unknown paths */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }

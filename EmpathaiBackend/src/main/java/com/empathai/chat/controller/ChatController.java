@@ -1,5 +1,6 @@
 package com.empathai.chat.controller;
 
+import com.empathai.chat.dto.ChatLogRequest;
 import com.empathai.chat.dto.ChatMessageRequest;
 import com.empathai.chat.dto.ChatMessageResponse;
 import com.empathai.chat.dto.ChatSessionResponse;
@@ -41,11 +42,33 @@ public class ChatController {
                     request.getImageBase64(),
                     request.getImageMimeType()
             );
-            ResponseEntity<ChatMessageResponse> result = ResponseEntity.ok(response);
             logger.info("sendMessage completed successfully for userId={}", currentUser.getId());
-            return result;
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("sendMessage failed for userId={}: {}", currentUser.getId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Log a Schedule Assistant conversation turn (no AI call).
+     * POST /api/chat/log
+     */
+    @PostMapping("/log")
+    public ResponseEntity<Void> logScheduleMessage(
+            @AuthenticationPrincipal User currentUser,
+            @RequestBody ChatLogRequest request) {
+        logger.info("logScheduleMessage started for userId={}", currentUser.getId());
+        try {
+            chatService.logScheduleMessage(
+                    currentUser.getId(),
+                    request.getUserMessage(),
+                    request.getAssistantMessage()
+            );
+            logger.info("logScheduleMessage completed for userId={}", currentUser.getId());
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            logger.error("logScheduleMessage failed for userId={}: {}", currentUser.getId(), e.getMessage(), e);
             throw e;
         }
     }
@@ -59,7 +82,8 @@ public class ChatController {
             @AuthenticationPrincipal User currentUser) {
         logger.info("getSessions started for userId={}", currentUser.getId());
         try {
-            ResponseEntity<List<ChatSessionResponse>> result = ResponseEntity.ok(chatService.getSessions(currentUser.getId()));
+            ResponseEntity<List<ChatSessionResponse>> result =
+                    ResponseEntity.ok(chatService.getSessions(currentUser.getId()));
             logger.info("getSessions completed successfully for userId={}", currentUser.getId());
             return result;
         } catch (Exception e) {
@@ -78,11 +102,13 @@ public class ChatController {
             @AuthenticationPrincipal User currentUser) {
         logger.info("getSession started for sessionId={}, userId={}", id, currentUser.getId());
         try {
-            ResponseEntity<ChatSessionResponse> result = ResponseEntity.ok(chatService.getSessionMessages(id, currentUser.getId()));
+            ResponseEntity<ChatSessionResponse> result =
+                    ResponseEntity.ok(chatService.getSessionMessages(id, currentUser.getId()));
             logger.info("getSession completed successfully for sessionId={}, userId={}", id, currentUser.getId());
             return result;
         } catch (Exception e) {
-            logger.error("getSession failed for sessionId={}, userId={}: {}", id, currentUser.getId(), e.getMessage(), e);
+            logger.error("getSession failed for sessionId={}, userId={}: {}",
+                    id, currentUser.getId(), e.getMessage(), e);
             throw e;
         }
     }
@@ -96,7 +122,8 @@ public class ChatController {
             @AuthenticationPrincipal User currentUser) {
         logger.info("getUsage started for userId={}", currentUser.getId());
         try {
-            ResponseEntity<ChatUsageResponse> result = ResponseEntity.ok(chatService.getUsage(currentUser.getId()));
+            ResponseEntity<ChatUsageResponse> result =
+                    ResponseEntity.ok(chatService.getUsage(currentUser.getId()));
             logger.info("getUsage completed successfully for userId={}", currentUser.getId());
             return result;
         } catch (Exception e) {
@@ -104,5 +131,4 @@ public class ChatController {
             throw e;
         }
     }
-
 }

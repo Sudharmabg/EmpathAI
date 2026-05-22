@@ -10,6 +10,13 @@ import java.util.Optional;
 
 @Repository
 public interface ChatSessionRepository extends JpaRepository<ChatSession, Long> {
+
+    // ── Existing ──────────────────────────────────────────────────────────────
     Optional<ChatSession> findByStudentIdAndWeekStart(Long studentId, LocalDate weekStart);
+
     List<ChatSession> findByStudentIdOrderByWeekStartDesc(Long studentId);
+
+    // ── NEW — used for CHAT and SCHEDULE sessions separately ─────────────────
+    Optional<ChatSession> findByStudentIdAndWeekStartAndSource(
+            Long studentId, LocalDate weekStart, String source);
 }

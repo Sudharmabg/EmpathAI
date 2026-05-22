@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import {
     PlusIcon, PencilIcon, TrashIcon, UserPlusIcon, ChevronDownIcon, ChevronRightIcon,
@@ -26,6 +27,21 @@ const TAB_ROLE_MAP = {
     content_admin: 'CONTENT_ADMIN',
     teacher: 'TEACHER',
 }
+
+// ── URL-friendly slugs ←→ internal tab IDs ─────────────────────────────────
+const TAB_TO_SLUG = {
+    student:       'students',
+    school_admin:  'school-admins',
+    psychologist:  'psychologists',
+    content_admin: 'content-admins',
+    schools:       'schools',
+    teacher:       'teachers',
+}
+
+const SLUG_TO_TAB = Object.entries(TAB_TO_SLUG).reduce((acc, [k, v]) => {
+    acc[v] = k
+    return acc
+}, {})
 
 const ordinal = (n) => {
     const s = ['th', 'st', 'nd', 'rd']
@@ -77,7 +93,47 @@ const EMPTY_FORM = {
 }
 
 export default function UserManagement({ user }) {
-    const [activeTab, setActiveTab] = useState('student')
+    const navigate = useNavigate()
+    const params = useParams()   // captures the "*" segment from /admin/users/*
+
+    // ── Determine roles available for this user ──────────────────────────
+    const roles = [
+        { id: 'student',       label: 'Students' },
+        { id: 'school_admin',  label: 'School Admin' },
+        { id: 'psychologist',  label: 'Psychologists' },
+        { id: 'content_admin', label: 'Content Admins' },
+        { id: 'schools',       label: 'Schools' },
+        { id: 'teacher',       label: 'Teachers' },
+    ].filter(r => {
+        if (user?.role === 'SUPER_ADMIN') return true
+        if (user?.role === 'SCHOOL_ADMIN') return r.id === 'student' || r.id === 'teacher'
+        return false
+    })
+
+    // ── Derive activeTab from URL ────────────────────────────────────────
+    const slugFromUrl = params['*'] || ''   // e.g. "students" or "students/extra"
+    const firstSegment = slugFromUrl.split('/')[0]
+    const tabFromUrl = SLUG_TO_TAB[firstSegment]
+    const validTab = roles.find(r => r.id === tabFromUrl)
+    const activeTab = validTab ? tabFromUrl : (roles[0]?.id || 'student')
+
+    // ── Auto-redirect to default tab if URL has no/invalid slug ─────────
+    useEffect(() => {
+        if (!firstSegment || !SLUG_TO_TAB[firstSegment] || !validTab) {
+            const defaultSlug = TAB_TO_SLUG[roles[0]?.id]
+            if (defaultSlug) {
+                navigate(`/admin/users/${defaultSlug}`, { replace: true })
+            }
+        }
+    }, [firstSegment, validTab, roles, navigate])
+
+    // ── Handler to change tab via URL ────────────────────────────────────
+    const setActiveTab = (tabId) => {
+        const slug = TAB_TO_SLUG[tabId]
+        if (slug) navigate(`/admin/users/${slug}`)
+    }
+
+    // ── All other state stays the same ───────────────────────────────────
     const [searchTerm, setSearchTerm] = useState('')
     const [selectedSchool, setSelectedSchool] = useState(null)
     const [selectedClass, setSelectedClass] = useState(null)
@@ -98,19 +154,6 @@ export default function UserManagement({ user }) {
     const [validationErrors, setValidationErrors] = useState({})
     const [formData, setFormData] = useState({ ...EMPTY_FORM })
     const schoolsForFormRef = useRef([])
-
-    const roles = [
-        { id: 'student', label: 'Students' },
-        { id: 'school_admin', label: 'School Admin' },
-        { id: 'psychologist', label: 'Psychologists' },
-        { id: 'content_admin', label: 'Content Admins' },
-        { id: 'schools', label: 'Schools' },
-        { id: 'teacher', label: 'Teachers' },
-    ].filter(r => {
-        if (user?.role === 'SUPER_ADMIN') return true
-        if (user?.role === 'SCHOOL_ADMIN') return r.id === 'student' || r.id === 'teacher'
-        return false
-    })
 
     const loadSchools = useCallback(async () => {
         setLoading(true)
@@ -637,7 +680,6 @@ export default function UserManagement({ user }) {
                                                             </td>
                                                         </tr>
 
-                                                        {/* Expanded Row */}
                                                         {expandedRow === u.id && (
                                                             <tr className="bg-gray-50">
                                                                 <td colSpan={5} className="px-8 py-4">

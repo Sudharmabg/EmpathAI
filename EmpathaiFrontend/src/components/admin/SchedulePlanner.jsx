@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   ClockIcon,
   PlusIcon,
@@ -21,6 +22,19 @@ const CLASS_OPTIONS = [
   '1st Standard', '2nd Standard', '3rd Standard', '4th Standard', '5th Standard', '6th Standard',
   '7th Standard', '8th Standard', '9th Standard', '10th Standard', '11th Standard', '12th Standard',
 ]
+
+// ── URL-friendly slugs ←→ internal section IDs ──────────────────────────────
+const SECTION_TO_SLUG = {
+  'school-timings': 'school-timings',
+  'exam-dates':     'exam-dates',
+}
+
+const SLUG_TO_SECTION = Object.entries(SECTION_TO_SLUG).reduce((acc, [k, v]) => {
+  acc[v] = k
+  return acc
+}, {})
+
+const VALID_SECTIONS = Object.keys(SECTION_TO_SLUG)
 
 // ── Inline message banner ─────────────────────────────────────────────────────
 const InlineMsg = ({ msg }) => {
@@ -175,10 +189,8 @@ function SchoolTimingsPanel({ schoolId, schoolName }) {
   return (
     <div className="space-y-5">
 
-      {/* Class sub-tabs */}
       <ClassTabs activeClass={activeClass} onSelect={cls => { setActiveClass(cls); setFormMsg({ type: '', text: '' }) }} />
 
-      {/* Add Row Form */}
       <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
         <p className="text-sm font-bold text-gray-700 mb-1">
           Add Time Block —{' '}
@@ -226,7 +238,6 @@ function SchoolTimingsPanel({ schoolId, schoolName }) {
         </button>
       </div>
 
-      {/* Table for active class */}
       {classTimings.length === 0 ? (
         <div className="text-center py-10 text-gray-400">
           <ClockIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -351,10 +362,8 @@ function ExamDatesPanel({ schoolId, schoolName }) {
   return (
     <div className="space-y-5">
 
-      {/* Class sub-tabs */}
       <ClassTabs activeClass={activeClass} onSelect={cls => { setActiveClass(cls); setFormMsg({ type: '', text: '' }) }} />
 
-      {/* Add Exam Form */}
       <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
         <p className="text-sm font-bold text-gray-700 mb-1">
           Add Exam —{' '}
@@ -394,7 +403,6 @@ function ExamDatesPanel({ schoolId, schoolName }) {
         </button>
       </div>
 
-      {/* Table for active class */}
       {classExams.length === 0 ? (
         <div className="text-center py-10 text-gray-400">
           <AcademicCapIcon className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -452,7 +460,28 @@ function ExamDatesPanel({ schoolId, schoolName }) {
 // Main Component
 // ══════════════════════════════════════════════════════════════════════════════
 export default function SchedulePlanner({ user }) {
-  const [activeSection, setActiveSection] = useState('school-timings')
+  const navigate = useNavigate()
+  const params = useParams()
+
+  // ── Derive activeSection from URL ────────────────────────────────────────
+  const slugFromUrl = params['*'] || ''
+  const firstSegment = slugFromUrl.split('/')[0]
+  const sectionFromUrl = SLUG_TO_SECTION[firstSegment]
+  const activeSection = sectionFromUrl || 'school-timings'
+
+  // ── Auto-redirect to default section if URL is invalid ───────────────────
+  useEffect(() => {
+    if (!firstSegment || !SLUG_TO_SECTION[firstSegment]) {
+      navigate('/admin/schedule-planner/school-timings', { replace: true })
+    }
+  }, [firstSegment, navigate])
+
+  // ── Handler to change section via URL ────────────────────────────────────
+  const setActiveSection = (sectionId) => {
+    const slug = SECTION_TO_SLUG[sectionId]
+    if (slug) navigate(`/admin/schedule-planner/${slug}`)
+  }
+
   const [schools, setSchools] = useState([])
   const [activeTimingSchoolId, setActiveTimingSchoolId] = useState('')
   const [activeExamSchoolId, setActiveExamSchoolId] = useState('')

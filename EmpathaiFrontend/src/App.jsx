@@ -139,14 +139,10 @@ function AppShell() {
         element={<StudentRoute user={user} onLogout={handleLogout} />}
       />
 
-<<<<<<< HEAD
-      {/* Admin panel — note the /* for nested routes */}
-=======
       {/* Old /dashboard bookmark redirect */}
       <Route path="/dashboard" element={<Navigate to="/student/overview" replace />} />
 
-      {/* Admin panel */}
->>>>>>> 3273cb274d3f07ca3ccc68aea2f0929ef7c39faf
+      {/* Admin panel — note the /* for nested routes */}
       <Route
         path="/admin/*"
         element={

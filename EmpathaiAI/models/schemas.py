@@ -9,7 +9,7 @@ class HistoryMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     # ── Core input ───────────────────────────────────────────────────────────
-    student_id: str                                    # ✅ NEW — used as LangGraph thread_id
+    student_id: str                                   
     student_name: str
     grade: str
     message: str
@@ -28,6 +28,11 @@ class ChatRequest(BaseModel):
     # ── Mood context ─────────────────────────────────────────────────────────
     latest_mood_score: Optional[int] = None
     mood_label: Optional[str] = None
+
+    # ── Overview context: sleep last night + current mood ────────────────────
+    sleep_hours:   Optional[float] = None   
+    sleep_quality: Optional[str]   = None   
+    current_mood:  Optional[str]   = None   
 
     # ── Emotional context ────────────────────────────────────────────────────
     weekly_mood_history: Optional[List[Dict[str, Any]]] = Field(default_factory=list)

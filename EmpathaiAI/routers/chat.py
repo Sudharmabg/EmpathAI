@@ -60,6 +60,11 @@ async def chat(request: ChatRequest):
             "tasks_completed_this_week": request.tasks_completed_this_week or 0,
             "tasks_total_this_week":     request.tasks_total_this_week or 0,
 
+            # ── Overview context: sleep last night + current mood ──────────────
+            "sleep_hours":   request.sleep_hours,
+            "sleep_quality": request.sleep_quality,
+            "current_mood":  request.current_mood,
+
             # ── Emotional context ──────────────────────────────────────────────
             "weekly_mood_history": request.weekly_mood_history or [],
             "assessment_summary":  request.assessment_summary,
@@ -88,7 +93,6 @@ async def chat(request: ChatRequest):
             "severity":     None,
         }
 
-        # ✅ thread_id = student_id so each student has their own memory
         thread_config = {
             "configurable": {
                 "thread_id": f"student-{request.student_id}"

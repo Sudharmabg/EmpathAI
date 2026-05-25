@@ -23,6 +23,9 @@ def _build_system_prompt(state: ChatState) -> str:
     total_week          = state.get("tasks_total_this_week", 0)
     mood_pattern        = state.get("mood_pattern_summary", "")
     assessment_context  = state.get("assessment_context_summary", "")
+    sleep_hours         = state.get("sleep_hours")
+    sleep_quality       = state.get("sleep_quality")
+    current_mood        = state.get("current_mood")
 
     tone_map = {
         "POSITIVE":   "The student is in a good mood. Be encouraging, energetic, and motivating.",
@@ -34,32 +37,47 @@ def _build_system_prompt(state: ChatState) -> str:
 
     schedule_instruction = ""
     if intent in ("SCHEDULE_QUERY", "SCHEDULE_ACTION", "PROGRESS_QUERY"):
+        sleep_line = ""
+        if sleep_hours is not None:
+            quality_str = f" ({sleep_quality} quality)" if sleep_quality else ""
+            sleep_line = f"\nSleep last night: {sleep_hours} hrs{quality_str} — factor this into study plan suggestions if low."
+        mood_line = f"\nCurrent mood: {current_mood}" if current_mood else ""
+
         schedule_instruction = f"""
 SCHEDULE CONTEXT (use this to give a specific personalised answer):
 {schedule_summary}
 Preferred Study Time: {preferred_study_time}
 Week Progress: {completed_week}/{total_week} tasks completed this week
-Academic Pressure Level: {academic_pressure}
+Academic Pressure Level: {academic_pressure}{sleep_line}{mood_line}
 
 When answering schedule questions:
 - Reference the student's actual tasks, exams, and goals
 - Respect their preferred study time window
 - If behind on tasks, acknowledge it gently and suggest a realistic catch-up plan
 - If exam pressure is HIGH, prioritise exam subjects
+- If sleep was poor or under 6 hours, suggest lighter study sessions and breaks
 - Keep suggestions specific and actionable
 """
 
     emotional_context = ""
     if intent == "EMOTIONAL_SUPPORT" or emotional_state in ("STRESSED", "DISTRESSED"):
+        sleep_line = ""
+        if sleep_hours is not None:
+            quality_str = f" ({sleep_quality} quality)" if sleep_quality else ""
+            sleep_line = f"\nSleep last night: {sleep_hours} hrs{quality_str}"
+        mood_line = f"\nCurrent mood: {current_mood}" if current_mood else ""
+
         emotional_context = f"""
 EMOTIONAL CONTEXT (use this to personalise empathy):
 Mood pattern (last 7 days): {mood_pattern}
-Latest assessment: {assessment_context}
+Latest assessment: {assessment_context}{sleep_line}{mood_line}
 
 When responding to emotional messages:
 - Acknowledge their feelings first
 - If mood pattern shows recurring negative emotions, gently note you've noticed they've been having a hard week
 - If assessment shows high anxiety/stress, use grounding language
+- If sleep was less than 6 hours or poor quality, gently acknowledge that tiredness can affect how we feel
+- If current mood is negative (sad/anxious/angry), lead with empathy before anything else
 - NEVER mention "I noticed your mood logs say..." — instead say things like "It sounds like things have been heavy lately"
 - Keep responses warm but not overly clinical
 """
@@ -163,7 +181,7 @@ def response_generator(state: ChatState) -> ChatState:
         # ── Build message list ─────────────────────────────────────────────────
         messages = [SystemMessage(content=system_prompt)]
 
-        # ✅ Use chat_history from LangGraph checkpointer (replaces old manual history)
+        # Use chat_history from LangGraph checkpointer (replaces old manual history)
         for msg in state.get("chat_history", []):
             role    = msg.get("role")    if isinstance(msg, dict) else msg.role
             content = msg.get("content") if isinstance(msg, dict) else msg.content
@@ -227,7 +245,7 @@ def response_generator(state: ChatState) -> ChatState:
             clean_reply = f"{state['empathy_prefix']}\n\n{clean_reply}"
             logger.info("Empathy prefix prepended to response")
 
-        # ✅ Update chat_history with this turn so checkpointer saves it
+        #  Update chat_history with this turn so checkpointer saves it
         updated_history = list(state.get("chat_history", []))
         updated_history.append({"role": "user",      "content": message_text})
         updated_history.append({"role": "assistant",  "content": clean_reply})

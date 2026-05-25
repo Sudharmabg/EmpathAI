@@ -89,6 +89,9 @@ def context_loader(state: ChatState) -> ChatState:
     mood_score = state.get("latest_mood_score")
     weekly_moods = state.get("weekly_mood_history", [])
     assessment = state.get("assessment_summary")
+    sleep_hours   = state.get("sleep_hours")
+    sleep_quality = state.get("sleep_quality")
+    current_mood  = state.get("current_mood")
 
     # ── Calculate academic pressure ───────────────────────────────────────────
     if any(e.get("daysRemaining", 99) <= 7 for e in exams):
@@ -139,6 +142,13 @@ def context_loader(state: ChatState) -> ChatState:
 
     if mood_score is not None:
         summary_parts.append(f"Latest mood score: {mood_score}/5")
+
+    # ── Overview: sleep last night + current mood ─────────────────────────────
+    if sleep_hours is not None:
+        quality_str = f" ({sleep_quality})" if sleep_quality else ""
+        summary_parts.append(f"Sleep last night: {sleep_hours} hrs{quality_str}")
+    if current_mood:
+        summary_parts.append(f"Current mood: {current_mood}")
 
     state["schedule_context_summary"] = (
         " | ".join(summary_parts) if summary_parts else "No schedule data available"

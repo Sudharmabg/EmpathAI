@@ -19,6 +19,8 @@ public class AssessmentReportResponse {
     private LocalDate   sessionDate;
     private String      summaryText;
     private String      bulletPoints;
+    private String      editedSummaryText;
+    private String      editedBy;
     private Boolean     chromaSynced;
     private LocalDateTime createdAt;
 }

@@ -12,7 +12,8 @@ import {
     createQuestion,
     updateQuestion,
     deleteQuestion,
-    createResponse
+    createResponse,
+    updateInsight
 } from '../../../api/Assessmentmanagement'
 
 export default function AssessmentManagement() {
@@ -55,6 +56,7 @@ export default function AssessmentManagement() {
     const [insightModal, setInsightModal] = useState({ open: false, data: null, parsed: null, studentName: '' })
 const [editingInsight, setEditingInsight] = useState(false)
 const [editedInsightText, setEditedInsightText] = useState('')
+const [isSavingInsight, setIsSavingInsight] = useState(false)
     const [questionFormData, setQuestionFormData] = useState({
         question: '',
         domain: '',
@@ -498,13 +500,16 @@ const handleSaveQuestion = () => {
             .then(r => r.ok ? r.json() : null)
             .then(d => {
                 if (!d) return
+                const id = d.id || null
                 const summaryText = (d.summaryText || '').trim()
                 const bulletPoints = (d.bulletPoints || '').trim()
+                const editedSummaryText = d.editedSummaryText || null
+                const editedBy = d.editedBy || null
                 const sessionDate = d.sessionDate || null
                 if (summaryText || bulletPoints) {
                     setLlmSummaries(prev => ({
                         ...prev,
-                        [studentId]: { summaryText, bulletPoints, sessionDate }
+                        [studentId]: { id, summaryText, bulletPoints, editedSummaryText, editedBy, sessionDate }
                     }))
                 }
             })
@@ -715,7 +720,7 @@ const parseBulletPoints = (raw) => {
                                         if (summaryText || bulletPoints) {
                                             setLlmSummaries(prev => ({
                                                 ...prev,
-                                                [sid]: { summaryText, bulletPoints, sessionDate: d.sessionDate }
+                                                [sid]: { id: d.id || null, summaryText, bulletPoints, editedSummaryText: d.editedSummaryText || null, editedBy: d.editedBy || null, sessionDate: d.sessionDate }
                                             }))
                                         }
                                     })
@@ -1107,8 +1112,8 @@ const parseBulletPoints = (raw) => {
                                                 <td key={i} className="border px-4 py-3 text-xs align-top max-w-xs">
                                                     {hasContent ? (
                                                         <div>
-                                                            {data?.summaryText && (
-                                                                <p className="text-gray-600 text-xs italic mb-1 line-clamp-2">{data.summaryText}</p>
+                                                            {(data?.editedSummaryText || data?.summaryText) && (
+                                                                <p className="text-gray-600 text-xs italic mb-1 line-clamp-2">{data.editedSummaryText || data.summaryText}</p>
                                                             )}
                                                             <div className="space-y-1 mb-2">
                                                                {parsed.strengths.length > 0 && (
@@ -1235,9 +1240,9 @@ const parseBulletPoints = (raw) => {
                         <h3 className="text-lg font-bold text-indigo-800 mb-1">
                             ✨ AI Insight — {insightModal.studentName}
                         </h3>
-                       {insightModal.data?.summaryText && (
+                       {(insightModal.data?.editedSummaryText || insightModal.data?.summaryText) && (
                             <p className="text-sm text-gray-600 italic mb-4 border-b pb-3">
-                                {insightModal.data.summaryText
+                                {(insightModal.data.editedSummaryText || insightModal.data.summaryText)
                                     .replace(/\bshe's\b/gi, "they're")
                                     .replace(/\bhe's\b/gi, "they're")
                                     .replace(/\bshe\b/gi, 'they')
@@ -1319,7 +1324,7 @@ const parseBulletPoints = (raw) => {
                         className="flex-1 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium"
                     >Cancel</button>
                     <button
-                        onClick={() => {
+                        onClick={async () => {
                             const lines = editedInsightText.split('\n')
                             const summaryMarker = lines.findIndex(l => l.trim() === 'Summary:')
                             let bulletPoints = editedInsightText
@@ -1328,18 +1333,38 @@ const parseBulletPoints = (raw) => {
                                 bulletPoints = lines.slice(0, summaryMarker).join('\n').trim()
                                 summaryText = lines.slice(summaryMarker + 1).join('\n').trim()
                             }
-                            const newData = { ...insightModal.data, bulletPoints, summaryText }
-                            const newParsed = parseBulletPoints(bulletPoints)
+                            const reportId = insightModal.data?.id
+                            let updatedData = { ...insightModal.data, bulletPoints, summaryText, editedSummaryText: editedInsightText }
+                            if (reportId) {
+                                try {
+                                    setIsSavingInsight(true)
+                                    const saved = await updateInsight(reportId, editedInsightText)
+                                    // Use what the backend confirmed (includes LLM-refined content)
+                                    updatedData = {
+                                        ...insightModal.data,
+                                        bulletPoints: saved.bulletPoints || bulletPoints,
+                                        summaryText: saved.summaryText || summaryText,
+                                        editedSummaryText: saved.editedSummaryText || editedInsightText,
+                                        editedBy: saved.editedBy
+                                    }
+                                } catch (err) {
+                                    console.error('Failed to save insight edit:', err)
+                                } finally {
+                                    setIsSavingInsight(false)
+                                }
+                            }
+                            const newParsed = parseBulletPoints(updatedData.bulletPoints)
                             setLlmSummaries(prev => ({
                                 ...prev,
-                                [Object.keys(prev).find(k => prev[k] === insightModal.data) || '']: newData
+                                [Object.keys(prev).find(k => prev[k] === insightModal.data) || '']: updatedData
                             }))
-                            setInsightModal(prev => ({ ...prev, data: newData, parsed: newParsed }))
+                            setInsightModal(prev => ({ ...prev, data: updatedData, parsed: newParsed }))
                             setEditingInsight(false)
                             setEditedInsightText('')
                         }}
-                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
-                    >Save Changes</button>
+                        disabled={isSavingInsight}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-60"
+                    >{isSavingInsight ? 'Saving...' : 'Save Changes'}</button>
                 </div>
             </div>
         )}

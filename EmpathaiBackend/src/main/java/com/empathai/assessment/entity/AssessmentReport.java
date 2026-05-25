@@ -51,6 +51,12 @@ public class AssessmentReport {
     @Column(name = "bullet_points", columnDefinition = "TEXT")
     private String bulletPoints;
 
+    @Column(name = "edited_summary_text", columnDefinition = "TEXT")
+    private String editedSummaryText;
+
+    @Column(name = "edited_by", length = 255)
+    private String editedBy;
+
     @Builder.Default
     @Column(name = "chroma_synced")
     private Boolean chromaSynced = false;

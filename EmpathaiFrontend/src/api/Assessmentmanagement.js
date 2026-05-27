@@ -141,12 +141,20 @@ export async function fetchGroupAnalytics (groupName, filter = 'ALL') {
   return handleResponse(res)
 }
 
-// Saves the edited AI insight text to the backend
 export async function updateInsight (reportId, editedText) {
-  const res = await fetch(`/api/assessment/reports/${reportId}/edit`, {
+  const res = await fetch(`${BASE}/assessment/reports/${reportId}/edit`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify({ editedText })
+  })
+  return handleResponse(res)
+}
+
+export async function confirmInsight (reportId) {
+  const res = await fetch(`${BASE}/assessment/reports/${reportId}/confirm`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({})  
   })
   return handleResponse(res)
 }

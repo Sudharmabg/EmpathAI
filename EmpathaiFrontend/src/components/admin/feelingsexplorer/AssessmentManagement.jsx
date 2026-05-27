@@ -13,7 +13,8 @@ import {
     updateQuestion,
     deleteQuestion,
     createResponse,
-    updateInsight
+    updateInsight,
+    confirmInsight
 } from '../../../api/Assessmentmanagement'
 
 export default function AssessmentManagement() {
@@ -57,6 +58,7 @@ export default function AssessmentManagement() {
 const [editingInsight, setEditingInsight] = useState(false)
 const [editedInsightText, setEditedInsightText] = useState('')
 const [isSavingInsight, setIsSavingInsight] = useState(false)
+const [isConfirming, setIsConfirming] = useState(false)
     const [questionFormData, setQuestionFormData] = useState({
         question: '',
         domain: '',
@@ -500,16 +502,20 @@ const handleSaveQuestion = () => {
             .then(r => r.ok ? r.json() : null)
             .then(d => {
                 if (!d) return
-                const id = d.id || null
-                const summaryText = (d.summaryText || '').trim()
+                const summaryText  = (d.summaryText  || '').trim()
                 const bulletPoints = (d.bulletPoints || '').trim()
-                const editedSummaryText = d.editedSummaryText || null
-                const editedBy = d.editedBy || null
-                const sessionDate = d.sessionDate || null
                 if (summaryText || bulletPoints) {
                     setLlmSummaries(prev => ({
                         ...prev,
-                        [studentId]: { id, summaryText, bulletPoints, editedSummaryText, editedBy, sessionDate }
+                        [studentId]: {
+                            id:                d.id   || null,
+                            summaryText,
+                            bulletPoints,
+                            editedSummaryText: d.editedSummaryText || null,
+                            editedBy:          d.editedBy          || null,
+                            confirmed:         d.confirmed         || 'N',
+                            sessionDate:       d.sessionDate       || null
+                        }
                     }))
                 }
             })
@@ -720,7 +726,15 @@ const parseBulletPoints = (raw) => {
                                         if (summaryText || bulletPoints) {
                                             setLlmSummaries(prev => ({
                                                 ...prev,
-                                                [sid]: { id: d.id || null, summaryText, bulletPoints, editedSummaryText: d.editedSummaryText || null, editedBy: d.editedBy || null, sessionDate: d.sessionDate }
+                                                [sid]: {
+                                                    id:                d.id   || null,
+                                                    summaryText,
+                                                    bulletPoints,
+                                                    editedSummaryText: d.editedSummaryText || null,
+                                                    editedBy:          d.editedBy          || null,
+                                                    confirmed:         d.confirmed         || 'N',
+                                                    sessionDate:       d.sessionDate       || null
+                                                }
                                             }))
                                         }
                                     })
@@ -1112,8 +1126,8 @@ const parseBulletPoints = (raw) => {
                                                 <td key={i} className="border px-4 py-3 text-xs align-top max-w-xs">
                                                     {hasContent ? (
                                                         <div>
-                                                            {(data?.editedSummaryText || data?.summaryText) && (
-                                                                <p className="text-gray-600 text-xs italic mb-1 line-clamp-2">{data.editedSummaryText || data.summaryText}</p>
+                                                            {data?.summaryText && (
+                                                                <p className="text-gray-600 text-xs italic mb-1 line-clamp-2">{data.summaryText}</p>
                                                             )}
                                                             <div className="space-y-1 mb-2">
                                                                {parsed.strengths.length > 0 && (
@@ -1131,9 +1145,9 @@ const parseBulletPoints = (raw) => {
                                                                 )}
                                                             </div>
                                                             <button
-                                                                onClick={() => setInsightModal({ open: true, data, parsed, studentName: student.studentName })}
-                                                                className="text-xs px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full transition-all"
-                                                            >
+    onClick={() => setInsightModal({ open: true, data, parsed, studentName: student.studentName, studentId: student.studentId })}
+    className="text-xs px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full transition-all"
+>
                                                                 View Full ✨
                                                             </button>
                                                         </div>
@@ -1240,9 +1254,9 @@ const parseBulletPoints = (raw) => {
                         <h3 className="text-lg font-bold text-indigo-800 mb-1">
                             ✨ AI Insight — {insightModal.studentName}
                         </h3>
-                       {(insightModal.data?.editedSummaryText || insightModal.data?.summaryText) && (
+                       {insightModal.data?.summaryText && (
                             <p className="text-sm text-gray-600 italic mb-4 border-b pb-3">
-                                {(insightModal.data.editedSummaryText || insightModal.data.summaryText)
+                                {insightModal.data.summaryText
                                     .replace(/\bshe's\b/gi, "they're")
                                     .replace(/\bhe's\b/gi, "they're")
                                     .replace(/\bshe\b/gi, 'they')
@@ -1289,27 +1303,75 @@ const parseBulletPoints = (raw) => {
                             )}
                         </div>
                         <div className="mt-5 flex gap-3">
-            <button
-                onClick={() => {
-                    setEditingInsight(true)
-                    setEditedInsightText(
-                        (insightModal.data?.bulletPoints || '') +
-                        (insightModal.data?.summaryText ? '\n\nSummary:\n' + insightModal.data.summaryText : '')
-                    )
-                }}
-                className="flex-1 py-2 bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 rounded-lg text-sm font-medium transition-colors"
-            >✏️ Edit</button>
-            <button
-                onClick={() => {
-                    setInsightModal({ open: false, data: null, parsed: null, studentName: '' })
-                    setEditingInsight(false)
-                    setEditedInsightText('')
-                }}
-                className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
-            >Close</button>
+            {insightModal.data?.confirmed === 'Y' ? (
+                <>
+                    <div className="flex-1 py-2 bg-green-50 border-2 border-green-500 text-green-700 rounded-lg text-sm font-medium text-center">
+                        ✅ Confirmed
+                    </div>
+                    <button
+                        onClick={() => {
+                            setInsightModal({ open: false, data: null, parsed: null, studentName: '' })
+                            setEditingInsight(false)
+                            setEditedInsightText('')
+                        }}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
+                    >Close</button>
+                </>
+            ) : (
+                <>
+                    <button
+                        onClick={() => {
+                            setEditingInsight(true)
+                            setEditedInsightText(
+                                (insightModal.data?.bulletPoints || '') +
+                                (insightModal.data?.summaryText ? '\n\nSummary:\n' + insightModal.data.summaryText : '')
+                            )
+                        }}
+                        className="flex-1 py-2 bg-white border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 rounded-lg text-sm font-medium transition-colors"
+                    >✏️ Edit</button>
+                    <button
+                        disabled={isConfirming}
+                        onClick={async () => {
+                            const reportId = insightModal.data?.id
+                            if (!reportId) {
+                                console.error('Confirm failed: reportId is missing from insightModal.data', insightModal.data)
+                                return
+                            }
+                            try {
+                                setIsConfirming(true)
+                                await confirmInsight(reportId)
+                               const updatedData = { ...insightModal.data, confirmed: 'Y' }
+setLlmSummaries(prev => ({ ...prev, [insightModal.studentId]: updatedData }))
+setInsightModal({
+    open: true,
+    data: updatedData,
+    parsed: insightModal.parsed,
+    studentName: insightModal.studentName,
+    studentId: insightModal.studentId
+})
+                                setEditingInsight(false)
+                                setEditedInsightText('')
+                            } catch (err) {
+                                console.error('Confirm insight failed:', err)
+                            } finally {
+                                setIsConfirming(false)
+                            }
+                        }}
+                        className="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium disabled:opacity-60"
+                    >{isConfirming ? 'Confirming...' : '✅ Confirm'}</button>
+                    <button
+                        onClick={() => {
+                            setInsightModal({ open: false, data: null, parsed: null, studentName: '' })
+                            setEditingInsight(false)
+                            setEditedInsightText('')
+                        }}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
+                    >Close</button>
+                </>
+            )}
         </div>
 
-        {editingInsight && (
+        {insightModal.data?.confirmed !== 'Y' && editingInsight && (
             <div className="mt-4 border-t pt-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Edit AI Response</p>
                 <textarea
@@ -1324,45 +1386,57 @@ const parseBulletPoints = (raw) => {
                         className="flex-1 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium"
                     >Cancel</button>
                     <button
+                        disabled={isSavingInsight}
                         onClick={async () => {
                             const lines = editedInsightText.split('\n')
-                            const summaryMarker = lines.findIndex(l => l.trim() === 'Summary:')
-                            let bulletPoints = editedInsightText
-                            let summaryText = insightModal.data?.summaryText || ''
-                            if (summaryMarker !== -1) {
-                                bulletPoints = lines.slice(0, summaryMarker).join('\n').trim()
-                                summaryText = lines.slice(summaryMarker + 1).join('\n').trim()
-                            }
-                            const reportId = insightModal.data?.id
-                            let updatedData = { ...insightModal.data, bulletPoints, summaryText, editedSummaryText: editedInsightText }
-                            if (reportId) {
-                                try {
-                                    setIsSavingInsight(true)
-                                    const saved = await updateInsight(reportId, editedInsightText)
-                                    // Use what the backend confirmed (includes LLM-refined content)
-                                    updatedData = {
-                                        ...insightModal.data,
-                                        bulletPoints: saved.bulletPoints || bulletPoints,
-                                        summaryText: saved.summaryText || summaryText,
-                                        editedSummaryText: saved.editedSummaryText || editedInsightText,
-                                        editedBy: saved.editedBy
-                                    }
-                                } catch (err) {
-                                    console.error('Failed to save insight edit:', err)
-                                } finally {
-                                    setIsSavingInsight(false)
-                                }
-                            }
-                            const newParsed = parseBulletPoints(updatedData.bulletPoints)
-                            setLlmSummaries(prev => ({
-                                ...prev,
-                                [Object.keys(prev).find(k => prev[k] === insightModal.data) || '']: updatedData
-                            }))
-                            setInsightModal(prev => ({ ...prev, data: updatedData, parsed: newParsed }))
-                            setEditingInsight(false)
-                            setEditedInsightText('')
+const summaryMarker = lines.findIndex(l => l.trim() === 'Summary:')
+let bulletPoints = editedInsightText
+let summaryText = insightModal.data?.summaryText || ''
+if (summaryMarker !== -1) {
+    bulletPoints = lines.slice(0, summaryMarker).join('\n').trim()
+    summaryText  = lines.slice(summaryMarker + 1).join('\n').trim()
+}
+
+const reportId = insightModal.data?.id
+let updatedData = {
+    ...insightModal.data,
+    bulletPoints,
+    summaryText,
+    editedSummaryText: editedInsightText
+}
+
+if (reportId) {
+    try {
+        setIsSavingInsight(true)
+        const saved = await updateInsight(reportId, editedInsightText)
+     
+        updatedData = {
+            ...updatedData,
+            editedSummaryText: saved.editedSummaryText || editedInsightText,
+            editedBy:          saved.editedBy          || '',
+            confirmed:         saved.confirmed          || 'N',
+            bulletPoints,
+            summaryText
+        }
+    } catch (err) {
+        console.error('Save insight failed:', err)
+    } finally {
+        setIsSavingInsight(false)
+    }
+}
+
+const newParsed = parseBulletPoints(bulletPoints)
+setLlmSummaries(prev => ({ ...prev, [insightModal.studentId]: updatedData }))
+setInsightModal({
+    open: true,
+    data: updatedData,
+    parsed: newParsed,
+    studentName: insightModal.studentName,
+    studentId: insightModal.studentId
+})
+setEditingInsight(false)
+setEditedInsightText('')
                         }}
-                        disabled={isSavingInsight}
                         className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-60"
                     >{isSavingInsight ? 'Saving...' : 'Save Changes'}</button>
                 </div>

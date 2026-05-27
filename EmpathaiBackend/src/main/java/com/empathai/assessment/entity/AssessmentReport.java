@@ -58,6 +58,10 @@ public class AssessmentReport {
     private String editedBy;
 
     @Builder.Default
+    @Column(name = "confirmed", length = 1)
+    private String confirmed = "N";
+
+    @Builder.Default
     @Column(name = "chroma_synced")
     private Boolean chromaSynced = false;
 
@@ -66,6 +70,8 @@ public class AssessmentReport {
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+ 
 
     @PrePersist
     protected void onCreate() {

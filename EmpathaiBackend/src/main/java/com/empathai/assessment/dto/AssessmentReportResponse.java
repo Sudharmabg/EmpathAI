@@ -21,6 +21,7 @@ public class AssessmentReportResponse {
     private String      bulletPoints;
     private String      editedSummaryText;
     private String      editedBy;
+    private String      confirmed;
     private Boolean     chromaSynced;
     private LocalDateTime createdAt;
 }

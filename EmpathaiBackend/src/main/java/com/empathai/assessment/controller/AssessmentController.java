@@ -14,8 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,7 +30,7 @@ public class AssessmentController {
     private static final Logger logger = LoggerFactory.getLogger(AssessmentController.class);
 
     private final IAssessmentService assessmentService;
-    private final AssessmentReportService reportService;    // ← ADD THIS FIELD
+    private final AssessmentReportService reportService;
 
     // ── Groups ────────────────────────────────────────────────────────────────
 
@@ -292,6 +291,7 @@ public class AssessmentController {
                         result.put("bulletPoints",      report.getBulletPoints());
                         result.put("editedSummaryText", report.getEditedSummaryText());
                         result.put("editedBy",          report.getEditedBy());
+                        result.put("confirmed",         report.getConfirmed() != null ? report.getConfirmed() : "N");
                         result.put("studentId",         report.getStudentId());
                         result.put("sessionDate",       report.getSessionDate());
                     },
@@ -355,10 +355,9 @@ public class AssessmentController {
     @PutMapping("/assessment/reports/{id}/edit")
     public ResponseEntity<Map<String, Object>> editInsight(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body,
-            @AuthenticationPrincipal UserDetails principal) {
+            @RequestBody Map<String, String> body) {
         String editedText = body.getOrDefault("editedText", "");
-        String editedBy   = (principal != null) ? principal.getUsername() : "unknown";
+        String editedBy = getCurrentUsername();
         logger.info("editInsight reportId={} by {}", id, editedBy);
         com.empathai.assessment.dto.AssessmentReportResponse updated =
                 reportService.updateEditedSummary(id, editedText, editedBy);
@@ -368,7 +367,35 @@ public class AssessmentController {
         result.put("bulletPoints",      updated.getBulletPoints());
         result.put("editedSummaryText", updated.getEditedSummaryText());
         result.put("editedBy",          updated.getEditedBy());
+        result.put("confirmed",         updated.getConfirmed());
         return ResponseEntity.ok(result);
+    }
+
+    @PutMapping("/assessment/reports/{id}/confirm")
+    public ResponseEntity<Map<String, Object>> confirmInsight(@PathVariable Long id) {
+        String confirmedBy = getCurrentUsername();
+        logger.info("confirmInsight reportId={} by {}", id, confirmedBy);
+        com.empathai.assessment.dto.AssessmentReportResponse updated =
+                reportService.confirmInsight(id, confirmedBy);
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("id",        updated.getId());
+        result.put("confirmed", updated.getConfirmed());
+        result.put("editedBy",  updated.getEditedBy());
+        return ResponseEntity.ok(result);
+    }
+
+    private String getCurrentUsername() {
+        try {
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() != null) {
+                Object p = auth.getPrincipal();
+                if (p instanceof org.springframework.security.core.userdetails.UserDetails ud) {
+                    return ud.getUsername();
+                }
+                return p.toString();
+            }
+        } catch (Exception ignored) {}
+        return "unknown";
     }
 
 }

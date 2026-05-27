@@ -1,10 +1,9 @@
 from typing import TypedDict, List, Optional, Dict, Any
-from langgraph.graph import MessagesState
 
 
 class ChatState(TypedDict):
     # ── Input from Spring Boot ────────────────────────────────────────────────
-    student_id: str                          # ✅ NEW — used as thread_id
+    student_id: str
     student_name: str
     grade: str
     message: str
@@ -33,6 +32,11 @@ class ChatState(TypedDict):
     is_crisis: bool
     schedule_context_summary: Optional[str]
 
+    # ── Fast path flag (set by fast_path_classifier) ──────────────────────────
+    # True  → simple curriculum question; emotion + crisis LLM calls skipped
+    # False → full pipeline runs (emotional, schedule, or ambiguous messages)
+    fast_path: bool
+
     # ── Emotional context summaries ───────────────────────────────────────────
     mood_pattern_summary: Optional[str]
     assessment_context_summary: Optional[str]
@@ -42,8 +46,6 @@ class ChatState(TypedDict):
     empathy_prefix: Optional[str]
 
     # ── Conversation history (managed by LangGraph checkpointer) ─────────────
-    # ✅ This replaces the old manual `history` field
-    # LangGraph stores and loads this automatically per thread_id
     chat_history: List[Dict[str, str]]
 
     # ── Final output ──────────────────────────────────────────────────────────

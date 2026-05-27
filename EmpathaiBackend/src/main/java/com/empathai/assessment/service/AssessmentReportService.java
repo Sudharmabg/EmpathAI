@@ -283,7 +283,10 @@ public class AssessmentReportService {
                 Object val = parsed.get(key);
                 if (val instanceof java.util.List<?> list) {
                     for (Object item : list) {
-                        String clean = item.toString().replaceAll("^[•\\-\\s]+", "").trim();
+                        String clean = item.toString()
+                                .replaceAll("^[•\\-\\s]+", "")   // strip bullets/dashes
+                                .replaceAll("^[✅🔹💡\\s]+", "")  // strip any leading emoji
+                                .trim();
                         if (key.equals("strengths"))    bullets.append("✅ ").append(clean).append("\n");
                         else                            bullets.append("🔹 ").append(clean).append("\n");
                     }
@@ -291,8 +294,12 @@ public class AssessmentReportService {
             }
             Object tip = parsed.get("tip");
             if (tip != null) {
-                String clean = tip.toString().replaceAll("^[•\\-\\s]+", "").trim();
+                String clean = tip.toString()
+                        .replaceAll("^[•\\-\\s]+", "")
+                        .replaceAll("^[✅🔹💡\\s]+", "")
+                        .trim();
                 bullets.append("💡 ").append(clean).append("\n");
+
             }
 
             result.put("summary", summary);
@@ -395,6 +402,8 @@ public class AssessmentReportService {
                 .sessionDate(r.getSessionDate())
                 .summaryText(r.getSummaryText())
                 .bulletPoints(r.getBulletPoints())
+                .editedSummaryText(r.getEditedSummaryText())
+                .editedBy(r.getEditedBy())
                 .chromaSynced(r.getChromaSynced())
                 .createdAt(r.getCreatedAt())
                 .build();
@@ -425,6 +434,66 @@ public class AssessmentReportService {
                 .findByStudentIdAndGroupIdAndSessionDate(studentId, groupId, LocalDate.now())
                 .ifPresent(reportRepo::delete);
         log.info("Deleted today's cached report for student={} group={}", studentId, groupId);
+    }
+    @Transactional
+    public AssessmentReportResponse updateEditedSummary(Long reportId, String editedText, String editedBy) {
+        AssessmentReport report = reportRepo.findById(reportId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
+                        "AssessmentReport not found: " + reportId));
+
+        report.setEditedSummaryText(editedText);
+        report.setEditedBy(editedBy);
+
+        if (openaiApiKey != null && !openaiApiKey.isBlank()) {
+            try {
+                String refinedPrompt = buildRefinedPrompt(report, editedText);
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                headers.set("Authorization", "Bearer " + openaiApiKey);
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("model", MODEL);
+                body.put("max_tokens", 1000);
+                body.put("messages", List.of(Map.of("role", "user", "content", refinedPrompt)));
+                ResponseEntity<Map> response = restTemplate.postForEntity(
+                        OPENAI_API_URL, new HttpEntity<>(body, headers), Map.class);
+                if (response.getBody() != null) {
+                    List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
+                    if (choices != null && !choices.isEmpty()) {
+                        Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                        String raw = (String) message.get("content");
+                        Map<String, String> parsed = parseReportText(raw);
+                        // Store refined content back into the main columns so it persists for future sessions
+                        if (parsed.containsKey("summary"))  report.setSummaryText(parsed.get("summary"));
+                        if (parsed.containsKey("bullets"))  report.setBulletPoints(parsed.get("bullets"));
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("LLM refinement after edit failed (non-critical): {}", e.getMessage());
+            }
+        }
+
+        AssessmentReport saved = reportRepo.save(report);
+        log.info("Insight edited for reportId={} by {}", reportId, editedBy);
+        return toResponse(saved);
+    }
+
+    private String buildRefinedPrompt(AssessmentReport report, String editedInsight) {
+        return "You are a compassionate school psychologist.\n\n" +
+                "A psychologist has reviewed and edited the AI-generated insight for student: " +
+                report.getStudentName() + "\n\n" +
+                "Original AI insight:\n" + report.getSummaryText() + "\n\n" +
+                "Psychologist's edited version:\n" + editedInsight + "\n\n" +
+                "Using the psychologist's edited version as the authoritative perspective, " +
+                "regenerate the full structured report adapting strengths, areas to improve, and tip accordingly.\n\n" +
+                "Respond ONLY with a JSON object. No markdown, no extra text.\n" +
+                "Format:\n" +
+                "{\n" +
+                "  \"summary\": \"2 warm supportive sentences.\",\n" +
+                "  \"strengths\": [\"✅ strength 1\", \"✅ strength 2\"],\n" +
+                "  \"improvements\": [\"🔹 area 1\", \"🔹 area 2\"],\n" +
+                "  \"tip\": \"💡 one actionable tip\"\n" +
+                "}\n" +
+                "STRICT RULES: strengths[] start with ✅, improvements[] start with 🔹, tip starts with 💡.";
     }
 
 }

@@ -1,5 +1,3 @@
-
-
 const BASE = '/api'
 
 /* ── Auth helper ──────────────────────────────────────────── */
@@ -140,5 +138,15 @@ export async function fetchGroupAnalytics (groupName, filter = 'ALL') {
     `${BASE}/analytics/group/${encodeURIComponent(groupName)}?filter=${filter}`,
     { headers: getAuthHeaders() }
   )
+  return handleResponse(res)
+}
+
+// Saves the edited AI insight text to the backend
+export async function updateInsight (reportId, editedText) {
+  const res = await fetch(`/api/assessment/reports/${reportId}/edit`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ editedText })
+  })
   return handleResponse(res)
 }

@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -284,10 +286,14 @@ public class AssessmentController {
 
             reportService.getLatestReport(studentId, groupId).ifPresentOrElse(
                     report -> {
-                        result.put("summary",      report.getSummaryText());
-                        result.put("bulletPoints", report.getBulletPoints());
-                        result.put("studentId",    report.getStudentId());
-                        result.put("sessionDate",  report.getSessionDate());
+                        result.put("id",                report.getId());
+                        result.put("summary",           report.getSummaryText());
+                        result.put("summaryText",       report.getSummaryText());
+                        result.put("bulletPoints",      report.getBulletPoints());
+                        result.put("editedSummaryText", report.getEditedSummaryText());
+                        result.put("editedBy",          report.getEditedBy());
+                        result.put("studentId",         report.getStudentId());
+                        result.put("sessionDate",       report.getSessionDate());
                     },
                     () -> {
                         result.put("summary",      null);
@@ -344,6 +350,25 @@ public class AssessmentController {
             logger.error("testEndpoint failed: {}", e.getMessage(), e);
             throw e;
         }
+    }
+
+    @PutMapping("/assessment/reports/{id}/edit")
+    public ResponseEntity<Map<String, Object>> editInsight(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal UserDetails principal) {
+        String editedText = body.getOrDefault("editedText", "");
+        String editedBy   = (principal != null) ? principal.getUsername() : "unknown";
+        logger.info("editInsight reportId={} by {}", id, editedBy);
+        com.empathai.assessment.dto.AssessmentReportResponse updated =
+                reportService.updateEditedSummary(id, editedText, editedBy);
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("id",                updated.getId());
+        result.put("summaryText",       updated.getSummaryText());
+        result.put("bulletPoints",      updated.getBulletPoints());
+        result.put("editedSummaryText", updated.getEditedSummaryText());
+        result.put("editedBy",          updated.getEditedBy());
+        return ResponseEntity.ok(result);
     }
 
 }

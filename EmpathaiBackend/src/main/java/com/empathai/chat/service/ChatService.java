@@ -19,7 +19,9 @@ import com.empathai.user.entity.User;
 import com.empathai.user.exception.EmpathaiException;
 import com.empathai.user.repository.UserRepository;
 import com.empathai.wellness.entity.MoodEntry;
+import com.empathai.wellness.entity.SleepEntry;
 import com.empathai.wellness.repository.MoodEntryRepository;
+import com.empathai.wellness.repository.SleepEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -55,6 +57,7 @@ public class ChatService {
 
     // ── Repositories for emotional context ────────────────────────────────────
     private final MoodEntryRepository moodEntryRepository;
+    private final SleepEntryRepository sleepEntryRepository;
     private final AssessmentReportRepository assessmentReportRepository;
 
     @Value("${app.chat.daily-limit:20}")
@@ -139,6 +142,18 @@ public class ChatService {
         aiRequest.put("mood_label",        latestMood != null ? latestMood.getMood() : null);
         aiRequest.put("latest_mood_score", mapMoodToScore(
                 latestMood != null ? latestMood.getMood() : null));
+
+        SleepEntry latestSleep = sleepEntryRepository
+                .findFirstByStudentIdOrderByLoggedAtDesc(studentId)
+                .orElse(null);
+        if (latestSleep != null) {
+            aiRequest.put("sleep_hours",   calculateSleepHours(latestSleep.getBedtime(), latestSleep.getWakeTime()));
+            aiRequest.put("sleep_quality", latestSleep.getQuality());
+        } else {
+            aiRequest.put("sleep_hours",   null);
+            aiRequest.put("sleep_quality", null);
+        }
+        aiRequest.put("current_mood", latestMood != null ? latestMood.getMood() : null);
 
         log.info("Calling AI service at: {}/chat", aiServiceUrl);
 
@@ -498,6 +513,20 @@ public class ChatService {
         } catch (Exception e) {
             log.warn("Failed to fetch assessment summary for studentId={}: {}",
                     studentId, e.getMessage());
+            return null;
+        }
+    }
+
+
+    private Double calculateSleepHours(String bedtime, String wakeTime) {
+        try {
+            java.time.LocalTime bed  = java.time.LocalTime.parse(bedtime);
+            java.time.LocalTime wake = java.time.LocalTime.parse(wakeTime);
+            long minutes = java.time.Duration.between(bed, wake).toMinutes();
+            if (minutes < 0) minutes += 24 * 60; // overnight
+            return Math.round((minutes / 60.0) * 10.0) / 10.0;
+        } catch (Exception e) {
+            log.warn("Could not parse sleep times bedtime={} wakeTime={}", bedtime, wakeTime);
             return null;
         }
     }

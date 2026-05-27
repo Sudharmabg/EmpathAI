@@ -371,3 +371,8 @@ dist-ssr
 *.sln
 *.sw?
 EmpathaiBackend/src/main/resources/application.properties
+
+# LangGraph checkpoints
+checkpoints.db
+checkpoints.db-shm
+checkpoints.db-wal

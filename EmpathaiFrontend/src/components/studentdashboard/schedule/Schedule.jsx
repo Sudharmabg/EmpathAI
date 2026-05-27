@@ -1690,9 +1690,42 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
                         )}
 
                         {!activeDayIsLocked && (recsLoading || suggestions.length > 0) && (() => {
-                            const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
-                                const alreadyAdded = normTasks.some(t => t.title?.toLowerCase()===s.title?.toLowerCase())
-                                if (alreadyAdded) return false
+                            const SUBJECT_ALIAS_MAP = {
+    'math': 'Mathematics', 'maths': 'Mathematics', 'mathematics': 'Mathematics',
+    'algebra': 'Mathematics', 'geometry': 'Mathematics', 'arithmetic': 'Mathematics',
+    'trigonometry': 'Mathematics', 'calculus': 'Mathematics',
+    'science': 'Science', 'sci': 'Science', 'physics': 'Science',
+    'phy': 'Science', 'chemistry': 'Science', 'chem': 'Science',
+    'biology': 'Science', 'bio': 'Science',
+    'sst': 'SST', 'social': 'SST', 'social studies': 'SST',
+    'history': 'SST', 'geography': 'SST', 'geo': 'SST',
+    'civics': 'SST', 'economics': 'SST', 'political science': 'SST',
+    'english': 'English', 'eng': 'English', 'grammar': 'English',
+    'literature': 'English', 'comprehension': 'English',
+    'hindi': 'Hindi', 'हिंदी': 'Hindi',
+}
+
+const extractSubject = (title) => {
+    if (!title) return null
+    const lower = title.toLowerCase()
+    for (const [alias, subject] of Object.entries(SUBJECT_ALIAS_MAP)) {
+        if (lower.includes(alias)) return subject
+    }
+    return null
+}
+
+const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
+    const alreadyAdded = normTasks.some(t => t.title?.toLowerCase() === s.title?.toLowerCase())
+    if (alreadyAdded) return false
+
+    // ✅ Also filter if same subject is already scheduled today
+    const suggestionSubject = extractSubject(s.title)
+    if (suggestionSubject) {
+        const subjectAlreadyScheduled = normTasks.some(t =>
+            extractSubject(t.title) === suggestionSubject
+        )
+        if (subjectAlreadyScheduled) return false
+    }
                                 if (isTodayDay(activeDay)) {
                                     const durationMins = s.estimatedMinutes || 45
                                     if (currentTimeMins + durationMins > 22*60) return false

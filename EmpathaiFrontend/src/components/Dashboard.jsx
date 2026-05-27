@@ -23,12 +23,49 @@ const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curri
 
 // ─── Subject extraction helper ────────────────────────────────────────────────
 const SUBJECT_KEYWORD_MAP = [
-  { keywords: ['math', 'mathematics', 'maths'], subject: 'Mathematics' },
-  { keywords: ['science'], subject: 'Science' },
-  { keywords: ['english'], subject: 'English' },
-  { keywords: ['hindi'], subject: 'Hindi' },
-  { keywords: ['sst', 'social', 'social studies'], subject: 'Social Studies' },
-  { keywords: ['art', 'craft', 'art & craft'], subject: 'Art & Craft' },
+  {
+    keywords: [
+      'math', 'maths', 'mathematics',
+      'algebra', 'geometry', 'arithmetic', 'trigonometry', 'calculus',
+    ],
+    subject: 'Mathematics'
+  },
+  {
+    keywords: [
+      'science', 'sci',
+      'physics', 'phy',
+      'chemistry', 'chem',
+      'biology', 'bio',
+    ],
+    subject: 'Science'
+  },
+  {
+    keywords: [
+      'english', 'eng',
+      'grammar', 'literature', 'reading', 'writing', 'comprehension',
+    ],
+    subject: 'English'
+  },
+  {
+    keywords: [
+      'hindi', 'हिंदी',
+    ],
+    subject: 'Hindi'
+  },
+  {
+    keywords: [
+      'sst', 'social', 'social studies',
+      'history', 'geography', 'geo', 'hist',
+      'civics', 'economics', 'political science',
+    ],
+    subject: 'Social Studies'
+  },
+  {
+    keywords: [
+      'art', 'craft', 'art & craft', 'drawing', 'painting',
+    ],
+    subject: 'Art & Craft'
+  },
 ]
 
 function getScheduledSubjectsForDay(tasks, day) {

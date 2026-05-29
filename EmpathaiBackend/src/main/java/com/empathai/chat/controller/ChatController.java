@@ -66,11 +66,12 @@ public class ChatController {
                     request.getAssistantMessage()
             );
             logger.info("logScheduleMessage completed for userId={}", currentUser.getId());
-            return ResponseEntity.ok().build();
         } catch (Exception e) {
-            logger.error("logScheduleMessage failed for userId={}: {}", currentUser.getId(), e.getMessage(), e);
-            throw e;
+            // Non-critical logging — don't fail the request
+            logger.warn("logScheduleMessage failed (non-critical) for userId={}: {}",
+                    currentUser.getId(), e.getMessage());
         }
+        return ResponseEntity.ok().build();
     }
 
     /**

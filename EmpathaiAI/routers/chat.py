@@ -10,7 +10,8 @@ routers/chat.py  —  Chat endpoints (non-streaming + streaming)
 """
 
 from __future__ import annotations
-
+from openai import OpenAI
+import os
 import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -30,7 +31,7 @@ logger = logging.getLogger("chat_router")
 # Thread pool for running the blocking LangGraph pipeline without stalling
 # the async event loop.
 _pipeline_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="langgraph")
-
+_openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -213,3 +214,15 @@ async def chat_stream(request: ChatRequest):
             "Transfer-Encoding": "chunked",
         },
     )
+@router.post("/agent")
+async def agent_chat(body: dict):
+    """
+    Forwards OpenAI-format requests (with tools) directly to OpenAI.
+    Used by the Schedule Assistant for function calling.
+    """
+    try:
+        response = _openai_client.chat.completions.create(**body)
+        return response.model_dump()
+    except Exception as exc:
+        logger.error("Error in /agent: %s", str(exc), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(exc)}")

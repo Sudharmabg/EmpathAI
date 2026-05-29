@@ -779,7 +779,7 @@ YOUR BEHAVIOUR:
         let lastAssistantText = ''
 
         for (let i = 0; i < MAX_ITERATIONS; i++) {
-            const response = await apiRequest('/api/openai/chat', {
+            const response = await apiRequest('/api/agent/chat', {
                 method: 'POST',
                 body: JSON.stringify({
                     model:       'gpt-4o',

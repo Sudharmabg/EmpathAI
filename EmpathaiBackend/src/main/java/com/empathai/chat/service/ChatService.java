@@ -234,6 +234,19 @@ public class ChatService {
     // ─────────────────────────────────────────────────────────────────────────
     // LOG SCHEDULE MESSAGE (Schedule Assistant — no Python LLM call)
     // ─────────────────────────────────────────────────────────────────────────
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public ChatSession findOrCreateScheduleSession(Long studentId, LocalDate weekStart) {
+        return sessionRepo
+                .findByStudentIdAndWeekStartAndSource(studentId, weekStart, "SCHEDULE")
+                .orElseGet(() -> {
+                    log.info("Creating new SCHEDULE session for studentId: {}", studentId);
+                    return sessionRepo.save(ChatSession.builder()
+                            .studentId(studentId)
+                            .weekStart(weekStart)
+                            .source("SCHEDULE")
+                            .build());
+                });
+    }
 
     @Transactional
     public void logScheduleMessage(
@@ -245,17 +258,15 @@ public class ChatService {
 
         LocalDate weekStart = getCurrentWeekStart();
 
-        // ── Find or create a SCHEDULE session for this week ───────────────────
-        ChatSession session = sessionRepo
-                .findByStudentIdAndWeekStartAndSource(studentId, weekStart, "SCHEDULE")
-                .orElseGet(() -> {
-                    log.info("Creating new SCHEDULE session for studentId: {}", studentId);
-                    return sessionRepo.save(ChatSession.builder()
-                            .studentId(studentId)
-                            .weekStart(weekStart)
-                            .source("SCHEDULE")
-                            .build());
-                });
+        ChatSession session;
+        try {
+            session = findOrCreateScheduleSession(studentId, weekStart);
+        } catch (Exception e) {
+            log.warn("Session creation failed, retrying fetch: {}", e.getMessage());
+            session = sessionRepo
+                    .findByStudentIdAndWeekStartAndSource(studentId, weekStart, "SCHEDULE")
+                    .orElseThrow(() -> new EmpathaiException("Could not find or create session"));
+        }
 
         // ── Save user message ──────────────────────────────────────────────────
         messageRepo.save(ChatMessage.builder()
@@ -275,7 +286,6 @@ public class ChatService {
 
         log.info("Schedule Assistant messages logged for sessionId: {}", session.getId());
     }
-
     // ─────────────────────────────────────────────────────────────────────────
     // GET OR CREATE SCHEDULE SESSION ID (used by CrisisCheckController)
     // ─────────────────────────────────────────────────────────────────────────
@@ -299,7 +309,6 @@ public class ChatService {
     public List<ChatSessionResponse> getSessions(Long studentId) {
         return sessionRepo.findByStudentIdOrderByWeekStartDesc(studentId).stream()
                 .map(s -> {
-                    // ✅ Use latest message time instead of session creation time
                     LocalDateTime lastMessageAt = messageRepo
                             .findTopBySessionIdOrderByCreatedAtDesc(s.getId())
                             .map(ChatMessage::getCreatedAt)

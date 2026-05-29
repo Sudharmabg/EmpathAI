@@ -538,7 +538,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   )
 
   return (
-    <div className="font-lora max-w-7xl mx-auto px-4 h-full flex flex-col">
+<div className="font-lora max-w-7xl mx-auto px-4 flex flex-col" style={{ height: 'calc(100vh - 64px)', maxHeight: 'calc(100vh - 64px)', overflow: 'hidden' }}>
 
       {/* Header section */}
       <div className="mb-6 shrink-0">

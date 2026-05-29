@@ -1,29 +1,31 @@
 import { useState } from 'react'
 import { XMarkIcon, SparklesIcon } from '@heroicons/react/24/outline'
-import { login, isAdminRole } from '../api/authApi.js'
+import { login } from '../api/authApi.js'
 
 export default function LoginModal({ isOpen, onClose, onLogin }) {
-  const [email, setEmail] = useState('')
+  const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [error, setError]       = useState('')
+  const [loading, setLoading]   = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
+      // login() calls POST /api/auth/login with credentials:'include'.
+      // The server sets the HttpOnly JWT cookie automatically — nothing to store here.
       const user = await login(email, password)
-      
-      // Normalize the user object for App.jsx usage
+
+      // Normalize the user object for App.jsx usage (unchanged logic)
       const computedAge = (() => {
         if (user.age != null) return user.age
         if (user.dateOfBirth) {
           try {
-            const dob = new Date(user.dateOfBirth)
+            const dob   = new Date(user.dateOfBirth)
             const today = new Date()
-            let age = today.getFullYear() - dob.getFullYear()
-            const m = today.getMonth() - dob.getMonth()
+            let age     = today.getFullYear() - dob.getFullYear()
+            const m     = today.getMonth() - dob.getMonth()
             if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--
             return age > 0 ? age : null
           } catch { return null }
@@ -32,22 +34,23 @@ export default function LoginModal({ isOpen, onClose, onLogin }) {
       })()
 
       const normalized = {
-        id: user.id,
-        name: user.name,
-        firstName: user.name?.split(' ')[0] || user.name,
-        lastName: user.name?.split(' ').slice(1).join(' ') || '',
-        email: user.email,
-        role: user.role,
-        school: user.school || null,
-        className: user.className || null,
-        section: user.section || null,
-        rollNo: user.rollNo || null,
-        schoolId: user.schoolId || null,
-        gender: user.gender ?? null,
-        age: computedAge,
+        id:          user.id,
+        name:        user.name,
+        firstName:   user.name?.split(' ')[0] || user.name,
+        lastName:    user.name?.split(' ').slice(1).join(' ') || '',
+        email:       user.email,
+        role:        user.role,
+        school:      user.school      || null,
+        className:   user.className   || null,
+        section:     user.section     || null,
+        rollNo:      user.rollNo      || null,
+        schoolId:    user.schoolId    || null,
+        gender:      user.gender      ?? null,
+        age:         computedAge,
         dateOfBirth: user.dateOfBirth ?? null,
-        parentName: user.parentName ?? null,
+        parentName:  user.parentName  ?? null,
       }
+
       onLogin(normalized)
       onClose()
     } catch (err) {

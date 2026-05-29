@@ -1,120 +1,79 @@
 /**
- * Central API client.
- * Automatically injects the JWT Bearer token and handles 401 errors.
- * BASE_URL is empty so all /api calls go through Vite's proxy (port 3000 → 8081).
+ * Central API client — Cookie-based auth edition.
+ *
+ * Changes from the localStorage version:
+ *  - No more getAccessToken / setTokens / clearTokens storing JWTs in localStorage.
+ *  - Every fetch includes `credentials: 'include'` so the browser automatically
+ *    sends the HttpOnly JWT cookie the backend set on login.
+ *  - The X-XSRF-TOKEN header is read from the XSRF-TOKEN cookie (set by Spring's
+ *    CookieCsrfTokenRepository) and forwarded on every mutating request.
+ *  - On 401 the user is redirected to home; there is no client-side refresh flow
+ *    because the browser manages the cookie lifecycle.
  */
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
-// ── Token helpers ─────────────────────────────────────────────────────────────
-export function getAccessToken() {
-  return localStorage.getItem('access_token');
-}
-
-export function setTokens(accessToken, refreshToken) {
-  localStorage.setItem('access_token', accessToken);
-  if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
-}
-
-export function clearTokens() {
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
-  localStorage.removeItem('user');
+// ── CSRF helper ───────────────────────────────────────────────────────────────
+// Spring sets a readable cookie called XSRF-TOKEN.
+// We must echo its value in the X-XSRF-TOKEN header on every non-GET request.
+function getCsrfToken() {
+  const match = document.cookie
+    .split('; ')
+    .find(row => row.startsWith('XSRF-TOKEN='));
+  return match ? decodeURIComponent(match.split('=')[1]) : null;
 }
 
 // ── Core fetch wrapper ────────────────────────────────────────────────────────
-let isRefreshing = false;
-let refreshSubscribers = [];
-
-function subscribeToRefresh(cb) {
-  refreshSubscribers.push(cb);
-}
-
-function notifySubscribers(newToken) {
-  refreshSubscribers.forEach(cb => cb(newToken));
-  refreshSubscribers = [];
-}
-
-async function attemptRefresh() {
-  const refreshToken = localStorage.getItem('refresh_token');
-  if (!refreshToken) throw new Error('No refresh token');
-
-  const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken })
-  });
-
-  if (!res.ok) throw new Error('Refresh failed');
-  const data = await res.json();
-  setTokens(data.accessToken, data.refreshToken);
-  if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
-  return data.accessToken;
-}
-
 export async function apiRequest(path, options = {}) {
-  const token = getAccessToken();
+  const method = (options.method || 'GET').toUpperCase();
   const isFormData = options.body instanceof FormData;
+
+  // Build headers — no Authorization header needed; the cookie is sent automatically
   const headers = {
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(options.headers || {})
+    ...(options.headers || {}),
   };
+
+  // Attach CSRF token on every state-changing request
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const csrf = getCsrfToken();
+    if (csrf) headers['X-XSRF-TOKEN'] = csrf;
+  }
 
   let response;
   try {
-    response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+    response = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers,
+      credentials: 'include',   // ← this makes the browser send & receive cookies
+    });
   } catch (networkErr) {
-    // fetch() itself threw — the backend is unreachable (ECONNREFUSED).
-    // The Vite proxy converts this to a 503 JSON response, but if for any
-    // reason it doesn't, we catch the raw network error here too.
     throw new Error(
       'Cannot reach the server. Make sure the backend is running:\n' +
-      '  cd EmpathaiBackend-main && mvn spring-boot:run'
+      '  cd EmpathaiBackend && mvn spring-boot:run'
     );
   }
 
-  // Vite proxy returns 503 with a JSON body when the backend is down
+  // Vite proxy returns 503 when the backend is down
   if (response.status === 503) {
     throw new Error(
       'Backend server is not running. Start it with:\n' +
-      '  cd EmpathaiBackend-main && mvn spring-boot:run'
+      '  cd EmpathaiBackend && mvn spring-boot:run'
     );
   }
 
+  // 401 means the cookie is missing or expired — send user back to login
   if (response.status === 401 && path !== '/api/auth/login') {
-    if (!isRefreshing) {
-      isRefreshing = true;
-      try {
-        const newToken = await attemptRefresh();
-        notifySubscribers(newToken);
-      } catch {
-        clearTokens();
-        window.dispatchEvent(new CustomEvent('auth:logout'));
-        throw new Error('Session expired. Please log in again.');
-      } finally {
-        isRefreshing = false;
-      }
-    }
-
-    return new Promise((resolve, reject) => {
-      subscribeToRefresh(async (newToken) => {
-        try {
-          const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` };
-          const retryRes = await fetch(`${BASE_URL}${path}`, { ...options, headers: retryHeaders });
-          resolve(retryRes);
-        } catch (err) {
-          reject(err);
-        }
-      });
-    });
+    window.dispatchEvent(new CustomEvent('auth:logout'));
+    throw new Error('Session expired. Please log in again.');
   }
 
   return response;
 }
 
+// ── Convenience wrappers (same API surface as before) ─────────────────────────
 export async function apiGet(path) {
-  const res = await apiRequest(path);
+  const res = await apiRequest(path, { method: 'GET' });
   if (!res.ok) await throwApiError(res);
   return res.json();
 }
@@ -137,6 +96,7 @@ export async function apiDelete(path) {
   return res.json().catch(() => null);
 }
 
+// ── Error helper ──────────────────────────────────────────────────────────────
 async function throwApiError(res) {
   let message = `Request failed (${res.status})`;
   try {
@@ -150,4 +110,14 @@ async function throwApiError(res) {
     }
   } catch { /* non-JSON error body */ }
   throw new Error(message);
+}
+
+// ── Kept for backward compatibility — these are now no-ops ───────────────────
+// Nothing is stored in localStorage anymore; these exist so any file that
+// still imports them does not crash until it is updated.
+export function getAccessToken()              { return null; }
+export function setTokens()                   { /* no-op */ }
+export function clearTokens()                 {
+  // Only the user profile key needs clearing; tokens live in the HttpOnly cookie
+  localStorage.removeItem('user');
 }

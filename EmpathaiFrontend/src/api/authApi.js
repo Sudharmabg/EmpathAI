@@ -1,26 +1,42 @@
-import { apiPost, apiGet, setTokens, clearTokens } from './apiClient.js';
+import { apiPost, apiGet, clearTokens } from './apiClient.js';
 
 /**
  * Log in with email + password.
- * Stores tokens and user info in localStorage.
- * Returns the user object: { id, name, email, role, school }
+ *
+ * The backend now sets the JWT as an HttpOnly cookie — it is NOT in the
+ * response body anymore. We only store the safe user-profile object in
+ * localStorage (no secrets there).
+ *
+ * Returns the user object: { id, name, email, role, school, ... }
  */
 export async function login(email, password) {
+  // credentials:'include' is set automatically by apiClient so the cookie is received
   const data = await apiPost('/api/auth/login', { email, password });
-  setTokens(data.token, data.refreshToken);
+
+  // Store only the user profile (no token) for getCurrentUser() reads
   if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+
   return data.user;
 }
 
 /**
- * Log out: wipe tokens and stored user.
+ * Log out: tell the backend to clear the HttpOnly cookie, then wipe
+ * the local user profile.
  */
-export function logout() {
-  clearTokens();
+export async function logout() {
+  try {
+    // Backend sets Max-Age=0 on the jwt cookie, effectively deleting it
+    await apiPost('/api/auth/logout', {});
+  } catch {
+    // Even if the network call fails, clear the local state
+  } finally {
+    clearTokens(); // removes localStorage 'user' key
+  }
 }
 
 /**
- * Get the currently stored user (from localStorage, not from server).
+ * Get the currently stored user profile (from localStorage, not from server).
+ * The JWT itself is in the HttpOnly cookie and is never readable here.
  */
 export function getCurrentUser() {
   try {
@@ -32,15 +48,15 @@ export function getCurrentUser() {
 }
 
 /**
- * Map backend role enum to frontend role string used in App.jsx
+ * Map backend role enum → frontend role string used in App.jsx
  */
 export function mapRole(backendRole) {
   const map = {
-    SUPER_ADMIN: 'super_admin',
-    SCHOOL_ADMIN: 'school_admin',
-    PSYCHOLOGIST: 'psychologist',
+    SUPER_ADMIN:   'super_admin',
+    SCHOOL_ADMIN:  'school_admin',
+    PSYCHOLOGIST:  'psychologist',
     CONTENT_ADMIN: 'content_admin',
-    STUDENT: 'student'
+    STUDENT:       'student',
   };
   return map[backendRole] || backendRole?.toLowerCase() || '';
 }
@@ -51,21 +67,15 @@ export function mapRole(backendRole) {
 export function isAdminRole(role) {
   return [
     'super_admin', 'school_admin', 'psychologist', 'content_admin',
-    'SUPER_ADMIN', 'SCHOOL_ADMIN', 'PSYCHOLOGIST', 'CONTENT_ADMIN'
+    'SUPER_ADMIN',  'SCHOOL_ADMIN',  'PSYCHOLOGIST',  'CONTENT_ADMIN',
   ].includes(role);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PASSWORD SETUP (Email invite flow — MFA)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Password setup (Email invite flow) ───────────────────────────────────────
 
 /**
  * Validate the one-time token from the email invite link.
- * Called on mount of /set-password page before showing the form.
- *
  * GET /api/auth/validate-token?token=xxx
- * Returns: { valid: true, name: "John", email: "john@school.com" }
- * Throws if token is invalid, expired, or already used.
  */
 export async function validateSetupToken(token) {
   return await apiGet(`/api/auth/validate-token?token=${token}`);
@@ -73,12 +83,7 @@ export async function validateSetupToken(token) {
 
 /**
  * Submit the student's new password using their setup token.
- * Called on form submit from /set-password page.
- *
  * POST /api/auth/set-password
- * Body: { token, password, confirmPassword }
- * Returns: { message: "Password set successfully. You can now log in." }
- * Throws if passwords don't match, token invalid, or password too weak.
  */
 export async function setStudentPassword(token, password, confirmPassword) {
   return await apiPost('/api/auth/set-password', { token, password, confirmPassword });

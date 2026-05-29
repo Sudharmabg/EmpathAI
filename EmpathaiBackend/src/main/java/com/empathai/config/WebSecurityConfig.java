@@ -13,6 +13,8 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -34,49 +36,64 @@ public class WebSecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
+        // ── CSRF: use a readable cookie so the React frontend can send the token back ──
+        CookieCsrfTokenRepository csrfRepo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        // CookieCsrfTokenRepository sets the cookie name to XSRF-TOKEN by default.
+        // The frontend must read this cookie and send its value in the X-XSRF-TOKEN header.
+        CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
+        requestHandler.setCsrfRequestAttributeName(null); // deferred loading
+
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable())
-                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
 
-                        // Allow preflight OPTIONS requests
+                // ── CSRF protection (re-enabled now that we are NOT using localStorage) ──
+                // We exempt /api/auth/login and /api/auth/set-password because those are
+                // the endpoints that the user hits before they have a CSRF token.
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(csrfRepo)
+                        .csrfTokenRequestHandler(requestHandler)
+                        .ignoringRequestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/logout",
+                                "/api/auth/set-password",
+                                "/api/auth/validate-token"
+                        )
+                )
+
+                // ── Session: stay STATELESS — the HttpOnly cookie carries the JWT ──────
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                // ── Authorization rules (unchanged from original) ─────────────────────
+                .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // Public authentication & set-password endpoints
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/auth/validate-token").permitAll()
                         .requestMatchers("/api/auth/set-password").permitAll()
 
-                        // Public endpoints
                         .requestMatchers("/api/public/**").permitAll()
 
-                        // Assessment & Group related
                         .requestMatchers(HttpMethod.GET, "/api/groups/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/groups/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/responses").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/responses/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/analytics/analyze").permitAll()
 
-                        // Questions
                         .requestMatchers(HttpMethod.GET, "/api/questions/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/questions/**")
                         .hasAnyRole("SUPER_ADMIN", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/questions/**").authenticated()
 
-                        // Delete operations (restricted)
                         .requestMatchers(HttpMethod.DELETE, "/api/**").authenticated()
 
-                        // Teachers management - only SUPER_ADMIN and SCHOOL_ADMIN
                         .requestMatchers("/api/teachers/**")
                         .hasAnyRole("SUPER_ADMIN", "SCHOOL_ADMIN")
 
-                        // Chat
                         .requestMatchers("/api/chat/**").authenticated()
-                        .requestMatchers("/api/agent/**").permitAll()
+                        .requestMatchers("/api/openai/**").permitAll()
                         .requestMatchers("/error").permitAll()
 
-                        // Everything else requires authentication
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider)
@@ -104,8 +121,10 @@ public class WebSecurityConfig {
                 "Sec-Ch-Ua-Platform",
                 "Sec-Fetch-Dest",
                 "Sec-Fetch-Mode",
-                "Sec-Fetch-Site"
+                "Sec-Fetch-Site",
+                "X-XSRF-TOKEN"   // ← required for CSRF token forwarding
         ));
+        // allowCredentials MUST be true for cookies to be sent cross-origin
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -1,24 +1,25 @@
 {
-  "name": "empathai-frontend",
+  "name": "empathiai-homepage",
   "private": true,
-  "version": "1.0.0",
-  "description": "EmpathAI Frontend — React-based educational mental health platform for students",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview",
-    "start": "vite"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "axios": "^1.13.6",
+    "datepicker": "^0.0.0",
     "katex": "^0.16.9",
     "react": "^18.2.0",
     "react-datepicker": "^9.1.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^8.0.7",
     "react-router-dom": "^7.14.2",
+    "react-syntax-highlighter": "^16.1.1",
     "rehype-katex": "^6.0.3",
     "remark-math": "^5.1.1"
   },
@@ -34,8 +35,5 @@
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
     "vite": "^7.3.1"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   }
 }

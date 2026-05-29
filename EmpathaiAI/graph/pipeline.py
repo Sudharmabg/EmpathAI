@@ -30,10 +30,12 @@ potentially sensitive always goes through the full pipeline.
 """
 
 import logging
-import sqlite3
+import os
 
-from langgraph.checkpoint.sqlite import SqliteSaver
+from dotenv import load_dotenv
+from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, StateGraph
+from psycopg_pool import ConnectionPool
 
 from graph.nodes.context_loader import context_loader
 from graph.nodes.crisis_evaluator import crisis_evaluator
@@ -46,11 +48,23 @@ from graph.nodes.response_logger import response_logger
 from graph.nodes.schedule_reasoner import schedule_reasoner
 from graph.state import ChatState
 
+load_dotenv()
+
 logger = logging.getLogger("pipeline")
 
-conn   = sqlite3.connect("checkpoints.db", check_same_thread=False)
-memory = SqliteSaver(conn)
+# ✅ Production-ready PostgreSQL connection pool
+# Replaces the old SQLite local file connection
+DB_URI = os.getenv("POSTGRES_URL")
 
+if not DB_URI:
+    raise ValueError("POSTGRES_URL is not set in .env file")
+
+connection_pool = ConnectionPool(
+    conninfo=DB_URI,
+    max_size=10,
+    open=True,
+    kwargs={"autocommit": True},
+)
 
 # ── Routing functions ─────────────────────────────────────────────────────────
 
@@ -138,9 +152,16 @@ def build_pipeline():
     graph.add_edge("response_generator", "response_logger")
     graph.add_edge("response_logger",    END)
 
-    compiled = graph.compile(checkpointer=memory)
+    # ✅ Initialize PostgresSaver using the connection pool
+    checkpointer = PostgresSaver(connection_pool)
+
+    # ✅ Automatically creates required tables in PostgreSQL if they don't exist
+    checkpointer.setup()
+
+    compiled = graph.compile(checkpointer=checkpointer)
+
     logger.info(
-        "LangGraph pipeline compiled with fast-path optimisation. "
+        "LangGraph pipeline compiled with PostgreSQL memory + fast-path optimisation. "
         "Simple curriculum questions skip 3 LLM calls."
     )
     return compiled

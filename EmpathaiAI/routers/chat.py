@@ -55,7 +55,7 @@ def _build_initial_state(request: ChatRequest) -> ChatState:
         "tasks_completed_this_week": request.tasks_completed_this_week or 0,
         "tasks_total_this_week":     request.tasks_total_this_week or 0,
 
-        # ── Overview context (other intern's addition) ────────────────────────
+        # ── Overview context ──────────────────────────────────────────────────
         "sleep_hours":   request.sleep_hours,
         "sleep_quality": request.sleep_quality,
         "current_mood":  request.current_mood,
@@ -76,10 +76,12 @@ def _build_initial_state(request: ChatRequest) -> ChatState:
         "empathy_prefix":             None,
 
         # ── Fast path flag (set by fast_path_classifier node) ─────────────────
-        "fast_path":    False,
+        "fast_path": False,
 
-        # ── Conversation history — LangGraph manages this ─────────────────────
-        "chat_history": [],
+        # ✅ chat_history is intentionally NOT passed here
+        # LangGraph PostgresSaver automatically loads saved chat_history
+        # from the checkpoint using thread_id = "student-{id}"
+        # Passing an empty list would overwrite the saved history
 
         # ── Output fields — reset each turn ───────────────────────────────────
         "reply":         "",
@@ -127,7 +129,11 @@ async def chat(request: ChatRequest):
 
         # ── Run LangGraph pipeline in thread pool (non-blocking) ──────────────
         initial_state = _build_initial_state(request)
-        thread_config = {"configurable": {"thread_id": f"student-{request.student_id}"}}
+        thread_config = {
+            "configurable": {
+                "thread_id": f"student-{request.student_id}"
+            }
+        }
 
         loop   = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -143,7 +149,11 @@ async def chat(request: ChatRequest):
             and not has_images
             and not result.get("is_flagged")
         ):
-            add_to_cache(request.message, result["reply"], result["detected_mode"])
+            add_to_cache(
+                request.message,
+                result["reply"],
+                result["detected_mode"]
+            )
 
         logger.info(
             "Response completed for %s | mode=%s | flagged=%s",
@@ -163,12 +173,16 @@ async def chat(request: ChatRequest):
 
     except Exception as exc:
         logger.error(
-            "Error in /chat for %s: %s", request.student_name, str(exc), exc_info=True
+            "Error in /chat for %s: %s",
+            request.student_name, str(exc), exc_info=True
         )
-        raise HTTPException(status_code=500, detail=f"AI service error: {str(exc)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI service error: {str(exc)}"
+        )
 
 
-# ── POST /chat/stream  (NEW — Server-Sent Events) ─────────────────────────────
+# ── POST /chat/stream  (Server-Sent Events) ───────────────────────────────────
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest):

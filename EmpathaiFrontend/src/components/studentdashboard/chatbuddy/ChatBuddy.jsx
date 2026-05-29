@@ -367,7 +367,6 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
     if (initialMessage) {
       setInputMessage(initialMessage)
       setChatMessage?.('')
-      // Auto-send the message after a short delay
       setTimeout(() => {
         const sendBtn = document.querySelector('[data-send-btn]')
         if (sendBtn) sendBtn.click()
@@ -538,7 +537,7 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
   )
 
   return (
-<div className="font-lora max-w-7xl mx-auto px-4 flex flex-col" style={{ height: 'calc(100vh - 64px)', maxHeight: 'calc(100vh - 64px)', overflow: 'hidden' }}>
+    <div className="font-lora max-w-7xl mx-auto px-4 flex flex-col" style={{ height: 'calc(100vh -100px)' }}>
 
       {/* Header section */}
       <div className="mb-6 shrink-0">
@@ -741,11 +740,11 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                 </div>
 
                 <button
-    data-send-btn
-    onClick={handleSendMessage}
-    disabled={isLoading || !inputMessage.trim() || (usage && usage.remaining === 0)}
-    className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl px-4 py-3 transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
->
+                  data-send-btn
+                  onClick={handleSendMessage}
+                  disabled={isLoading || !inputMessage.trim() || (usage && usage.remaining === 0)}
+                  className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl px-4 py-3 transition-colors flex items-center gap-1.5 shadow-sm shrink-0"
+                >
                   {isLoading
                     ? <ArrowPathIcon className="w-5 h-5 animate-spin" />
                     : <PaperAirplaneIcon className="w-5 h-5" />
@@ -842,14 +841,14 @@ export default function ChatBuddy({ user, initialMessage, setChatMessage }) {
                           {formatSessionLabel(session)}
                         </p>
                         {session.source === 'SCHEDULE' ? (
-    <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 border border-violet-200 shrink-0 whitespace-nowrap">
-        🗓 Schedule
-    </span>
-) : (
-    <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600 border border-purple-200 shrink-0 whitespace-nowrap">
-        💬 ChatBuddy
-    </span>
-)}
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-600 border border-violet-200 shrink-0 whitespace-nowrap">
+                            🗓 Schedule
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600 border border-purple-200 shrink-0 whitespace-nowrap">
+                            💬 ChatBuddy
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                         <ClockIcon className="w-3 h-3" />

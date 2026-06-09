@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { XMarkIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { login } from '../api/authApi.js'
 
+import ReactGA from 'react-ga4'
+
 export default function LoginModal({ isOpen, onClose, onLogin }) {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -52,6 +54,21 @@ export default function LoginModal({ isOpen, onClose, onLogin }) {
       }
 
       onLogin(normalized)
+
+      // ── GA4: Track login time ──────────────────────
+const now = new Date()
+ReactGA.event('user_login_time', {
+  login_hour: now.getHours(),
+  login_minute: now.getMinutes(),
+  login_time_string: now.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }),
+  login_date: now.toLocaleDateString('en-IN'),
+  user_role: normalized.role
+})
+
       onClose()
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.')

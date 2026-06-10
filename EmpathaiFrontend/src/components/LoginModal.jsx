@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { XMarkIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { login } from '../api/authApi.js'
-
 import ReactGA from 'react-ga4'
 
 export default function LoginModal({ isOpen, onClose, onLogin }) {
@@ -10,16 +9,37 @@ export default function LoginModal({ isOpen, onClose, onLogin }) {
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
 
+  // ── Helper: Detect Browser Name ──────────────────────
+  const getBrowserName = () => {
+    const ua = navigator.userAgent
+    if (ua.includes('Edg'))                              return 'Microsoft Edge'
+    if (ua.includes('OPR') || ua.includes('Opera'))     return 'Opera'
+    if (ua.includes('Chrome') && !ua.includes('Edg'))   return 'Chrome'
+    if (ua.includes('Firefox'))                          return 'Firefox'
+    if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari'
+    if (ua.includes('MSIE') || ua.includes('Trident'))  return 'Internet Explorer'
+    return 'Unknown Browser'
+  }
+
+  // ── Helper: Detect Browser Version ───────────────────
+  const getBrowserVersion = () => {
+    const ua = navigator.userAgent
+    let match =
+      ua.match(/Edg\/([\d.]+)/)      ||
+      ua.match(/OPR\/([\d.]+)/)      ||
+      ua.match(/Chrome\/([\d.]+)/)   ||
+      ua.match(/Firefox\/([\d.]+)/)  ||
+      ua.match(/Version\/([\d.]+).*Safari/)
+    return match ? match[1] : 'Unknown Version'
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      // login() calls POST /api/auth/login with credentials:'include'.
-      // The server sets the HttpOnly JWT cookie automatically — nothing to store here.
       const user = await login(email, password)
 
-      // Normalize the user object for App.jsx usage (unchanged logic)
       const computedAge = (() => {
         if (user.age != null) return user.age
         if (user.dateOfBirth) {
@@ -55,19 +75,29 @@ export default function LoginModal({ isOpen, onClose, onLogin }) {
 
       onLogin(normalized)
 
-      // ── GA4: Track login time ──────────────────────
-const now = new Date()
-ReactGA.event('user_login_time', {
-  login_hour: now.getHours(),
-  login_minute: now.getMinutes(),
-  login_time_string: now.toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true
-  }),
-  login_date: now.toLocaleDateString('en-IN'),
-  user_role: normalized.role
-})
+      // ── GA4: Track login time (your teammate's code) ──
+      const now = new Date()
+      ReactGA.event('user_login_time', {
+        login_hour:        now.getHours(),
+        login_minute:      now.getMinutes(),
+        login_time_string: now.toLocaleTimeString('en-IN', {
+          hour:   '2-digit',
+          minute: '2-digit',
+          hour12: true
+        }),
+        login_date: now.toLocaleDateString('en-IN'),
+        user_role:  normalized.role
+      })
+
+      // ── GA4: Track browser info (YOUR task) ──────────
+      ReactGA.event('user_browser_info', {
+        browser_name:    getBrowserName(),
+        browser_version: getBrowserVersion(),
+        user_agent:      navigator.userAgent,
+        platform:        navigator.platform,
+        user_role:       normalized.role,
+        user_email:      normalized.email
+      })
 
       onClose()
     } catch (err) {

@@ -17,7 +17,6 @@ import ErrorBoundary from './components/ErrorBoundary'
 
 import { getCurrentUser, logout as authLogout } from './api/authApi.js'
 import { clearTokens } from './api/apiClient.js'
-import useTimeTracker from './api/useTimeTracker'
 
 const ADMIN_ROLES = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PSYCHOLOGIST', 'CONTENT_ADMIN', 'TEACHER']
 
@@ -85,9 +84,6 @@ function HomePage({ user, onLogin, onLogout }) {
 function AppShell() {
   const [user, setUser] = useState(() => getCurrentUser())
   const navigate = useNavigate()
-
-  const studentId = user && !isAdmin(user) ? user.id : null
-  useTimeTracker(studentId)
 
   useEffect(() => {
     const handleAuthLogout = () => {

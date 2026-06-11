@@ -17,7 +17,6 @@ import {
   getGratitudeEntries, saveGratitudeEntry, deleteGratitudeEntry,
   getSleepEntries, saveSleepEntry
 } from '../../../api/wellnessApi.js'
-import { updateTimeSpent } from '../../../api/usermanagementapi.js'
 
 const SUBJECTS = ['Mathematics', 'Science', 'SST', 'English', 'Hindi', 'Art & Craft', 'Physical Education', 'Computer Science', 'Other']
 
@@ -114,7 +113,6 @@ export default function Activities({ user }) {
   )
 
   // ── Meditation Timer ───────────────────────────────────────────────────────
-  // Sends the actual meditation duration (in seconds) when the timer finishes
   function MeditationTimer({ user }) {
     const [duration, setDuration] = useState(5)
     const [isActive, setIsActive] = useState(false)
@@ -138,16 +136,9 @@ export default function Activities({ user }) {
             setCompleted(true)
             setSaving(true)
 
-            const seconds = duration * 60 // ← actual meditation duration
-
             // Record intervention
             completeIntervention(user?.id, 'meditation')
               .catch(err => console.error('Failed to record meditation intervention:', err))
-
-            // Send actual meditation duration as time spent
-            updateTimeSpent(user?.id, seconds)
-              .then(() => console.log('Time spent updated:', seconds, 'seconds'))
-              .catch(err => console.warn('Failed to update time spent:', err))
               .finally(() => setSaving(false))
 
             return 0
@@ -211,10 +202,7 @@ export default function Activities({ user }) {
   }
 
   // ── Mood Tracker ───────────────────────────────────────────────────────────
-  // Sends actual time from opening modal to clicking "Log Mood"
   function MoodTracker({ user }) {
-    const openedAt = useRef(Date.now()) // ← start timer when modal opens
-
     const [selectedMood, setSelectedMood] = useState('')
     const [note, setNote] = useState('')
     const [entries, setEntries] = useState([])
@@ -242,9 +230,6 @@ export default function Activities({ user }) {
       if (!selectedMood) return
       setSaving(true)
 
-      // Actual time spent from opening to completing
-      const seconds = Math.floor((Date.now() - openedAt.current) / 1000)
-
       try {
         const saved = await saveMoodEntry(user?.id, selectedMood, note)
         setEntries(prev => [saved, ...prev])
@@ -252,11 +237,6 @@ export default function Activities({ user }) {
         // Record intervention
         completeIntervention(user?.id, 'mood')
           .catch(err => console.error('Failed to record mood intervention:', err))
-
-        // Send actual time spent
-        updateTimeSpent(user?.id, seconds)
-          .then(() => console.log('Time spent updated:', seconds, 'seconds'))
-          .catch(err => console.warn('Failed to update time spent:', err))
 
         setLogged(true)
         setSelectedMood('')
@@ -336,10 +316,7 @@ export default function Activities({ user }) {
   }
 
   // ── Gratitude Journal ──────────────────────────────────────────────────────
-  // Sends actual time from opening modal to clicking "Add Entry"
   function GratitudeJournal({ user }) {
-    const openedAt = useRef(Date.now()) // ← start timer when modal opens
-
     const [gratitude, setGratitude] = useState('')
     const [entries, setEntries] = useState([])
     const [saving, setSaving] = useState(false)
@@ -358,9 +335,6 @@ export default function Activities({ user }) {
       if (!gratitude.trim()) return
       setSaving(true)
 
-      // Actual time spent from opening to completing
-      const seconds = Math.floor((Date.now() - openedAt.current) / 1000)
-
       try {
         const saved = await saveGratitudeEntry(user?.id, gratitude)
         setEntries(prev => [saved, ...prev])
@@ -368,11 +342,6 @@ export default function Activities({ user }) {
         // Record intervention
         completeIntervention(user?.id, 'gratitude')
           .catch(err => console.error('Failed to record gratitude intervention:', err))
-
-        // Send actual time spent
-        updateTimeSpent(user?.id, seconds)
-          .then(() => console.log('Time spent updated:', seconds, 'seconds'))
-          .catch(err => console.warn('Failed to update time spent:', err))
 
         setLogged(true)
         setGratitude('')
@@ -448,10 +417,7 @@ export default function Activities({ user }) {
   }
 
   // ── Sleep Tracker ──────────────────────────────────────────────────────────
-  // Sends actual time from opening modal to clicking "Log Sleep"
   function SleepTracker({ user }) {
-    const openedAt = useRef(Date.now()) // ← start timer when modal opens
-
     const [bedtime, setBedtime] = useState('')
     const [wakeTime, setWakeTime] = useState('')
     const [quality, setQuality] = useState('')
@@ -472,9 +438,6 @@ export default function Activities({ user }) {
       if (!bedtime || !wakeTime || !quality) return
       setSaving(true)
 
-      // Actual time spent from opening to completing
-      const seconds = Math.floor((Date.now() - openedAt.current) / 1000)
-
       try {
         const saved = await saveSleepEntry(user?.id, bedtime, wakeTime, quality)
         setEntries(prev => [saved, ...prev])
@@ -482,11 +445,6 @@ export default function Activities({ user }) {
         // Record intervention
         completeIntervention(user?.id, 'sleep')
           .catch(err => console.error('Failed to record sleep intervention:', err))
-
-        // Send actual time spent
-        updateTimeSpent(user?.id, seconds)
-          .then(() => console.log('Time spent updated:', seconds, 'seconds'))
-          .catch(err => console.warn('Failed to update time spent:', err))
 
         setLogged(true)
         setBedtime('')
@@ -571,10 +529,7 @@ export default function Activities({ user }) {
   }
 
   // ── Goal Setting ───────────────────────────────────────────────────────────
-  // Sends actual time from opening modal to clicking "Add Goal"
   function GoalSetting({ user }) {
-    const openedAt = useRef(Date.now()) // ← start timer when modal opens
-
     const [goal, setGoal] = useState('')
     const [subjectTag, setSubjectTag] = useState('Mathematics')
     const [targetDate, setTargetDate] = useState('')
@@ -599,9 +554,6 @@ export default function Activities({ user }) {
       setSaving(true)
       setMsg('')
 
-      // Actual time spent from opening to completing
-      const seconds = Math.floor((Date.now() - openedAt.current) / 1000)
-
       try {
         const newGoal = await saveGoal(studentId, goal, subjectTag, targetDate)
         setGoals(prev => [newGoal, ...(Array.isArray(prev) ? prev : [])])
@@ -612,11 +564,6 @@ export default function Activities({ user }) {
         // Record intervention
         completeIntervention(studentId, 'goal')
           .catch(err => console.error('Failed to record goal intervention:', err))
-
-        // Send actual time spent
-        updateTimeSpent(studentId, seconds)
-          .then(() => console.log('Time spent updated:', seconds, 'seconds'))
-          .catch(err => console.warn('Failed to update time spent:', err))
 
         setMsg('Goal saved! Wellness activity recorded.')
       } catch {

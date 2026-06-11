@@ -5,7 +5,7 @@ import {
   ChatBubbleLeftRightIcon, BookOpenIcon, ClipboardDocumentListIcon,
   PuzzlePieceIcon, BoltIcon, ArrowRightOnRectangleIcon, CheckCircleIcon, XMarkIcon,
 } from '@heroicons/react/24/outline'
-
+import { trackTabView, trackTimeSpent } from '../analytics/ga4'
 import ChatBuddy from './studentdashboard/chatbuddy/ChatBuddy'
 import Activities from './studentdashboard/activity/Activities'
 import Questionnaire from './studentdashboard/assessment/Questionnaire'
@@ -159,7 +159,19 @@ export default function Dashboard({ user, onLogout }) {
     const map = { chat: 'chatbuddy', schedule: 'schedule', tasks: 'schedule', feelings: 'questionnaire', activities: 'activities' }
     for (const [k, v] of Object.entries(map)) { if (q.includes(k)) { setActiveTab(v); return } }
   }
+useEffect(() => {
+  const tabLabel = sidebarItems.find(i => i.id === activeTab)?.name || activeTab
+  const studentId = user?.id || ''
+  const className = user?.className || ''
+  const start = Date.now()
 
+  trackTabView(tabLabel, studentId, className)
+
+  return () => {
+    const seconds = Math.round((Date.now() - start) / 1000)
+    trackTimeSpent(tabLabel, studentId, seconds)
+  }
+}, [activeTab])
   return (
     <div className="min-h-screen bg-gray-50 font-lora">
 

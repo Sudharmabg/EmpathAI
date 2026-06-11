@@ -75,6 +75,9 @@ export default function LoginModal({ isOpen, onClose, onLogin }) {
 
       onLogin(normalized)
 
+      // ── Save login timestamp for duration tracking ──
+      localStorage.setItem('login_timestamp', Date.now())
+
       // ── GA4: Track login time (your teammate's code) ──
       const now = new Date()
       ReactGA.event('user_login_time', {

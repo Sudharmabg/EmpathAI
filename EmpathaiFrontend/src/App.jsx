@@ -18,6 +18,8 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { getCurrentUser, logout as authLogout } from './api/authApi.js'
 import { clearTokens } from './api/apiClient.js'
 
+import ReactGA from 'react-ga4'
+
 const ADMIN_ROLES = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PSYCHOLOGIST', 'CONTENT_ADMIN', 'TEACHER']
 
 // ── All valid student tabs ─────────────────────────────────────────────────────
@@ -96,7 +98,22 @@ function AppShell() {
 
   const handleLogin = (userData) => setUser(userData)
 
-  const handleLogout = async () => {
+const handleLogout = async () => {
+    // ── GA4: Track session duration in minutes ────
+    const loginTime = localStorage.getItem('login_timestamp')
+    if (loginTime) {
+      const durationMs      = Date.now() - parseInt(loginTime)
+      const durationMinutes = Math.round(durationMs / 60000)
+      const durationSeconds = Math.round(durationMs / 1000)
+
+      ReactGA.event('session_duration', {
+        duration_minutes: durationMinutes,
+        duration_seconds: durationSeconds,
+        user_role: user?.role || 'unknown'
+      })
+      localStorage.removeItem('login_timestamp')
+    }
+    // ─────────────────────────────────────────────
     authLogout()
     clearTokens()
     setUser(null)

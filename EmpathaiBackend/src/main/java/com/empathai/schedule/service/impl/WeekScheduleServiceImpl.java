@@ -236,6 +236,8 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
 
         // Track slots used in this day's generation (to avoid internal overlaps)
         List<int[]> usedSlots = new ArrayList<>(occupiedSlots);
+        usedSlots.sort(Comparator.comparingInt(s -> s[0]));
+
 
         for (TaskSuggestion suggestion : suggestions) {
 
@@ -292,7 +294,8 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
 
             // Mark slot as used (with 10-min break gap after study tasks)
             int breakGap = "STUDY".equals(suggestion.getTaskType()) ? 10 : 0;
-            usedSlots.add(new int[]{slot[0], slot[1] + breakGap});
+            insertSorted(usedSlots, new int[]{slot[0], slot[1] + breakGap});
+
 
             String detectedType = ruleEngine.detectType(suggestion.getTitle());
 
@@ -336,14 +339,9 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
     private int[] findFreeSlot(List<int[]> occupiedSlots, int durationMins,
                                int windowStart, int windowEnd) {
 
-        // Sort occupied slots by start time
-        List<int[]> sorted = occupiedSlots.stream()
-                .sorted(Comparator.comparingInt(s -> s[0]))
-                .collect(Collectors.toList());
-
         int cursor = windowStart;
 
-        for (int[] slot : sorted) {
+        for (int[] slot : occupiedSlots) {
             int slotStart = slot[0];
             int slotEnd   = slot[1];
 
@@ -370,6 +368,7 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
 
         return null; // no slot found
     }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // BUILD OCCUPIED SLOTS
@@ -463,4 +462,12 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
                 .warnings(warnings)
                 .build();
     }
-}
+
+    private void insertSorted(List<int[]> list, int[] newSlot) {
+        int index = 0;
+        while (index < list.size() && list.get(index)[0] < newSlot[0]) {
+            index++;
+        }
+        list.add(index, newSlot);
+    }
+}

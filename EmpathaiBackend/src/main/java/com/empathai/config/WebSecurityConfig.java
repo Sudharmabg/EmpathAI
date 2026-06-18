@@ -18,6 +18,7 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 import java.util.Arrays;
 import java.util.List;
@@ -54,15 +55,17 @@ public class WebSecurityConfig {
                         .csrfTokenRepository(csrfRepo)
                         .csrfTokenRequestHandler(requestHandler)
                         .ignoringRequestMatchers(
-                                "/api/auth/login",
-                                "/api/auth/logout",
-                                "/api/auth/set-password",
-                                "/api/auth/validate-token"
+                                new AntPathRequestMatcher("/api/**")
                         )
                 )
 
                 // ── Session: stay STATELESS — the HttpOnly cookie carries the JWT ──────
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                
+                // ── Preserve SecurityContext across async dispatches (e.g. Mono/Flux returns) ──
+                .securityContext(context -> context.securityContextRepository(
+                        new org.springframework.security.web.context.RequestAttributeSecurityContextRepository()
+                ))
 
                 // ── Authorization rules (unchanged from original) ─────────────────────
                 .authorizeHttpRequests(auth -> auth
@@ -90,7 +93,7 @@ public class WebSecurityConfig {
                         .requestMatchers("/api/teachers/**")
                         .hasAnyRole("SUPER_ADMIN", "SCHOOL_ADMIN")
 
-                        .requestMatchers("/api/chat/**").authenticated()
+                        .requestMatchers("/api/chat/**", "/api/agent/**").authenticated()
                         .requestMatchers("/api/openai/**").permitAll()
                         .requestMatchers("/error").permitAll()
 

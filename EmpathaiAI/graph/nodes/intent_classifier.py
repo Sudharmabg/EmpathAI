@@ -49,7 +49,8 @@ Student message: "{message}"
 
 Reply with ONLY the category label."""
 
-        response = llm.invoke([HumanMessage(content=prompt)])
+        from graph.utils.llm_retry import with_retry
+        response = with_retry(lambda: llm.invoke([HumanMessage(content=prompt)]))
         intent = response.content.strip().upper()
         state["intent"] = intent if intent in VALID_INTENTS else "CURRICULUM"
 

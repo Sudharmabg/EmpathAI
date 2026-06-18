@@ -38,11 +38,9 @@ from langgraph.graph import END, StateGraph
 from psycopg_pool import ConnectionPool
 
 from graph.nodes.context_loader import context_loader
-from graph.nodes.crisis_evaluator import crisis_evaluator
-from graph.nodes.emotion_evaluator import emotion_evaluator
 from graph.nodes.empathy_validator import empathy_validator
 from graph.nodes.fast_path_classifier import fast_path_classifier
-from graph.nodes.intent_classifier import intent_classifier
+from graph.nodes.full_classifier import full_classifier
 from graph.nodes.response_generator import response_generator
 from graph.nodes.response_logger import response_logger
 from graph.nodes.schedule_reasoner import schedule_reasoner
@@ -103,12 +101,10 @@ def build_pipeline():
     # so we can route to it separately from the slow-path context_loader)
     graph.add_node("fast_context_loader",  context_loader)    # same function, fast alias
 
-    # Slow path nodes (full pipeline — unchanged from original)
+    # Slow path nodes (full pipeline)
     graph.add_node("context_loader",       context_loader)
-    graph.add_node("intent_classifier",    intent_classifier)
-    graph.add_node("emotion_evaluator",    emotion_evaluator)
+    graph.add_node("full_classifier",      full_classifier)
     graph.add_node("schedule_reasoner",    schedule_reasoner)
-    graph.add_node("crisis_evaluator",     crisis_evaluator)
     graph.add_node("empathy_validator",    empathy_validator)
 
     # Shared tail — both paths converge here
@@ -131,14 +127,12 @@ def build_pipeline():
     # ── FAST path: context_loader → response_generator → response_logger ──────
     graph.add_edge("fast_context_loader", "response_generator")
 
-    # ── SLOW path: full original chain ────────────────────────────────────────
-    graph.add_edge("context_loader",    "intent_classifier")
-    graph.add_edge("intent_classifier", "emotion_evaluator")
-    graph.add_edge("emotion_evaluator", "schedule_reasoner")
-    graph.add_edge("schedule_reasoner", "crisis_evaluator")
+    # ── SLOW path: consolidated classifier chain ──────────────────────────────
+    graph.add_edge("context_loader",    "full_classifier")
+    graph.add_edge("full_classifier",   "schedule_reasoner")
 
     graph.add_conditional_edges(
-        "crisis_evaluator",
+        "schedule_reasoner",
         _route_after_crisis,
         {
             "response_logger":   "response_logger",

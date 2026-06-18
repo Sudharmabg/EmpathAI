@@ -38,7 +38,7 @@ public abstract class BaseEntity {
     @Column(name = "updated_by")
     private String updatedBy;
     @Builder.Default
-    @Column(name = "deleted", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 0")
+    @Column(name = "deleted", nullable = false)
     private Boolean deleted = false;
 
 

@@ -27,7 +27,7 @@ public class AssessmentGroup extends BaseEntity {
     private String color;
 
     @Builder.Default
-    @Column(name = "is_default", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 0")
+    @Column(name = "is_default", nullable = false)
     private Boolean isDefault = false;
 
 

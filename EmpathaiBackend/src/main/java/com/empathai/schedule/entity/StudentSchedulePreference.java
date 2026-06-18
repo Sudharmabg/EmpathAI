@@ -29,9 +29,7 @@ public class StudentSchedulePreference extends BaseEntity {
     @Column(name = "busy_slots", columnDefinition = "TEXT")
     private String busySlots;
 
-    // Whether onboarding has been completed
     @Builder.Default
-    @Column(name = "onboarding_complete", nullable = false,
-            columnDefinition = "TINYINT(1) DEFAULT 0")
+    @Column(name = "onboarding_complete", nullable = false)
     private Boolean onboardingComplete = false;
 }

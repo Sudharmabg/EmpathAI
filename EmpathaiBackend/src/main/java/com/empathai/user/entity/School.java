@@ -38,6 +38,6 @@ public class School extends BaseEntity {
     private String email;
 
     @Builder.Default
-    @Column(name = "is_active", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 1")
+    @Column(name = "is_active", nullable = false)
     private Boolean active = true;
 }

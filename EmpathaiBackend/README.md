@@ -3,20 +3,19 @@
 ## Prerequisites
 - Java 21
 - Maven 3.8+
-- MySQL 8+
+- PostgreSQL 14+
 
 ## Setup
 
 ### 1. Database
-No manual DB creation needed. Just ensure MySQL is running.
-The app auto-creates `empathai_db` on first startup.
+Ensure PostgreSQL is running and that a database named `empathai` has been created (e.g. `CREATE DATABASE empathai;` if it doesn't already exist). Both the AI microservice and Java backend can share this database.
 
 ### 2. Configure your password
 Edit `src/main/resources/application.properties`:
 ```properties
-spring.datasource.password=YOUR_MYSQL_PASSWORD
+spring.datasource.password=YOUR_POSTGRES_PASSWORD
 ```
-> Default is `root`. Change if your MySQL password is different.
+> Default is `root` (matching postgres superuser settings in EmpathaiAI/.env). Change if your password is different.
 
 ### 3. Run
 ```bash

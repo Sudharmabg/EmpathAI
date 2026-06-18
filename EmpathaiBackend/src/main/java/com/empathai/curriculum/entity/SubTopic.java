@@ -35,7 +35,8 @@ public class SubTopic extends BaseEntity {
     @Column(name = "learning_objectives", columnDefinition = "TEXT")
     private String learningObjectives;
 
-    @Column(name = "summary_image", columnDefinition = "LONGBLOB")
+    @Lob
+    @Column(name = "summary_image")
     @JsonIgnore
     private byte[] summaryImage;
 

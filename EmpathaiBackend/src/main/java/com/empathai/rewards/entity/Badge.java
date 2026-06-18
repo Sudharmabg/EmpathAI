@@ -18,7 +18,8 @@ public class Badge {
     @Column(nullable = false)
     private String title;
 
-    @Column(name = "image", columnDefinition = "LONGBLOB")
+    @Lob
+    @Column(name = "image")
     private byte[] image;
 
     @Column(name = "image_type")

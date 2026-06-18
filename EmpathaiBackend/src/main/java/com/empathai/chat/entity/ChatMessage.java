@@ -31,8 +31,8 @@ public class ChatMessage {
     private String detectedMode; // "curriculum" or "mental_health"
 
     // ── Image persistence ──────────────────────────────────────────────────────
-    // Stored as MEDIUMTEXT to hold base64-encoded image data (~1–2 MB per image)
-    @Column(name = "image_base64", columnDefinition = "MEDIUMTEXT")
+    // Stored as TEXT to hold base64-encoded image data
+    @Column(name = "image_base64", columnDefinition = "TEXT")
     private String imageBase64;
 
     @Column(name = "image_mime_type", length = 50)

@@ -39,6 +39,6 @@ public class ScheduleTask extends BaseEntity {
     private String notes;
 
     @Builder.Default
-    @Column(name = "is_completed", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 0")
+    @Column(name = "is_completed", nullable = false)
     private boolean completed = false;     // ← Changed to primitive boolean
 }

@@ -50,7 +50,8 @@ public class QuizQuestion extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String explanation;
 
-    @Column(name = "question_image", columnDefinition = "LONGBLOB")
+    @Lob
+    @Column(name = "question_image")
     @JsonIgnore
     private byte[] questionImage;
 

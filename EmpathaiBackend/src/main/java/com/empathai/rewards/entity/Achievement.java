@@ -21,7 +21,8 @@ public class Achievement {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "image", columnDefinition = "LONGBLOB")
+    @Lob
+    @Column(name = "image")
     private byte[] image;
 
     @Column(name = "image_type")

@@ -31,7 +31,7 @@ public class ScheduleRule {
     @Column(name = "block_type", nullable = false, length = 15)
     private String blockType;
 
-    @Column(name = "is_active", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 1")
+    @Column(name = "is_active", nullable = false)
     private Boolean active;
 
     // JSON string storing configurable values e.g. {"min_minutes":15}

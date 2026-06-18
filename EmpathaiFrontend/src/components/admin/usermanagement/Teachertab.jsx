@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
     PencilIcon, TrashIcon, UserPlusIcon, MagnifyingGlassIcon,
-    KeyIcon, PhoneIcon, AcademicCapIcon, BookOpenIcon,
+    KeyIcon, PhoneIcon, AcademicCapIcon, BookOpenIcon, XMarkIcon
 } from '@heroicons/react/24/outline'
 import {
     getTeachers, createTeacher, updateTeacher,
@@ -95,6 +95,23 @@ export default function TeacherTab({ user, schoolsData = [] }) {
     }, [searchTerm, user])
 
     useEffect(() => { loadTeachers() }, [loadTeachers])
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                if (isModalOpen) {
+                    setIsModalOpen(false)
+                } else if (isDeleteModalOpen) {
+                    setIsDeleteModalOpen(false)
+                } else if (resetTarget) {
+                    setResetTarget(null)
+                    setResetResult(null)
+                }
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [isModalOpen, isDeleteModalOpen, resetTarget])
 
     // ── modal helpers ─────────────────────────────────────────────────────────
 
@@ -396,6 +413,12 @@ export default function TeacherTab({ user, schoolsData = [] }) {
                     <div className="flex items-center justify-center min-h-screen px-4 py-8">
                         <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setIsModalOpen(false)} />
                         <div className="bg-white rounded-xl shadow-2xl p-6 z-10 w-full max-w-2xl relative">
+                            <button
+                                onClick={() => setIsModalOpen(false)}
+                                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                                <XMarkIcon className="w-5 h-5" />
+                            </button>
                             <h3 className="text-lg font-bold text-gray-900 mb-5">
                                 {editingTeacher ? 'Edit Teacher' : 'Add Teacher'}
                             </h3>
@@ -433,7 +456,11 @@ export default function TeacherTab({ user, schoolsData = [] }) {
                                         <input
                                             type="text"
                                             value={formData.phoneNumber}
-                                            onChange={e => setFormData(p => ({ ...p, phoneNumber: e.target.value }))}
+                                            onChange={e => {
+                                                const val = e.target.value.replace(/\D/g, '');
+                                                setFormData(p => ({ ...p, phoneNumber: val }));
+                                            }}
+                                            maxLength={10}
                                             placeholder="10-digit mobile"
                                             className={`mt-1 block w-full border rounded-md p-2 text-sm ${validationErrors.phoneNumber ? 'border-red-500' : 'border-gray-300'}`}
                                         />
@@ -605,7 +632,13 @@ export default function TeacherTab({ user, schoolsData = [] }) {
             {isDeleteModalOpen && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
                     <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setIsDeleteModalOpen(false)} />
-                    <div className="bg-white p-6 rounded-lg z-10 max-w-sm w-full text-center shadow-xl">
+                    <div className="bg-white p-6 rounded-lg z-10 max-w-sm w-full text-center shadow-xl relative">
+                        <button
+                            onClick={() => setIsDeleteModalOpen(false)}
+                            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            <XMarkIcon className="w-5 h-5" />
+                        </button>
                         <TrashIcon className="h-12 w-12 text-red-600 mx-auto mb-4" />
                         <h3 className="text-lg font-bold">Delete Teacher?</h3>
                         <p className="text-sm text-gray-500 mt-2">
@@ -637,7 +670,13 @@ export default function TeacherTab({ user, schoolsData = [] }) {
             {resetTarget && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
                     <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => { setResetTarget(null); setResetResult(null) }} />
-                    <div className="bg-white p-6 rounded-lg z-10 max-w-sm w-full text-center shadow-xl">
+                    <div className="bg-white p-6 rounded-lg z-10 max-w-sm w-full text-center shadow-xl relative">
+                        <button
+                            onClick={() => { setResetTarget(null); setResetResult(null) }}
+                            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            <XMarkIcon className="w-5 h-5" />
+                        </button>
                         <KeyIcon className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
                         <h3 className="text-lg font-bold">Reset Password</h3>
                         {resetResult ? (

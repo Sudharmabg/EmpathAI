@@ -31,7 +31,7 @@ export default function AdminPanel({ user, onLogout }) {
     { id: 'users',            path: 'users',            label: 'Users',             icon: UsersIcon },
     { id: 'assessments',      path: 'assessments',      label: 'Feelings Explorer', icon: ClipboardDocumentCheckIcon },
     { id: 'schedule_planner', path: 'schedule-planner', label: 'Schedule Planner',  icon: CalendarDaysIcon },
-    { id: 'curriculum',       path: 'curriculum',       label: 'Curriculum',        icon: AcademicCapIcon },
+    // { id: 'curriculum',       path: 'curriculum',       label: 'Curriculum',        icon: AcademicCapIcon },
     { id: 'flagged_chats',    path: 'flagged-chats',    label: 'Support Alerts',    icon: FlagIcon },
     { id: 'analytics',        path: 'analytics',        label: 'Analytics',         icon: ChartBarIcon },
     { id: 'rewards',          path: 'rewards',          label: 'Rewards',           icon: TrophyIcon },

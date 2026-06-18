@@ -54,8 +54,7 @@ function entryDateStr(dateStr) {
     return new Date(dateStr).toISOString().split('T')[0]
 }
 
-export default function RightSidebarPanel({ user }) {
-    const [completedTasks, setCompletedTasks] = useState({})
+export default function RightSidebarPanel({ user, tasks, todayDayName, onToggleTask }) {
 
     // ── Mood ──────────────────────────────────────────────────────────────────
     const [latestMood, setLatestMood] = useState(null)
@@ -297,23 +296,22 @@ export default function RightSidebarPanel({ user }) {
             <div className="mb-6">
                 <h3 className="font-semibold text-gray-900 mb-3">Tasks to be done</h3>
                 <div className="bg-white border-2 border-purple-200 rounded-xl p-4 space-y-3">
-                    {[
-                        { id: 'task1', text: 'Complete Math Chapter 5 exercises' },
-                        { id: 'task2', text: 'Science project submission' },
-                        { id: 'task3', text: 'English essay writing' },
-                    ].map(task => (
+                    {(tasks?.[todayDayName] || []).filter(t => !t.completed).map(task => (
                         <div key={task.id} className="flex items-center space-x-3">
                             <input
                                 type="checkbox"
                                 className="rounded text-green-600 focus:ring-green-500"
-                                checked={completedTasks[task.id] || false}
-                                onChange={() => setCompletedTasks(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
+                                checked={false}
+                                onChange={() => onToggleTask(todayDayName, task.id)}
                             />
-                            <span className={'text-sm ' + (completedTasks[task.id] ? 'text-green-600 line-through' : 'text-gray-700')}>
-                                {task.text}
+                            <span className="text-sm text-gray-700">
+                                {task.title}
                             </span>
                         </div>
                     ))}
+                    {(!tasks?.[todayDayName] || tasks[todayDayName].filter(t => !t.completed).length === 0) && (
+                        <p className="text-sm text-gray-400 italic py-2 text-center">No tasks left for today! 🎉</p>
+                    )}
                 </div>
             </div>
 
@@ -323,21 +321,20 @@ export default function RightSidebarPanel({ user }) {
                     <span className="w-2 h-2 bg-primary rounded-full" />Recent Activity
                 </h3>
                 <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3 shadow-sm">
-                    {[
-                        { bg: 'bg-green-50/50', border: 'border-green-100', iconBg: 'bg-green-100', icon: '✓', iconColor: 'text-green-600', title: 'Completed Math Quiz', time: '2 hours ago' },
-                        { bg: 'bg-blue-50/50', border: 'border-blue-100', iconBg: 'bg-blue-100', icon: '💬', iconColor: 'text-blue-600', title: 'ChatBuddy session', time: 'Yesterday' },
-                        { bg: 'bg-primary/5', border: 'border-primary/10', iconBg: 'bg-primary/10', icon: '📝', iconColor: 'text-primary', title: 'Feelings Explorer', time: '2 days ago' },
-                    ].map((item, i) => (
-                        <div key={i} className={'flex items-center space-x-3 p-3 rounded-xl border ' + item.bg + ' ' + item.border}>
-                            <div className={'w-10 h-10 ' + item.iconBg + ' rounded-lg flex items-center justify-center shrink-0'}>
-                                <span className={'text-sm font-bold ' + item.iconColor}>{item.icon}</span>
+                    {(tasks?.[todayDayName] || []).filter(t => t.completed).map((task) => (
+                        <div key={task.id} className="flex items-center space-x-3 p-3 rounded-xl border bg-green-50/50 border-green-100">
+                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
+                                <span className="text-sm font-bold text-green-600">✓</span>
                             </div>
                             <div className="flex-1">
-                                <p className="text-sm font-bold text-gray-900">{item.title}</p>
-                                <p className="text-xs text-gray-500 font-medium">{item.time}</p>
+                                <p className="text-sm font-bold text-gray-900">{task.title}</p>
+                                <p className="text-xs text-gray-500 font-medium">Completed today</p>
                             </div>
                         </div>
                     ))}
+                    {(!tasks?.[todayDayName] || tasks[todayDayName].filter(t => t.completed).length === 0) && (
+                        <p className="text-sm text-gray-400 italic text-center py-2">No activity yet</p>
+                    )}
                 </div>
             </div>
         </div>

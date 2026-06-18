@@ -16,7 +16,7 @@ import RightSidebarPanel from './dashboard/RightSidebarPanel'
 import BadgesModal from './dashboard/BadgesModal'
 import NotificationsModal from './dashboard/NotificationsModal'
 
-import { getWeekTasks } from '../api/scheduleApi.js'
+import { getWeekTasks, toggleTaskComplete as apiToggleTaskComplete } from '../api/scheduleApi.js'
 
 // ─── Valid tab IDs ─────────────────────────────────────────────────────────────
 const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities']
@@ -137,8 +137,14 @@ export default function Dashboard({ user, onLogout }) {
       .finally(() => setTasksLoading(false))
   }, [user?.id])
 
-  const toggleTaskComplete = (day, taskId) =>
-    setTasks(prev => ({ ...prev, [day]: prev[day].map(t => t.id === taskId ? { ...t, completed: !t.completed } : t) }))
+  const toggleTaskComplete = async (day, taskId) => {
+    try {
+      const saved = await apiToggleTaskComplete(taskId)
+      setTasks(prev => ({ ...prev, [day]: prev[day].map(t => t.id === taskId ? { ...t, completed: saved.completed } : t) }))
+    } catch (err) {
+      console.error('Failed to toggle task', err)
+    }
+  }
 
   const scheduledSubjects = getScheduledSubjectsForDay(tasks, activeDay)
 
@@ -147,7 +153,7 @@ export default function Dashboard({ user, onLogout }) {
     { id: 'chatbuddy', name: 'ChatBuddy', icon: ChatBubbleLeftRightIcon },
     { id: 'schedule', name: 'My Schedule', icon: CalendarIcon },
     { id: 'questionnaire', name: 'Feelings Explorer', icon: ClipboardDocumentListIcon },
-    { id: 'curriculum', name: 'Curriculum', icon: BookOpenIcon },
+    // { id: 'curriculum', name: 'Curriculum', icon: BookOpenIcon },
     { id: 'activities', name: 'Activities', icon: PuzzlePieceIcon },
   ]
 
@@ -374,7 +380,12 @@ useEffect(() => {
         {/* Right sidebar — overview only */}
         {activeTab === 'overview' && (
           <aside className="w-80 bg-white border-l border-gray-200 p-6">
-            <RightSidebarPanel user={user} />
+            <RightSidebarPanel 
+              user={user} 
+              tasks={tasks} 
+              todayDayName={todayDayName} 
+              onToggleTask={toggleTaskComplete} 
+            />
           </aside>
         )}
       </div>

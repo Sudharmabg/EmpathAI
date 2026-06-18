@@ -147,6 +147,16 @@ function BadgesTab() {
 
   useEffect(() => { loadBadges() }, [])
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && showModal) {
+        setShowModal(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showModal])
+
   const loadBadges = async () => {
     try {
       setLoading(true)

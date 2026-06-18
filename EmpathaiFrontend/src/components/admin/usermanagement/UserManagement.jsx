@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
     PlusIcon, PencilIcon, TrashIcon, UserPlusIcon, ChevronDownIcon, ChevronRightIcon,
     MagnifyingGlassIcon, ArrowLeftIcon, BuildingLibraryIcon, AcademicCapIcon,
-    ClockIcon, PhoneIcon
+    ClockIcon, PhoneIcon, XMarkIcon
 } from '@heroicons/react/24/outline'
 
 import {
@@ -252,7 +252,7 @@ export default function UserManagement({ user }) {
             loadStudents(selectedSchool.id || selectedSchool, selectedClass)
     }, [selectedClass, selectedSchool, activeTab, loadStudents])
 
-    const handleBack = () => {
+    const handleBack = useCallback(() => {
         if (selectedClass) {
             setSelectedClass(null)
             setStudentsData([])
@@ -260,7 +260,23 @@ export default function UserManagement({ user }) {
             setSelectedSchool(null)
             setClassesData([])
         }
-    }
+    }, [selectedClass, selectedSchool])
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                if (isModalOpen) {
+                    setIsModalOpen(false)
+                } else if (isDeleteModalOpen) {
+                    setIsDeleteModalOpen(false)
+                } else if (selectedClass || selectedSchool) {
+                    handleBack()
+                }
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [isModalOpen, isDeleteModalOpen, selectedClass, selectedSchool, handleBack])
 
     const generatePassword = () => {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
@@ -541,7 +557,7 @@ export default function UserManagement({ user }) {
                         <div className="flex items-center gap-3">
                             {(selectedSchool || selectedClass) && activeTab === 'student' && (
                                 <button onClick={handleBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                                    <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
+                                    <XMarkIcon className="w-5 h-5 text-gray-600" />
                                 </button>
                             )}
                             <h3 className="text-lg font-medium text-gray-900">
@@ -798,10 +814,18 @@ export default function UserManagement({ user }) {
                         <div className="fixed inset-0 z-50 overflow-y-auto">
                             <div className="flex items-center justify-center min-h-screen px-4">
                                 <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setIsModalOpen(false)} />
-                                <div className="bg-white rounded-lg p-6 z-10 w-full max-w-2xl">
-                                    <h3 className="text-lg font-bold mb-4">
-                                        {editingUser ? 'Edit' : 'Create'} {roleTitles[activeTab]}
-                                    </h3>
+                                <div className="bg-white rounded-lg p-6 z-10 w-full max-w-2xl relative">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-bold">
+                                            {editingUser ? 'Edit' : 'Create'} {roleTitles[activeTab]}
+                                        </h3>
+                                        <button
+                                            onClick={() => setIsModalOpen(false)}
+                                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                                        >
+                                            <XMarkIcon className="w-5 h-5" />
+                                        </button>
+                                    </div>
                                     <div className="space-y-4">
                                         <div>
                                             <label className="block text-sm font-medium">Name</label>
@@ -843,7 +867,12 @@ export default function UserManagement({ user }) {
                                                     <input
                                                         type="text"
                                                         value={formData.phoneNumber}
-                                                        onChange={e => setFormData({ ...formData, phoneNumber: e.target.value })}
+                                                        onChange={e => {
+                                                            const val = e.target.value.replace(/\D/g, '');
+                                                            setFormData({ ...formData, phoneNumber: val });
+                                                        }}
+                                                        maxLength={10}
+                                                        placeholder="10-digit number"
                                                         className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                                                     />
                                                 </div>
@@ -985,7 +1014,10 @@ export default function UserManagement({ user }) {
                                                         <input
                                                             type="text"
                                                             value={formData.parentPhone}
-                                                            onChange={e => setFormData({ ...formData, parentPhone: e.target.value })}
+                                                            onChange={e => {
+                                                                const val = e.target.value.replace(/\D/g, '');
+                                                                setFormData({ ...formData, parentPhone: val });
+                                                            }}
                                                             placeholder="10-digit number"
                                                             maxLength={10}
                                                             className={'mt-1 block w-full border rounded-md p-2 ' + (validationErrors.parentPhone ? 'border-red-500' : 'border-gray-300')}
@@ -1027,7 +1059,12 @@ export default function UserManagement({ user }) {
                                                         <input
                                                             type="text"
                                                             value={formData.phoneNumber}
-                                                            onChange={e => setFormData({ ...formData, phoneNumber: e.target.value })}
+                                                            onChange={e => {
+                                                                const val = e.target.value.replace(/\D/g, '');
+                                                                setFormData({ ...formData, phoneNumber: val });
+                                                            }}
+                                                            maxLength={10}
+                                                            placeholder="10-digit number"
                                                             className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                                                         />
                                                     </div>
@@ -1094,7 +1131,13 @@ export default function UserManagement({ user }) {
                     {isDeleteModalOpen && (
                         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
                             <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setIsDeleteModalOpen(false)} />
-                            <div className="bg-white p-6 rounded-lg z-10 max-w-sm w-full text-center">
+                            <div className="bg-white p-6 rounded-lg z-10 max-w-sm w-full text-center relative">
+                                <button
+                                    onClick={() => setIsDeleteModalOpen(false)}
+                                    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                    <XMarkIcon className="w-5 h-5" />
+                                </button>
                                 <TrashIcon className="h-12 w-12 text-red-600 mx-auto mb-4" />
                                 <h3 className="text-lg font-bold">Delete {activeTab === 'schools' ? 'School' : 'User'}?</h3>
                                 <p className="text-sm text-gray-500 mt-2">

@@ -40,6 +40,16 @@ function TranscriptModal({ flagId, studentName, onClose }) {
         fetchTranscript()
     }, [flagId])
 
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                onClose()
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [onClose])
+
     const formatTime = (iso) => {
         if (!iso) return ''
         return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

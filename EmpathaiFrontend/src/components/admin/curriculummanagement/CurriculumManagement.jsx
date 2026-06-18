@@ -544,6 +544,22 @@ export default function CurriculumManagement() {
             .catch(err => { console.error(err); setLoading(false) })
     }, [])
 
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                if (isSyllabusModalOpen) {
+                    setIsSyllabusModalOpen(false)
+                } else if (isModuleModalOpen) {
+                    setIsModuleModalOpen(false)
+                } else if (isSubTopicModalOpen) {
+                    setIsSubTopicModalOpen(false)
+                }
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [isSyllabusModalOpen, isModuleModalOpen, isSubTopicModalOpen])
+
     const classTabs = [...new Set(
         CLASS_LEVELS.map(l => `${l} Standard`).filter(lvl => syllabi.some(s => s.classLevel === lvl))
     )]
@@ -953,6 +969,12 @@ export default function CurriculumManagement() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
                     <div className="fixed inset-0 bg-black/40" onClick={() => setIsSyllabusModalOpen(false)} />
                     <div className="relative bg-white rounded-2xl shadow-2xl sm:max-w-lg w-full z-10">
+                        <button
+                            onClick={() => setIsSyllabusModalOpen(false)}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            <XMarkIcon className="w-5 h-5" />
+                        </button>
                         <div className="px-6 pt-6 pb-4">
                             <h3 className="text-lg font-bold text-gray-900 mb-4">
                                 {editingSyllabus ? 'Edit Syllabus' : 'Add New Syllabus'}
@@ -1005,6 +1027,12 @@ export default function CurriculumManagement() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
                     <div className="fixed inset-0 bg-black/40" onClick={() => setIsModuleModalOpen(false)} />
                     <div className="relative bg-white rounded-2xl shadow-2xl sm:max-w-lg w-full z-10">
+                        <button
+                            onClick={() => setIsModuleModalOpen(false)}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            <XMarkIcon className="w-5 h-5" />
+                        </button>
                         <div className="px-6 pt-6 pb-4">
                             <h3 className="text-lg font-bold text-gray-900 mb-4">
                                 {editingModule ? 'Edit Module' : 'Add New Module'}
@@ -1036,10 +1064,16 @@ export default function CurriculumManagement() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
                     <div className="fixed inset-0 bg-black/40" onClick={() => setIsSubTopicModalOpen(false)} />
                     <div className="relative bg-white rounded-2xl shadow-2xl sm:max-w-2xl w-full z-10 flex flex-col max-h-[90vh]">
-                        <div className="px-6 pt-6 pb-3 border-b border-gray-100 flex-shrink-0 rounded-t-2xl">
+                        <div className="px-6 pt-6 pb-3 border-b border-gray-100 flex-shrink-0 rounded-t-2xl relative flex items-center justify-between">
                             <h3 className="text-lg font-bold text-gray-900">
                                 {editingSubTopic ? 'Edit Unit' : 'Add New Unit'}
                             </h3>
+                            <button
+                                onClick={() => setIsSubTopicModalOpen(false)}
+                                className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors"
+                            >
+                                <XMarkIcon className="w-5 h-5" />
+                            </button>
                         </div>
 
                         <div className="overflow-y-auto px-6 py-4 space-y-4 flex-1">

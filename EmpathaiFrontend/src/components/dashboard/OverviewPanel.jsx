@@ -96,7 +96,7 @@ export default function OverviewPanel({ user, setActiveTab }) {
                 )}
             </div>
 
-            {/* Ongoing Learning */}
+            {/* Ongoing Learning 
             <div className="mb-10 text-center">
                 <h2 className="text-lg font-black text-dark-navy mb-6 flex items-center justify-center gap-2">
                     <span className="w-6 h-1 bg-purple-200 rounded-full" />Ongoing Learning<span className="w-6 h-1 bg-purple-200 rounded-full" />
@@ -132,6 +132,7 @@ export default function OverviewPanel({ user, setActiveTab }) {
                     ))}
                 </div>
             </div>
+            */}
 
             {/* Mindfulness CTA */}
             <div className="mb-6">

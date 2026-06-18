@@ -577,15 +577,20 @@ public class RecommendationServiceImpl implements IRecommendationService {
     private int countConsecutiveStudyDays(Long studentId, String dayOfWeek,
                                           List<ScheduleTask> weekTasks) {
         int todayIdx = DAYS_ORDER.indexOf(dayOfWeek);
-        if (todayIdx <= 0) return 0;
+        if (todayIdx < 0) return 0;
         int count = 0;
-        for (int i = todayIdx - 1; i >= 0; i--) {
-            String prevDay = DAYS_ORDER.get(i);
+        // Check up to 6 preceding days (to count consecutive days wrapping around the weekly cycle)
+        for (int i = 1; i <= 6; i++) {
+            int prevIdx = (todayIdx - i + 7) % 7;
+            String prevDay = DAYS_ORDER.get(prevIdx);
             boolean hadStudy = weekTasks.stream()
                     .filter(t -> prevDay.equalsIgnoreCase(t.getDayOfWeek()))
                     .anyMatch(t -> "study".equalsIgnoreCase(t.getDetectedType()));
-            if (hadStudy) count++;
-            else break;
+            if (hadStudy) {
+                count++;
+            } else {
+                break;
+            }
         }
         return count;
     }
@@ -597,10 +602,17 @@ public class RecommendationServiceImpl implements IRecommendationService {
     private List<SchoolTimingResponse> getBlockedWindows(
             Long schoolId, String dayOfWeek, String className) {
         if (schoolId == null || className == null) return new ArrayList<>();
+        int targetClassNum = extractClassNumber(className);
+
         return schoolTimingRepository.findBySchoolId(schoolId).stream()
                 .filter(t -> t.getDayOfWeek().equalsIgnoreCase(dayOfWeek))
-                .filter(t -> t.getClassName() != null
-                        && t.getClassName().equalsIgnoreCase(className))
+                .filter(t -> {
+                    if (t.getClassName() == null) return false;
+                    int tClassNum = extractClassNumber(t.getClassName());
+                    return (targetClassNum != -1 && tClassNum != -1)
+                            ? targetClassNum == tClassNum
+                            : className.equalsIgnoreCase(t.getClassName());
+                })
                 .map(t -> SchoolTimingResponse.builder()
                         .id(t.getId()).className(t.getClassName())
                         .dayOfWeek(t.getDayOfWeek())
@@ -608,6 +620,7 @@ public class RecommendationServiceImpl implements IRecommendationService {
                         .build())
                 .collect(Collectors.toCollection(ArrayList::new));
     }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // UPCOMING EXAMS

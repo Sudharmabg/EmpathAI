@@ -18,5 +18,22 @@ public class QuestionResponse {
     private String optionB;
     private String optionC;
     private String optionD;
+    
+    private String option1OverallMeaning;
+    private String option1Interpretation;
+    private String option1Tag;
+    
+    private String option2OverallMeaning;
+    private String option2Interpretation;
+    private String option2Tag;
+    
+    private String option3OverallMeaning;
+    private String option3Interpretation;
+    private String option3Tag;
+    
+    private String option4OverallMeaning;
+    private String option4Interpretation;
+    private String option4Tag;
+
     private LocalDateTime createdAt;
 }

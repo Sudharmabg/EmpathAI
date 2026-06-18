@@ -50,10 +50,11 @@ MENTAL HEALTH BASELINE: {assessment_summary}
 
 Analyze the emotional state."""
 
-        response = llm.invoke([
+        from graph.utils.llm_retry import with_retry
+        response = with_retry(lambda: llm.invoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt)
-        ])
+        ]))
 
         raw = response.content.strip()
         # Strip markdown code fences if present

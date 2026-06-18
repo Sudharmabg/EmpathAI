@@ -15,9 +15,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
 
 @Service
 @RequiredArgsConstructor
@@ -147,14 +150,24 @@ public class ScheduleServiceImpl implements IScheduleService {
 
     @Override
     public Map<String, List<TaskResponse>> getWeekTasks(Long studentId) {
+        List<ScheduleTask> allTasks = taskRepository.findByStudentId(studentId);
+        Map<String, List<ScheduleTask>> tasksByDay = allTasks.stream()
+                .collect(Collectors.groupingBy(ScheduleTask::getDayOfWeek));
+
         List<String> days = List.of(
                 "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday");
 
         return days.stream().collect(Collectors.toMap(
                 day -> day,
-                day -> getTasksForDay(studentId, day)
+                day -> tasksByDay.getOrDefault(day, List.of()).stream()
+                        .sorted(Comparator.comparing(ScheduleTask::getStartTime))
+                        .map(t -> toResponse(t, List.of()))
+                        .collect(Collectors.toList()),
+                (v1, v2) -> v1,
+                LinkedHashMap::new
         ));
     }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // HELPERS

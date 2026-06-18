@@ -11,6 +11,8 @@ Changes from original:
 import logging
 import os
 import sys
+import signal
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -74,3 +76,35 @@ async def startup_event():
 def health_check():
     logger.info("Health check called")
     return {"status": "ok", "service": "EmpathAI AI Service"}
+
+
+# ── Graceful Shutdown ─────────────────────────────────────────────────────────
+
+shutdown_event = threading.Event()
+
+def signal_handler(signum, frame):
+    logger.info("Signal %d received, setting shutdown event...", signum)
+    shutdown_event.set()
+    try:
+        from graph.pipeline import connection_pool
+        connection_pool.close()
+        logger.info("PostgreSQL connection pool closed successfully via signal handler.")
+    except Exception as exc:
+        logger.error("Error closing connection pool: %s", exc)
+
+try:
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+except ValueError:
+    pass
+
+@app.on_event("shutdown")
+async def shutdown_event_handler():
+    logger.info("FastAPI shutdown event triggered.")
+    shutdown_event.set()
+    try:
+        from graph.pipeline import connection_pool
+        connection_pool.close()
+        logger.info("PostgreSQL connection pool closed successfully via shutdown event.")
+    except Exception as exc:
+        logger.error("Error closing connection pool: %s", exc)

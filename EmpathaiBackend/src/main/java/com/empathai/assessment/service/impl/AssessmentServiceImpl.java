@@ -275,7 +275,8 @@ public class AssessmentServiceImpl implements IAssessmentService {
     }
 
     private QuestionResponse toQuestionResponse(AssessmentQuestion q) {
-        return QuestionResponse.builder()
+        List<AnswerOptionResponse> options = answerOptionService.getByQuestionId(q.getId());
+        QuestionResponse.QuestionResponseBuilder builder = QuestionResponse.builder()
                 .id(q.getId())
                 .groupMapId(q.getGroupMapId())
                 .questions(q.getQuestionText())
@@ -284,8 +285,29 @@ public class AssessmentServiceImpl implements IAssessmentService {
                 .optionB(q.getOptionB())
                 .optionC(q.getOptionC())
                 .optionD(q.getOptionD())
-                .createdAt(q.getCreatedAt())
-                .build();
+                .createdAt(q.getCreatedAt());
+
+        for (AnswerOptionResponse opt : options) {
+            String label = opt.getOptionLabel() != null ? opt.getOptionLabel().trim() : "";
+            if (q.getOptionA() != null && label.equalsIgnoreCase(q.getOptionA().trim())) {
+                builder.option1OverallMeaning(opt.getOverallMeaning())
+                       .option1Interpretation(opt.getInterpretation())
+                       .option1Tag(opt.getTag());
+            } else if (q.getOptionB() != null && label.equalsIgnoreCase(q.getOptionB().trim())) {
+                builder.option2OverallMeaning(opt.getOverallMeaning())
+                       .option2Interpretation(opt.getInterpretation())
+                       .option2Tag(opt.getTag());
+            } else if (q.getOptionC() != null && label.equalsIgnoreCase(q.getOptionC().trim())) {
+                builder.option3OverallMeaning(opt.getOverallMeaning())
+                       .option3Interpretation(opt.getInterpretation())
+                       .option3Tag(opt.getTag());
+            } else if (q.getOptionD() != null && label.equalsIgnoreCase(q.getOptionD().trim())) {
+                builder.option4OverallMeaning(opt.getOverallMeaning())
+                       .option4Interpretation(opt.getInterpretation())
+                       .option4Tag(opt.getTag());
+            }
+        }
+        return builder.build();
     }
 
     private ResponseDto toResponseDto(AssessmentResponse r) {

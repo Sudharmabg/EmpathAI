@@ -48,6 +48,7 @@ except ImportError:
 from graph.nodes.intent_classifier import intent_classifier
 from graph.nodes.emotion_evaluator import emotion_evaluator
 from graph.nodes.crisis_evaluator import crisis_evaluator
+from graph.nodes.full_classifier import full_classifier
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -377,10 +378,8 @@ def run_evaluation():
         try:
             state = build_state(msg)
 
-            # Run the three classifiers in order (same as pipeline)
-            state = intent_classifier(state)
-            state = emotion_evaluator(state)
-            state = crisis_evaluator(state)
+            # Run the consolidated full classifier
+            state = full_classifier(state)
 
             pred_intent  = state.get("intent", "CURRICULUM")
             pred_emotion = state.get("emotional_state", "NEUTRAL")

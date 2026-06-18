@@ -33,8 +33,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
+        String requestURI = request.getRequestURI();
+        logger.info("JWT_LOG: Processing " + request.getMethod() + " " + requestURI);
+
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            logger.info("JWT_LOG: Found " + cookies.length + " cookies in request.");
+            for (Cookie cookie : cookies) {
+                logger.info("JWT_LOG: Cookie name = " + cookie.getName() + 
+                            ", value length = " + (cookie.getValue() != null ? cookie.getValue().length() : 0));
+            }
+        } else {
+            logger.info("JWT_LOG: request.getCookies() is null (no cookies sent by browser).");
+        }
+
         // ── 1. Extract JWT from the HttpOnly cookie (not the Authorization header) ──
         String jwt = extractJwtFromCookie(request);
+        logger.info("JWT_LOG: Extracted JWT token = " + (jwt != null ? "PRESENT" : "MISSING"));
 
         // ── 2. If no cookie token found, fall back to Authorization header ──────────
         //       (keeps Swagger / Postman / API clients working during migration)
@@ -54,6 +69,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // ── 4. Validate token and set authentication in the security context ─────────
         try {
             final String username = jwtService.extractUsername(jwt);
+            logger.info("JWT_LOG: Extracted username = " + username);
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
@@ -67,11 +83,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    logger.info("JWT_LOG: Authentication successful, SecurityContext set for " + username);
+                } else {
+                    logger.warn("JWT_LOG: Token validation failed (isTokenValid returned false) for " + username);
                 }
+            } else if (username == null) {
+                logger.warn("JWT_LOG: Extracted username is null");
+            } else {
+                logger.info("JWT_LOG: SecurityContext already had authentication: " + 
+                            SecurityContextHolder.getContext().getAuthentication().getName());
             }
         } catch (Exception e) {
             // Invalid / expired token — do not set authentication; the request will be rejected downstream
-            logger.warn("JWT validation failed: " + e.getMessage());
+            logger.warn("JWT_LOG: JWT validation failed with exception: " + e.getMessage(), e);
         }
 
         filterChain.doFilter(request, response);
@@ -86,5 +110,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
         return null;
+    }
+
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return false;
     }
 }

@@ -47,10 +47,11 @@ ASSESSMENT: {assessment_summary}
 
 Write the empathetic opening line."""
 
-        response = llm.invoke([
+        from graph.utils.llm_retry import with_retry
+        response = with_retry(lambda: llm.invoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt)
-        ])
+        ]))
 
         return response.content.strip().strip('"').strip("'")
     except Exception as e:

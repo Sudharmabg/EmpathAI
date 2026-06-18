@@ -3,7 +3,9 @@ package com.empathai.assessment.service;
 import com.empathai.assessment.dto.AnswerOptionRequest;
 import com.empathai.assessment.dto.AnswerOptionResponse;
 import com.empathai.assessment.entity.AnswerOption;
+import com.empathai.assessment.entity.AssessmentQuestion;
 import com.empathai.assessment.repository.AnswerOptionRepository;
+import com.empathai.assessment.repository.AssessmentQuestionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +26,7 @@ import java.util.stream.Collectors;
 public class AnswerOptionService {
 
     private final AnswerOptionRepository answerOptionRepo;
+    private final AssessmentQuestionRepository questionRepo;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Value("${openai.api.key:}")
@@ -85,9 +88,135 @@ public class AnswerOptionService {
 
     @Transactional
     public List<AnswerOptionResponse> saveOptions(List<AnswerOptionRequest> requests) {
-        return requests.stream()
-                .map(this::saveOption)
-                .collect(Collectors.toList());
+        if (requests == null || requests.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Long questionId = requests.get(0).getQuestionId();
+        if (questionId == null) {
+            return requests.stream().map(this::saveOption).collect(Collectors.toList());
+        }
+
+        // 1. Fetch the question to get the current list of option texts (order is important)
+        Optional<AssessmentQuestion> questionOpt = questionRepo.findById(questionId);
+        if (questionOpt.isEmpty()) {
+            return requests.stream().map(this::saveOption).collect(Collectors.toList());
+        }
+
+        AssessmentQuestion question = questionOpt.get();
+        List<String> currentQuestionOptions = new ArrayList<>();
+        if (question.getOptionA() != null) currentQuestionOptions.add(question.getOptionA().trim());
+        if (question.getOptionB() != null) currentQuestionOptions.add(question.getOptionB().trim());
+        if (question.getOptionC() != null) currentQuestionOptions.add(question.getOptionC().trim());
+        if (question.getOptionD() != null) currentQuestionOptions.add(question.getOptionD().trim());
+
+        // 2. Fetch existing AnswerOption rows for this question
+        List<AnswerOption> dbOptions = answerOptionRepo.findByQuestionId(questionId);
+
+        // 3. Map dbOptions to option indices of the question
+        Map<Integer, AnswerOption> dbOptionMap = new HashMap<>();
+        List<AnswerOption> unmatchedDbOptions = new ArrayList<>();
+
+        for (AnswerOption dbOpt : dbOptions) {
+            String dbLabel = dbOpt.getOptionLabel() != null ? dbOpt.getOptionLabel().trim() : "";
+            int matchIndex = -1;
+            for (int i = 0; i < currentQuestionOptions.size(); i++) {
+                if (dbLabel.equalsIgnoreCase(currentQuestionOptions.get(i))) {
+                    matchIndex = i;
+                    break;
+                }
+            }
+            if (matchIndex != -1) {
+                dbOptionMap.put(matchIndex, dbOpt);
+            } else {
+                unmatchedDbOptions.add(dbOpt);
+            }
+        }
+
+        // Find which indices in currentQuestionOptions do not have a mapped dbOption
+        List<Integer> unmappedIndices = new ArrayList<>();
+        for (int i = 0; i < currentQuestionOptions.size(); i++) {
+            if (!dbOptionMap.containsKey(i)) {
+                unmappedIndices.add(i);
+            }
+        }
+
+        // Pair unmatched DB options to unmapped indices in order of appearance
+        int pairsCount = Math.min(unmatchedDbOptions.size(), unmappedIndices.size());
+        for (int i = 0; i < pairsCount; i++) {
+            dbOptionMap.put(unmappedIndices.get(i), unmatchedDbOptions.get(i));
+        }
+
+        // Delete any leftover DB options that are no longer part of the question
+        if (unmatchedDbOptions.size() > pairsCount) {
+            for (int i = pairsCount; i < unmatchedDbOptions.size(); i++) {
+                answerOptionRepo.delete(unmatchedDbOptions.get(i));
+                log.info("Deleted removed answer option id={} for questionId={}", 
+                        unmatchedDbOptions.get(i).getId(), questionId);
+            }
+        }
+
+        // 4. Match requests to option positions and save/update
+        List<AnswerOptionResponse> responses = new ArrayList<>();
+
+        for (AnswerOptionRequest req : requests) {
+            String reqLabel = req.getOptionLabel() != null ? req.getOptionLabel().trim() : "";
+            
+            int reqIndex = -1;
+            for (int i = 0; i < currentQuestionOptions.size(); i++) {
+                if (reqLabel.equalsIgnoreCase(currentQuestionOptions.get(i))) {
+                    reqIndex = i;
+                    break;
+                }
+            }
+
+            AnswerOption optionToSave;
+            boolean interpretationChanged = false;
+
+            if (reqIndex != -1 && dbOptionMap.containsKey(reqIndex)) {
+                optionToSave = dbOptionMap.get(reqIndex);
+                
+                interpretationChanged =
+                        !Objects.equals(optionToSave.getOptionLabel(), req.getOptionLabel()) ||
+                        !Objects.equals(optionToSave.getRangeValue(),  req.getRange()) ||
+                        !Objects.equals(optionToSave.getOverallMeaning(), req.getOverallMeaning()) ||
+                        !Objects.equals(optionToSave.getInterpretation(), req.getInterpretation()) ||
+                        !Objects.equals(optionToSave.getTag(), req.getTag());
+
+                optionToSave.setOptionLabel(req.getOptionLabel());
+                optionToSave.setRangeValue(req.getRange());
+                optionToSave.setOverallMeaning(req.getOverallMeaning());
+                optionToSave.setInterpretation(req.getInterpretation());
+                optionToSave.setTag(req.getTag());
+
+                if (interpretationChanged) {
+                    optionToSave.setCachedBullets(null);
+                    optionToSave.setBulletsGeneratedAt(null);
+                    log.info("Label or interpretation changed for optionId={} — cache invalidated", optionToSave.getId());
+                }
+            } else {
+                optionToSave = AnswerOption.builder()
+                        .questionId(questionId)
+                        .optionLabel(req.getOptionLabel())
+                        .rangeValue(req.getRange())
+                        .overallMeaning(req.getOverallMeaning())
+                        .interpretation(req.getInterpretation())
+                        .tag(req.getTag())
+                        .build();
+                interpretationChanged = true;
+            }
+
+            AnswerOption saved = answerOptionRepo.save(optionToSave);
+            log.info("Saved answer option id={} for questionId={}", saved.getId(), saved.getQuestionId());
+
+            if (interpretationChanged || saved.getCachedBullets() == null) {
+                generateBulletsAsync(saved.getId());
+            }
+
+            responses.add(toResponse(saved));
+        }
+
+        return responses;
     }
 
     // ── Lookup ────────────────────────────────────────────────────────────────

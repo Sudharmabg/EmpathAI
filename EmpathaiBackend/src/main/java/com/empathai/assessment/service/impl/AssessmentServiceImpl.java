@@ -74,8 +74,16 @@ public class AssessmentServiceImpl implements IAssessmentService {
 
     @Override
     public Page<QuestionResponse> getQuestions(int page, int size) {
-        return questionRepo.findAll(PageRequest.of(page, size))
-                .map(this::toQuestionResponse);
+        Page<AssessmentQuestion> questionsPage = questionRepo.findAll(PageRequest.of(page, size));
+        List<AssessmentQuestion> content = questionsPage.getContent();
+        List<Long> ids = content.stream().map(AssessmentQuestion::getId).collect(Collectors.toList());
+        Map<Long, List<AnswerOption>> optionsMap = answerOptionService.getOptionsMapForQuestions(ids);
+
+        List<QuestionResponse> responseList = content.stream()
+                .map(q -> toQuestionResponse(q, optionsMap.getOrDefault(q.getId(), List.of())))
+                .collect(Collectors.toList());
+
+        return new PageImpl<>(responseList, PageRequest.of(page, size), questionsPage.getTotalElements());
     }
 
     @Override
@@ -130,8 +138,12 @@ public class AssessmentServiceImpl implements IAssessmentService {
 
     @Override
     public List<QuestionResponse> getQuestionsByGroupMap(Long groupMapId) {
-        return questionRepo.findByGroupMapId(groupMapId)
-                .stream().map(this::toQuestionResponse).collect(Collectors.toList());
+        List<AssessmentQuestion> questions = questionRepo.findByGroupMapId(groupMapId);
+        List<Long> ids = questions.stream().map(AssessmentQuestion::getId).collect(Collectors.toList());
+        Map<Long, List<AnswerOption>> optionsMap = answerOptionService.getOptionsMapForQuestions(ids);
+        return questions.stream()
+                .map(q -> toQuestionResponse(q, optionsMap.getOrDefault(q.getId(), List.of())))
+                .collect(Collectors.toList());
     }
 
     // ── Responses ─────────────────────────────────────────────────────────────
@@ -275,11 +287,17 @@ public class AssessmentServiceImpl implements IAssessmentService {
     }
 
     private QuestionResponse toQuestionResponse(AssessmentQuestion q) {
-        List<AnswerOptionResponse> options = answerOptionService.getByQuestionId(q.getId());
+        List<AnswerOption> options = answerOptionService.getOptionsMapForQuestions(List.of(q.getId()))
+                .getOrDefault(q.getId(), List.of());
+        return toQuestionResponse(q, options);
+    }
+
+    private QuestionResponse toQuestionResponse(AssessmentQuestion q, List<AnswerOption> options) {
         QuestionResponse.QuestionResponseBuilder builder = QuestionResponse.builder()
                 .id(q.getId())
                 .groupMapId(q.getGroupMapId())
                 .questions(q.getQuestionText())
+                .questionText(q.getQuestionText())
                 .domain(q.getDomain())
                 .optionA(q.getOptionA())
                 .optionB(q.getOptionB())
@@ -287,24 +305,26 @@ public class AssessmentServiceImpl implements IAssessmentService {
                 .optionD(q.getOptionD())
                 .createdAt(q.getCreatedAt());
 
-        for (AnswerOptionResponse opt : options) {
-            String label = opt.getOptionLabel() != null ? opt.getOptionLabel().trim() : "";
-            if (q.getOptionA() != null && label.equalsIgnoreCase(q.getOptionA().trim())) {
-                builder.option1OverallMeaning(opt.getOverallMeaning())
-                       .option1Interpretation(opt.getInterpretation())
-                       .option1Tag(opt.getTag());
-            } else if (q.getOptionB() != null && label.equalsIgnoreCase(q.getOptionB().trim())) {
-                builder.option2OverallMeaning(opt.getOverallMeaning())
-                       .option2Interpretation(opt.getInterpretation())
-                       .option2Tag(opt.getTag());
-            } else if (q.getOptionC() != null && label.equalsIgnoreCase(q.getOptionC().trim())) {
-                builder.option3OverallMeaning(opt.getOverallMeaning())
-                       .option3Interpretation(opt.getInterpretation())
-                       .option3Tag(opt.getTag());
-            } else if (q.getOptionD() != null && label.equalsIgnoreCase(q.getOptionD().trim())) {
-                builder.option4OverallMeaning(opt.getOverallMeaning())
-                       .option4Interpretation(opt.getInterpretation())
-                       .option4Tag(opt.getTag());
+        if (options != null) {
+            for (AnswerOption opt : options) {
+                String label = opt.getOptionLabel() != null ? opt.getOptionLabel().trim() : "";
+                if (q.getOptionA() != null && label.equalsIgnoreCase(q.getOptionA().trim())) {
+                    builder.option1OverallMeaning(opt.getOverallMeaning())
+                           .option1Interpretation(opt.getInterpretation())
+                           .option1Tag(opt.getTag());
+                } else if (q.getOptionB() != null && label.equalsIgnoreCase(q.getOptionB().trim())) {
+                    builder.option2OverallMeaning(opt.getOverallMeaning())
+                           .option2Interpretation(opt.getInterpretation())
+                           .option2Tag(opt.getTag());
+                } else if (q.getOptionC() != null && label.equalsIgnoreCase(q.getOptionC().trim())) {
+                    builder.option3OverallMeaning(opt.getOverallMeaning())
+                           .option3Interpretation(opt.getInterpretation())
+                           .option3Tag(opt.getTag());
+                } else if (q.getOptionD() != null && label.equalsIgnoreCase(q.getOptionD().trim())) {
+                    builder.option4OverallMeaning(opt.getOverallMeaning())
+                           .option4Interpretation(opt.getInterpretation())
+                           .option4Tag(opt.getTag());
+                }
             }
         }
         return builder.build();

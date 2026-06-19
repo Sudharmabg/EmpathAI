@@ -226,28 +226,15 @@ public class AssessmentController {
         }
     }
 
-    @GetMapping("/responses/group/{groupName}")
+    @GetMapping({"/responses/group/{groupName}", "/responses/sheet/{groupName}"})
     public ResponseEntity<List<ResponseDto>> getResponsesByGroup(@PathVariable String groupName) {
-        logger.info("getResponsesByGroup started for groupName={}", groupName);
+        logger.info("getResponsesByGroup/Sheet started for groupName={}", groupName);
         try {
             ResponseEntity<List<ResponseDto>> response = ResponseEntity.ok(assessmentService.getResponsesByGroup(groupName));
-            logger.info("getResponsesByGroup completed successfully for groupName={}", groupName);
+            logger.info("getResponsesByGroup/Sheet completed successfully for groupName={}", groupName);
             return response;
         } catch (Exception e) {
-            logger.error("getResponsesByGroup failed for groupName={}: {}", groupName, e.getMessage(), e);
-            throw e;
-        }
-    }
-
-    @GetMapping("/responses/sheet/{groupName}")
-    public ResponseEntity<List<ResponseDto>> getResponseSheet(@PathVariable String groupName) {
-        logger.info("getResponseSheet started for groupName={}", groupName);
-        try {
-            ResponseEntity<List<ResponseDto>> response = ResponseEntity.ok(assessmentService.getResponsesByGroup(groupName));
-            logger.info("getResponseSheet completed successfully for groupName={}", groupName);
-            return response;
-        } catch (Exception e) {
-            logger.error("getResponseSheet failed for groupName={}: {}", groupName, e.getMessage(), e);
+            logger.error("getResponsesByGroup/Sheet failed for groupName={}: {}", groupName, e.getMessage(), e);
             throw e;
         }
     }

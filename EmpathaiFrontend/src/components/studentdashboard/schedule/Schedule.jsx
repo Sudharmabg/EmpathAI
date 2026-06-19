@@ -171,8 +171,14 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
     )
 
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-lora">
-            <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border-2 border-violet-100 max-h-[92vh] overflow-hidden flex flex-col">
+        <div 
+            onClick={() => onSkip && onSkip()}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-lora"
+        >
+            <div 
+                onClick={e => e.stopPropagation()}
+                className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border-2 border-violet-100 max-h-[92vh] overflow-hidden flex flex-col"
+            >
 
                 <div className="relative bg-gradient-to-br from-violet-600 via-violet-600 to-indigo-600 px-6 pt-6 pb-8 rounded-t-3xl overflow-hidden flex-shrink-0">
                     <div className="absolute -top-6 -right-6 w-32 h-32 bg-white/5 rounded-full" />
@@ -1834,8 +1840,14 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Edit Task Modal ── */}
             {editingTask && !activeDayIsLocked && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl">
+                <div 
+                    onClick={() => setEditingTask(null)}
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                >
+                    <div 
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl"
+                    >
                         <div className="flex items-center gap-3 mb-5">
                             <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center"><PencilIcon className="w-4 h-4 text-violet-500"/></div>
                             <h3 className="text-xl font-black text-black">Edit Activity</h3>
@@ -1873,8 +1885,14 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Add Task Modal ── */}
             {showAddTask && !activeDayIsLocked && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl">
+                <div 
+                    onClick={() => { setShowAddTask(false); setOverlapError(''); setAddWarnings([]) }}
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                >
+                    <div 
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl"
+                    >
                         <h3 className="text-xl font-black text-black mb-4">Add New Activity</h3>
                         <div className="space-y-4">
                             <div>
@@ -1925,8 +1943,14 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Push Modal ── */}
             {showPushModal && !activeDayIsLocked && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-md border-2 border-amber-200 shadow-xl max-h-[90vh] overflow-y-auto">
+                <div 
+                    onClick={closePush}
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                >
+                    <div 
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white rounded-2xl p-6 w-full max-w-md border-2 border-amber-200 shadow-xl max-h-[90vh] overflow-y-auto"
+                    >
                         <div className="flex items-center gap-3 mb-5">
                             <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center"><ArrowRightIcon className="w-5 h-5 text-amber-600"/></div>
                             <div>

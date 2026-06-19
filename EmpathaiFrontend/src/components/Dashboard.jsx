@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  MagnifyingGlassIcon, BellIcon, CalendarIcon, GiftIcon, HomeIcon,
+  MagnifyingGlassIcon, CalendarIcon, GiftIcon, HomeIcon,
   ChatBubbleLeftRightIcon, BookOpenIcon, ClipboardDocumentListIcon,
   PuzzlePieceIcon, BoltIcon, ArrowRightOnRectangleIcon, CheckCircleIcon, XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -264,40 +264,6 @@ useEffect(() => {
             {/* Rewards */}
             <GiftIcon onClick={() => setActiveHeaderModal('rewards')} className="w-6 h-6 text-gray-400 hover:text-primary cursor-pointer transition-colors" />
 
-            {/* Notifications */}
-            <div className="relative">
-              <BellIcon
-                onClick={() => setShowNotificationsDropdown(v => !v)}
-                className={'w-6 h-6 cursor-pointer transition-colors ' + (notifications.some(n => !n.read) ? 'text-primary animate-swing' : 'text-gray-400 hover:text-purple-600')}
-              />
-              {notifications.some(n => !n.read) && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black rounded-full w-4 h-4 flex items-center justify-center border-2 border-white">
-                  {notifications.filter(n => !n.read).length}
-                </span>
-              )}
-              <div className={'absolute top-full right-0 mt-4 w-80 bg-white rounded-2xl shadow-2xl border-2 border-purple-100 overflow-hidden transition-all duration-300 transform origin-top-right z-50 ' +
-                (showNotificationsDropdown ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none')}>
-                <div className="bg-purple-50 p-4 border-b border-purple-100 flex justify-between items-center">
-                  <h3 className="font-black text-dark-navy text-sm">Notifications</h3>
-                  <button className="text-[10px] font-bold text-purple-600 hover:underline">Mark all read</button>
-                </div>
-                <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
-                  {notifications.map(n => (
-                    <div key={n.id} className={'p-4 hover:bg-gray-50 transition-colors cursor-pointer flex gap-3 ' + (!n.read ? 'bg-purple-50/30' : '')}>
-                      <div className={'w-2 h-2 rounded-full mt-1.5 shrink-0 ' + (!n.read ? 'bg-primary' : 'bg-gray-200')} />
-                      <div>
-                        <p className={'text-sm ' + (!n.read ? 'font-bold text-black' : 'font-medium text-gray-500')}>{n.title}</p>
-                        <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-2 border-t border-purple-50 text-center">
-                  <button className="text-xs font-bold text-gray-500 hover:text-black transition-colors w-full py-2">View All Activity</button>
-                </div>
-              </div>
-            </div>
-
             {/* Avatar */}
             <div className="flex items-center gap-3 pl-4 border-l border-gray-100">
               <div className="text-right hidden sm:block">
@@ -392,8 +358,14 @@ useEffect(() => {
 
       {/* ── Modals ── */}
       {activeHeaderModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border-2 border-purple-200 rounded-2xl shadow-xl p-8 w-full max-w-lg relative max-h-[90vh] overflow-y-auto">
+        <div 
+          onClick={() => setActiveHeaderModal(null)}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div 
+            onClick={e => e.stopPropagation()}
+            className="bg-white border-2 border-purple-200 rounded-2xl shadow-xl p-8 w-full max-w-lg relative max-h-[90vh] overflow-y-auto"
+          >
             <button onClick={() => setActiveHeaderModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl">×</button>
             {activeHeaderModal === 'rewards' && <BadgesModal user={user} />}
             {activeHeaderModal === 'notifications' && <NotificationsModal notifications={notifications} />}

@@ -30,7 +30,7 @@ logger = logging.getLogger("chat_router")
 
 # Thread pool for running the blocking LangGraph pipeline without stalling
 # the async event loop.
-_pipeline_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="langgraph")
+_pipeline_executor = ThreadPoolExecutor(max_workers=20, thread_name_prefix="langgraph")
 _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

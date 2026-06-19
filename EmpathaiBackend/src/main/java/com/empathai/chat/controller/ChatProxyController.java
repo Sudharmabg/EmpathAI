@@ -12,9 +12,13 @@ public class ChatProxyController {
     private final WebClient webClient = WebClient.create("http://localhost:8000");
 
     @PostMapping("/api/chat/chat")
-    public Mono<String> chat(@RequestBody String body) {
+    public Mono<String> chat(
+            @RequestBody String body,
+            @RequestHeader(value = "X-Request-ID", required = false) String requestId) {
+        String reqId = getOrGenerateRequestId(requestId);
         return webClient.post()
                 .uri("/chat")
+                .header("X-Request-ID", reqId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .retrieve()
@@ -22,9 +26,13 @@ public class ChatProxyController {
     }
 
     @PostMapping(value = "/api/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> chatStream(@RequestBody String body) {
+    public Flux<String> chatStream(
+            @RequestBody String body,
+            @RequestHeader(value = "X-Request-ID", required = false) String requestId) {
+        String reqId = getOrGenerateRequestId(requestId);
         return webClient.post()
                 .uri("/chat/stream")
+                .header("X-Request-ID", reqId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .bodyValue(body)
@@ -33,12 +41,27 @@ public class ChatProxyController {
     }
 
     @PostMapping("/api/agent/chat")
-    public Mono<String> agentChat(@RequestBody String body) {
+    public Mono<String> agentChat(
+            @RequestBody String body,
+            @RequestHeader(value = "X-Request-ID", required = false) String requestId) {
+        String reqId = getOrGenerateRequestId(requestId);
         return webClient.post()
                 .uri("/agent")
+                .header("X-Request-ID", reqId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(String.class);
+    }
+
+    private String getOrGenerateRequestId(String headerValue) {
+        if (headerValue != null && !headerValue.isBlank()) {
+            return headerValue;
+        }
+        String mdcValue = org.slf4j.MDC.get("requestId");
+        if (mdcValue != null && !mdcValue.isBlank()) {
+            return mdcValue;
+        }
+        return java.util.UUID.randomUUID().toString();
     }
 }

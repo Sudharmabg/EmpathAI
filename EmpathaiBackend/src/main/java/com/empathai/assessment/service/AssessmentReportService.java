@@ -5,7 +5,9 @@ import com.empathai.assessment.dto.AssessmentReportRequest;
 import com.empathai.assessment.dto.AssessmentReportResponse;
 import com.empathai.assessment.entity.AnswerOption;
 import com.empathai.assessment.entity.AssessmentReport;
+import com.empathai.assessment.entity.AssessmentReportHistory;
 import com.empathai.assessment.repository.AssessmentReportRepository;
+import com.empathai.assessment.repository.AssessmentReportHistoryRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import java.util.Arrays;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -29,6 +32,7 @@ public class AssessmentReportService {
     private final AssessmentReportRepository reportRepo;
     private final AnswerOptionService answerOptionService;
     private final ChromaDBService chromaDBService;
+    private final AssessmentReportHistoryRepository reportHistoryRepo;
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -184,32 +188,52 @@ public class AssessmentReportService {
         }
 
         String prompt = buildFullReportPrompt(request, enriched);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authorization", "Bearer " + openaiApiKey);
 
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", "Bearer " + openaiApiKey);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", MODEL);
+        body.put("max_tokens", 1000);
+        body.put("messages", List.of(Map.of("role", "user", "content", prompt)));
 
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("model", MODEL);
-            body.put("max_tokens", 1000);
-            body.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+        int maxRetries = 3;
+        int attempt = 0;
+        long backoffMs = 1000;
 
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                    OPENAI_API_URL, new HttpEntity<>(body, headers), Map.class);
+        while (attempt < maxRetries) {
+            try {
+                attempt++;
+                ResponseEntity<Map> response = restTemplate.postForEntity(
+                        OPENAI_API_URL, new HttpEntity<>(body, headers), Map.class);
 
-            if (response.getBody() != null) {
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-                    String raw = (String) message.get("content");
-                    return parseReportText(raw);
+                if (response.getBody() != null) {
+                    List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
+                    if (choices != null && !choices.isEmpty()) {
+                        Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                        String raw = (String) message.get("content");
+                        return parseReportText(raw);
+                    }
                 }
-            }
-        } catch (Exception e) {
-            log.error("LLM full report call failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
-            if (e instanceof org.springframework.web.client.HttpClientErrorException httpEx) {
-                log.error("OpenAI error response body: {}", httpEx.getResponseBodyAsString());
+                throw new RuntimeException("Unsuccessful response or empty body");
+            } catch (Exception e) {
+                log.warn("OpenAI full report call failed on attempt {}/{} for student={}: {}", 
+                        attempt, maxRetries, request.getStudentId(), e.getMessage());
+                if (attempt >= maxRetries) {
+                    log.error("All retries exhausted for full report generation: {}", e.getMessage());
+                    if (e instanceof org.springframework.web.client.HttpClientErrorException httpEx) {
+                        log.error("OpenAI error response body: {}", httpEx.getResponseBodyAsString());
+                    }
+                } else {
+                    long jitter = (long) (Math.random() * 200);
+                    long sleepTime = (backoffMs * (1L << (attempt - 1))) + jitter;
+                    try {
+                        Thread.sleep(sleepTime);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Retry sleep interrupted", ie);
+                    }
+                }
             }
         }
         return fallback;
@@ -344,12 +368,16 @@ public class AssessmentReportService {
             metadata.put("className",   report.getClassName() != null ? report.getClassName() : "");
             metadata.put("sessionDate", report.getSessionDate().toString());
 
+            String summaryToSync = report.getEditedSummaryText() != null && !report.getEditedSummaryText().isBlank()
+                    ? report.getEditedSummaryText()
+                    : (report.getSummaryText() != null ? report.getSummaryText() : "");
+
             String document = String.format(
                     "Student: %s | Class: %s | Date: %s\n\n%s\n\n%s",
                     report.getStudentName(),
                     report.getClassName(),
                     report.getSessionDate(),
-                    report.getSummaryText() != null ? report.getSummaryText() : "",
+                    summaryToSync,
                     report.getBulletPoints() != null ? report.getBulletPoints() : ""
             );
 
@@ -416,6 +444,58 @@ public class AssessmentReportService {
         String tag;
         String cachedBullets;
     }
+    private void saveHistorySnapshot(AssessmentReport report) {
+        String summaryTextSnapshot = report.getEditedSummaryText() != null ? report.getEditedSummaryText() : report.getSummaryText();
+        String editedBySnapshot = report.getEditedBy() != null ? report.getEditedBy() : "AI";
+        LocalDateTime editedAtSnapshot = report.getUpdatedAt() != null ? report.getUpdatedAt() : report.getCreatedAt();
+        if (editedAtSnapshot == null) {
+            editedAtSnapshot = LocalDateTime.now();
+        }
+
+        String changeTypeSnapshot;
+        if ("Y".equalsIgnoreCase(report.getConfirmed())) {
+            changeTypeSnapshot = "CONFIRMED";
+        } else if (report.getEditedSummaryText() != null) {
+            changeTypeSnapshot = "HUMAN_EDITED";
+        } else {
+            changeTypeSnapshot = "AI_GENERATED";
+        }
+
+        AssessmentReportHistory history = AssessmentReportHistory.builder()
+                .reportId(report.getId())
+                .summaryText(summaryTextSnapshot)
+                .editedBy(editedBySnapshot)
+                .editedAt(editedAtSnapshot)
+                .changeType(changeTypeSnapshot)
+                .build();
+
+        reportHistoryRepo.save(history);
+        log.info("Saved assessment report history snapshot for reportId={}, changeType={}", report.getId(), changeTypeSnapshot);
+    }
+
+    @Transactional
+    public AssessmentReportResponse updateEditedSummary(Long reportId, String editedText, String editedBy) {
+        AssessmentReport report = reportRepo.findById(reportId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("AssessmentReport not found: " + reportId));
+        saveHistorySnapshot(report);
+        report.setEditedSummaryText(editedText);
+        report.setEditedBy(editedBy);
+        AssessmentReport saved = reportRepo.save(report);
+        syncToChromaAsync(saved);
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public AssessmentReportResponse confirmInsight(Long reportId, String confirmedBy) {
+        AssessmentReport report = reportRepo.findById(reportId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("AssessmentReport not found: " + reportId));
+        saveHistorySnapshot(report);
+        report.setConfirmed("Y");
+        report.setEditedBy(confirmedBy);
+        log.info("Insight confirmed for reportId={} by {}", reportId, confirmedBy);
+        return toResponse(reportRepo.save(report));
+    }
+
     public Optional<AssessmentReportResponse> getLatestReport(String studentId, Long groupId) {
         return reportRepo.findByStudentIdOrderByCreatedAtDesc(studentId)
                 .stream()
@@ -429,25 +509,6 @@ public class AssessmentReportService {
                 .findByStudentIdAndGroupIdAndSessionDate(studentId, groupId, LocalDate.now())
                 .ifPresent(reportRepo::delete);
         log.info("Deleted today's cached report for student={} group={}", studentId, groupId);
-    }
-
-    @Transactional
-    public AssessmentReportResponse updateEditedSummary(Long reportId, String editedText, String editedBy) {
-        AssessmentReport report = reportRepo.findById(reportId)
-                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("AssessmentReport not found: " + reportId));
-        report.setEditedSummaryText(editedText);
-        report.setEditedBy(editedBy);
-        return toResponse(reportRepo.save(report));
-    }
-
-    @Transactional
-    public AssessmentReportResponse confirmInsight(Long reportId, String confirmedBy) {
-        AssessmentReport report = reportRepo.findById(reportId)
-                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("AssessmentReport not found: " + reportId));
-        report.setConfirmed("Y");
-        report.setEditedBy(confirmedBy);
-        log.info("Insight confirmed for reportId={} by {}", reportId, confirmedBy);
-        return toResponse(reportRepo.save(report));
     }
 
 }

@@ -13,20 +13,57 @@ import os
 import sys
 import signal
 import threading
+import contextvars
+import structlog
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from routers import chat
 
-# ── Logging ───────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler()],
+# ── Logging & Request Context ──────────────────────────────────────────────────
+request_id_var = contextvars.ContextVar("request_id", default="unknown")
+
+def add_request_id(logger, method_name, event_dict):
+    event_dict["request_id"] = request_id_var.get()
+    return event_dict
+
+# Configure structlog
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        add_request_id,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.JSONRenderer()
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
 )
+
+# Set up root logger with structlog JSON formatter
+handler = logging.StreamHandler()
+formatter = structlog.stdlib.ProcessorFormatter(
+    processor=structlog.processors.JSONRenderer(),
+    foreign_pre_chain=[
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        add_request_id,
+        structlog.processors.TimeStamper(fmt="iso"),
+    ]
+)
+handler.setFormatter(formatter)
+root_logger = logging.getLogger()
+root_logger.handlers = [handler]
+root_logger.setLevel(logging.INFO)
+
 logger = logging.getLogger("main")
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -46,6 +83,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID", "unknown")
+    token = request_id_var.set(request_id)
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        request_id_var.reset(token)
 
 app.include_router(chat.router)
 
@@ -70,12 +118,17 @@ async def startup_event():
         logger.warning("Warm-up failed (non-fatal): %s", exc)
 
 
-# ── Health check ──────────────────────────────────────────────────────────────
+# ── Health check & Metrics ────────────────────────────────────────────────────
 
 @app.get("/health")
 def health_check():
     logger.info("Health check called")
     return {"status": "ok", "service": "EmpathAI AI Service"}
+
+@app.get("/metrics")
+def get_metrics():
+    from services.metrics_service import metrics
+    return metrics
 
 
 # ── Graceful Shutdown ─────────────────────────────────────────────────────────

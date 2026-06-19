@@ -71,11 +71,18 @@ public class AssessmentReport {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
- 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
         if (sessionDate == null) sessionDate = java.time.LocalDate.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 }

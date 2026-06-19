@@ -160,9 +160,15 @@ public class ChatService {
         // ── Call Python LangGraph service ──────────────────────────────────────
         Map<String, Object> aiResponse;
         try {
+            String requestId = org.slf4j.MDC.get("requestId");
+            if (requestId == null || requestId.isBlank()) {
+                requestId = java.util.UUID.randomUUID().toString();
+            }
+
             aiResponse = webClientBuilder.build()
                     .post()
                     .uri(aiServiceUrl + "/chat")
+                    .header("X-Request-ID", requestId)
                     .bodyValue(aiRequest)
                     .retrieve()
                     .onStatus(

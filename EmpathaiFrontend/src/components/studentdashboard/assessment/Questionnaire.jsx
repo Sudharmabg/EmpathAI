@@ -235,6 +235,44 @@ fetchQuestionsByClass(className)
       .finally(() => setLoading(false))
   }, [user])
 
+  // Fetch past student responses on load to prefill questions
+  useEffect(() => {
+    const _su = localStorage.getItem('user')
+    const _uu = _su ? JSON.parse(_su) : user
+    const studentId = _uu?.id ?? null
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
+    if (!studentId || apiQuestions.length === 0) return
+
+    fetch(`/api/responses?studentId=${encodeURIComponent(studentId)}&size=200`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    .then(res => res.ok ? res.json() : null)
+    .then(data => {
+      if (data && (data.content || Array.isArray(data))) {
+        const responseList = data.content || data
+        const prefilledAnswers = {}
+
+        responseList.forEach(resp => {
+          const question = apiQuestions.find(q => q.id === resp.questionId)
+          if (question) {
+            const matchedOption = question.options.find(
+              o => o.label.trim().toLowerCase() === (resp.responseValue || '').trim().toLowerCase()
+            )
+            if (matchedOption) {
+              prefilledAnswers[resp.questionId] = matchedOption.value
+            }
+          }
+        })
+
+        if (Object.keys(prefilledAnswers).length > 0) {
+          answersRef.current = prefilledAnswers
+          setAnswers(prefilledAnswers)
+        }
+      }
+    })
+    .catch(err => console.error('[Questionnaire] Fetch past responses failed:', err))
+  }, [apiQuestions, user])
+
   // ✅ NEW useEffect starts HERE — outside and after the previous one
   useEffect(() => {
     if (!alreadyDone || apiQuestions.length === 0) return
@@ -767,7 +805,7 @@ sessionStorage.setItem(_key, 'true')
         ) : (
           <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 content-center">
             {currentQ.options.map((option, index) => {
-              const isSelected = selectedOption === index
+              const isSelected = selectedOption === index || (selectedOption === null && answers[currentQ.id] === option.value)
               return (
                 <label
                   key={index}

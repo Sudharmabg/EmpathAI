@@ -27,6 +27,7 @@ public class AnswerOptionService {
 
     private final AnswerOptionRepository answerOptionRepo;
     private final AssessmentQuestionRepository questionRepo;
+    private final LlmMetricsTracker metricsTracker;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Value("${openai.api.key:}")
@@ -39,8 +40,12 @@ public class AnswerOptionService {
 
     @Transactional
     public AnswerOptionResponse saveOption(AnswerOptionRequest request) {
-        Optional<AnswerOption> existing = answerOptionRepo
-                .findByQuestionIdAndOptionLabel(request.getQuestionId(), request.getOptionLabel());
+        Optional<AnswerOption> existing = Optional.empty();
+        if (request.getOptionIndex() != null) {
+            existing = answerOptionRepo.findByQuestionIdAndOptionIndex(request.getQuestionId(), request.getOptionIndex());
+        } else if (request.getOptionLabel() != null) {
+            existing = answerOptionRepo.findByQuestionIdAndOptionLabel(request.getQuestionId(), request.getOptionLabel().trim());
+        }
 
         boolean interpretationChanged = false;
         AnswerOption option;
@@ -49,11 +54,17 @@ public class AnswerOptionService {
             option = existing.get();
 
             interpretationChanged =
-                    !Objects.equals(option.getRangeValue(),      request.getRange())       ||
+                    !Objects.equals(option.getOptionIndex(),     request.getOptionIndex()) ||
+                            !Objects.equals(option.getOptionLabel(),     request.getOptionLabel()) ||
+                            !Objects.equals(option.getRangeValue(),      request.getRange())       ||
                             !Objects.equals(option.getOverallMeaning(),  request.getOverallMeaning()) ||
                             !Objects.equals(option.getInterpretation(),  request.getInterpretation()) ||
                             !Objects.equals(option.getTag(),             request.getTag());
 
+            if (request.getOptionIndex() != null) {
+                option.setOptionIndex(request.getOptionIndex());
+            }
+            option.setOptionLabel(request.getOptionLabel());
             option.setRangeValue(request.getRange());
             option.setOverallMeaning(request.getOverallMeaning());
             option.setInterpretation(request.getInterpretation());
@@ -62,16 +73,19 @@ public class AnswerOptionService {
             if (interpretationChanged) {
                 option.setCachedBullets(null);
                 option.setBulletsGeneratedAt(null);
-                log.info("Interpretation changed for optionId={} — cache invalidated", option.getId());
+                option.setBulletsStatus("PENDING");
+                log.info("Interpretation or index changed for optionId={} — cache invalidated", option.getId());
             }
         } else {
             option = AnswerOption.builder()
                     .questionId(request.getQuestionId())
+                    .optionIndex(request.getOptionIndex() != null ? request.getOptionIndex() : 0)
                     .optionLabel(request.getOptionLabel())
                     .rangeValue(request.getRange())
                     .overallMeaning(request.getOverallMeaning())
                     .interpretation(request.getInterpretation())
                     .tag(request.getTag())
+                    .bulletsStatus("PENDING")
                     .build();
             interpretationChanged = true;
         }
@@ -79,9 +93,10 @@ public class AnswerOptionService {
         AnswerOption saved = answerOptionRepo.save(option);
         log.info("Saved answer option id={} for questionId={}", saved.getId(), saved.getQuestionId());
 
-        if (interpretationChanged || saved.getCachedBullets() == null) {
-            generateBulletsAsync(saved.getId());
+        if (saved.getCachedBullets() != null && !interpretationChanged) {
+            return toResponse(saved);
         }
+        generateBulletsAsync(saved.getId());
 
         return toResponse(saved);
     }
@@ -97,92 +112,57 @@ public class AnswerOptionService {
             return requests.stream().map(this::saveOption).collect(Collectors.toList());
         }
 
-        // 1. Fetch the question to get the current list of option texts (order is important)
-        Optional<AssessmentQuestion> questionOpt = questionRepo.findById(questionId);
-        if (questionOpt.isEmpty()) {
-            return requests.stream().map(this::saveOption).collect(Collectors.toList());
-        }
-
-        AssessmentQuestion question = questionOpt.get();
-        List<String> currentQuestionOptions = new ArrayList<>();
-        if (question.getOptionA() != null) currentQuestionOptions.add(question.getOptionA().trim());
-        if (question.getOptionB() != null) currentQuestionOptions.add(question.getOptionB().trim());
-        if (question.getOptionC() != null) currentQuestionOptions.add(question.getOptionC().trim());
-        if (question.getOptionD() != null) currentQuestionOptions.add(question.getOptionD().trim());
-
-        // 2. Fetch existing AnswerOption rows for this question
+        // Fetch existing AnswerOption rows for this question
         List<AnswerOption> dbOptions = answerOptionRepo.findByQuestionId(questionId);
 
-        // 3. Map dbOptions to option indices of the question
+        // Map dbOptions by optionIndex
         Map<Integer, AnswerOption> dbOptionMap = new HashMap<>();
-        List<AnswerOption> unmatchedDbOptions = new ArrayList<>();
-
         for (AnswerOption dbOpt : dbOptions) {
-            String dbLabel = dbOpt.getOptionLabel() != null ? dbOpt.getOptionLabel().trim() : "";
-            int matchIndex = -1;
-            for (int i = 0; i < currentQuestionOptions.size(); i++) {
-                if (dbLabel.equalsIgnoreCase(currentQuestionOptions.get(i))) {
-                    matchIndex = i;
-                    break;
-                }
-            }
-            if (matchIndex != -1) {
-                dbOptionMap.put(matchIndex, dbOpt);
-            } else {
-                unmatchedDbOptions.add(dbOpt);
+            if (dbOpt.getOptionIndex() != null) {
+                dbOptionMap.put(dbOpt.getOptionIndex(), dbOpt);
             }
         }
 
-        // Find which indices in currentQuestionOptions do not have a mapped dbOption
-        List<Integer> unmappedIndices = new ArrayList<>();
-        for (int i = 0; i < currentQuestionOptions.size(); i++) {
-            if (!dbOptionMap.containsKey(i)) {
-                unmappedIndices.add(i);
-            }
-        }
-
-        // Pair unmatched DB options to unmapped indices in order of appearance
-        int pairsCount = Math.min(unmatchedDbOptions.size(), unmappedIndices.size());
-        for (int i = 0; i < pairsCount; i++) {
-            dbOptionMap.put(unmappedIndices.get(i), unmatchedDbOptions.get(i));
-        }
-
-        // Delete any leftover DB options that are no longer part of the question
-        if (unmatchedDbOptions.size() > pairsCount) {
-            for (int i = pairsCount; i < unmatchedDbOptions.size(); i++) {
-                answerOptionRepo.delete(unmatchedDbOptions.get(i));
-                log.info("Deleted removed answer option id={} for questionId={}", 
-                        unmatchedDbOptions.get(i).getId(), questionId);
-            }
-        }
-
-        // 4. Match requests to option positions and save/update
         List<AnswerOptionResponse> responses = new ArrayList<>();
+        Set<Integer> processedIndices = new HashSet<>();
 
         for (AnswerOptionRequest req : requests) {
-            String reqLabel = req.getOptionLabel() != null ? req.getOptionLabel().trim() : "";
-            
-            int reqIndex = -1;
-            for (int i = 0; i < currentQuestionOptions.size(); i++) {
-                if (reqLabel.equalsIgnoreCase(currentQuestionOptions.get(i))) {
-                    reqIndex = i;
-                    break;
+            Integer reqIndex = req.getOptionIndex();
+            // If optionIndex is not provided, we can fall back to matching by optionLabel if needed
+            if (reqIndex == null) {
+                Optional<AssessmentQuestion> questionOpt = questionRepo.findById(questionId);
+                if (questionOpt.isPresent()) {
+                    AssessmentQuestion q = questionOpt.get();
+                    List<String> qOpts = Arrays.asList(q.getOptionA(), q.getOptionB(), q.getOptionC(), q.getOptionD());
+                    for (int i = 0; i < qOpts.size(); i++) {
+                        if (qOpts.get(i) != null && qOpts.get(i).trim().equalsIgnoreCase(req.getOptionLabel().trim())) {
+                            reqIndex = i;
+                            break;
+                        }
+                    }
                 }
             }
+            if (reqIndex == null) {
+                reqIndex = 0; // Default fallback if no match found
+            }
+
+            processedIndices.add(reqIndex);
 
             AnswerOption optionToSave;
             boolean interpretationChanged = false;
 
-            if (reqIndex != -1 && dbOptionMap.containsKey(reqIndex)) {
+            if (dbOptionMap.containsKey(reqIndex)) {
                 optionToSave = dbOptionMap.get(reqIndex);
-                
+
                 interpretationChanged =
+                        !Objects.equals(optionToSave.getOptionIndex(), reqIndex) ||
                         !Objects.equals(optionToSave.getOptionLabel(), req.getOptionLabel()) ||
                         !Objects.equals(optionToSave.getRangeValue(),  req.getRange()) ||
                         !Objects.equals(optionToSave.getOverallMeaning(), req.getOverallMeaning()) ||
                         !Objects.equals(optionToSave.getInterpretation(), req.getInterpretation()) ||
                         !Objects.equals(optionToSave.getTag(), req.getTag());
 
+                optionToSave.setOptionIndex(reqIndex);
                 optionToSave.setOptionLabel(req.getOptionLabel());
                 optionToSave.setRangeValue(req.getRange());
                 optionToSave.setOverallMeaning(req.getOverallMeaning());
@@ -192,28 +172,42 @@ public class AnswerOptionService {
                 if (interpretationChanged) {
                     optionToSave.setCachedBullets(null);
                     optionToSave.setBulletsGeneratedAt(null);
-                    log.info("Label or interpretation changed for optionId={} — cache invalidated", optionToSave.getId());
+                    optionToSave.setBulletsStatus("PENDING");
+                    log.info("Label/Index/Interpretation changed for optionId={} — cache invalidated", optionToSave.getId());
                 }
             } else {
                 optionToSave = AnswerOption.builder()
                         .questionId(questionId)
+                        .optionIndex(reqIndex)
                         .optionLabel(req.getOptionLabel())
                         .rangeValue(req.getRange())
                         .overallMeaning(req.getOverallMeaning())
                         .interpretation(req.getInterpretation())
                         .tag(req.getTag())
+                        .bulletsStatus("PENDING")
                         .build();
                 interpretationChanged = true;
             }
 
             AnswerOption saved = answerOptionRepo.save(optionToSave);
-            log.info("Saved answer option id={} for questionId={}", saved.getId(), saved.getQuestionId());
+            log.info("Saved answer option id={} for questionId={} with index={}", saved.getId(), saved.getQuestionId(), saved.getOptionIndex());
 
-            if (interpretationChanged || saved.getCachedBullets() == null) {
-                generateBulletsAsync(saved.getId());
+            if (saved.getCachedBullets() != null && !interpretationChanged) {
+                responses.add(toResponse(saved));
+                continue;
             }
+            generateBulletsAsync(saved.getId());
 
             responses.add(toResponse(saved));
+        }
+
+        // Delete any existing options that are not in the processed index set
+        for (AnswerOption dbOpt : dbOptions) {
+            if (dbOpt.getOptionIndex() != null && !processedIndices.contains(dbOpt.getOptionIndex())) {
+                answerOptionRepo.delete(dbOpt);
+                log.info("Deleted removed answer option id={} with index={} for questionId={}",
+                        dbOpt.getId(), dbOpt.getOptionIndex(), questionId);
+            }
         }
 
         return responses;
@@ -242,28 +236,49 @@ public class AnswerOptionService {
     // ── Bullet Pre-Generation ─────────────────────────────────────────────────
 
     @Async
-    public void generateBulletsAsync(Long optionId) {
+    public void generateBulletsAsync(Long optionId, boolean forceRetry) {
         answerOptionRepo.findById(optionId).ifPresent(option -> {
             if (option.getCachedBullets() != null && !option.getCachedBullets().isBlank()) {
                 log.debug("Bullets already cached for option id={}", optionId);
                 return;
             }
-            String bullets = callLlmForBullets(option);
-            if (bullets != null && !bullets.isBlank()) {
+            if (!forceRetry && "FAILED".equals(option.getBulletsStatus())) {
+                log.debug("Option id={} already marked as FAILED — skipping in standard requests", optionId);
+                return;
+            }
 
-                option.setCachedBullets(bullets);
-                option.setBulletsGeneratedAt(LocalDateTime.now());
+            option.setBulletsStatus("GENERATING");
+            answerOptionRepo.save(option);
+
+            try {
+                String bullets = callLlmForBullets(option);
+                if (bullets != null && !bullets.isBlank()) {
+                    option.setCachedBullets(bullets);
+                    option.setBulletsGeneratedAt(LocalDateTime.now());
+                    option.setBulletsStatus("COMPLETED");
+                    answerOptionRepo.save(option);
+                    log.info("Cached bullets for option id={}", optionId);
+                } else {
+                    throw new RuntimeException("Generated bullets were empty");
+                }
+            } catch (Exception e) {
+                option.setBulletsStatus("FAILED");
                 answerOptionRepo.save(option);
-                log.info("Cached bullets for option id={}", optionId);
+                log.error("Failed to generate bullets for option id={} after all retries: {}", optionId, e.getMessage());
             }
         });
     }
 
+    @Async
+    public void generateBulletsAsync(Long optionId) {
+        generateBulletsAsync(optionId, false);
+    }
+
     public void pregenerateAllMissingBullets() {
         List<AnswerOption> uncached = answerOptionRepo.findAllUncached();
-        log.info("Pre-generating bullets for {} uncached options", uncached.size());
+        log.info("Pre-generating bullets for {} uncached options (including retrying failed ones)", uncached.size());
         for (AnswerOption option : uncached) {
-            generateBulletsAsync(option.getId());
+            generateBulletsAsync(option.getId(), true);
         }
     }
 
@@ -276,31 +291,56 @@ public class AnswerOptionService {
         }
 
         String prompt = buildBulletPrompt(option);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authorization", "Bearer " + openaiApiKey);
 
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", "Bearer " + openaiApiKey);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", MODEL);
+        body.put("max_tokens", 400);
+        body.put("messages", List.of(Map.of("role", "user", "content", prompt)));
 
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("model", MODEL);
-            body.put("max_tokens", 400);
-            body.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+        int maxRetries = 3;
+        int attempt = 0;
+        long backoffMs = 1000;
 
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                    OPENAI_API_URL, new HttpEntity<>(body, headers), Map.class);
+        long startTime = System.currentTimeMillis();
+        while (attempt < maxRetries) {
+            try {
+                attempt++;
+                ResponseEntity<Map> response = restTemplate.postForEntity(
+                        OPENAI_API_URL, new HttpEntity<>(body, headers), Map.class);
 
-            if (response.getBody() != null) {
-                List<Map<String, Object>> choices =
-                        (List<Map<String, Object>>) response.getBody().get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
-                    return (String) message.get("content");
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    List<Map<String, Object>> choices =
+                            (List<Map<String, Object>>) response.getBody().get("choices");
+                    if (choices != null && !choices.isEmpty()) {
+                        Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                        String content = (String) message.get("content");
+                        metricsTracker.recordSuccess(System.currentTimeMillis() - startTime);
+                        return content;
+                    }
+                }
+                throw new RuntimeException("Unsuccessful response code or empty body");
+            } catch (Exception e) {
+                log.warn("OpenAI bullet generation failed on attempt {}/{} for option id={}: {}", 
+                        attempt, maxRetries, option.getId(), e.getMessage());
+                if (attempt >= maxRetries) {
+                    metricsTracker.recordFailure(System.currentTimeMillis() - startTime);
+                    throw new RuntimeException("All retries exhausted", e);
+                }
+                long jitter = (long) (Math.random() * 200);
+                long sleepTime = (backoffMs * (1L << (attempt - 1))) + jitter;
+                try {
+                    Thread.sleep(sleepTime);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    metricsTracker.recordFailure(System.currentTimeMillis() - startTime);
+                    throw new RuntimeException("Retry sleep interrupted", ie);
                 }
             }
-        } catch (Exception e) {
-            log.error("LLM bullet generation failed for option id={}: {}", option.getId(), e.getMessage());
         }
+        metricsTracker.recordFailure(System.currentTimeMillis() - startTime);
         return null;
     }
 
@@ -384,6 +424,7 @@ public class AnswerOptionService {
         return AnswerOptionResponse.builder()
                 .id(o.getId())
                 .questionId(o.getQuestionId())
+                .optionIndex(o.getOptionIndex())
                 .optionLabel(o.getOptionLabel())
                 .rangeValue(o.getRangeValue())
                 .overallMeaning(o.getOverallMeaning())
@@ -391,6 +432,7 @@ public class AnswerOptionService {
                 .tag(o.getTag())
                 .cachedBullets(o.getCachedBullets())
                 .bulletsGeneratedAt(o.getBulletsGeneratedAt())
+                .bulletsStatus(o.getBulletsStatus())
                 .createdAt(o.getCreatedAt())
                 .updatedAt(o.getUpdatedAt())
                 .build();

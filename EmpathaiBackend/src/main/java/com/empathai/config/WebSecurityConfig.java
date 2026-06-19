@@ -75,6 +75,7 @@ public class WebSecurityConfig {
                         .requestMatchers("/api/auth/validate-token").permitAll()
                         .requestMatchers("/api/auth/set-password").permitAll()
 
+                        .requestMatchers("/api/health/ai-service", "/metrics").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/api/groups/**").permitAll()

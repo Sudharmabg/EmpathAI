@@ -248,6 +248,19 @@ def response_generator(state: ChatState) -> ChatState:
             clean_reply = f"{state['empathy_prefix']}\n\n{clean_reply}"
             logger.info("Empathy prefix prepended to response")
 
+        # ── Metric: check for fast path override/misclassification ──────────────
+        if state.get("fast_path"):
+            has_empathy_phrase = any(phrase in clean_reply.lower() for phrase in [
+                "i'm sorry", "i hear you", "sounds tough", "sounds hard", "understand how you feel",
+                "feel sad", "don't worry", "grounding", "take a deep breath"
+            ])
+            if detected_mode == "mental_health" or has_empathy_phrase:
+                logger.warning(
+                    "[METRIC] fast_path_override | Fast path was taken but response included "
+                    "emotional indicators (mode=%s, has_empathy_phrase=%s) for message: '%s'",
+                    detected_mode, has_empathy_phrase, message_text
+                )
+
         #  Update chat_history with this turn so checkpointer saves it
         updated_history = list(state.get("chat_history", []))
         updated_history.append({"role": "user",      "content": message_text})

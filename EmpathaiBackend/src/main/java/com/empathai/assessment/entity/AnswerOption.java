@@ -9,8 +9,8 @@ import java.time.LocalDateTime;
 @Table(
         name = "answer_options",
         uniqueConstraints = @UniqueConstraint(
-                name = "uq_answer_option",
-                columnNames = {"question_id", "option_label"}
+                name = "uq_answer_option_index",
+                columnNames = {"question_id", "option_index"}
         )
 )
 @Getter
@@ -26,6 +26,10 @@ public class AnswerOption {
 
     @Column(name = "question_id", nullable = false)
     private Long questionId;
+
+    @Builder.Default
+    @Column(name = "option_index", nullable = false)
+    private Integer optionIndex = 0;
 
     @Column(name = "option_label", nullable = false, length = 500)
     private String optionLabel;
@@ -47,6 +51,10 @@ public class AnswerOption {
 
     @Column(name = "bullets_generated_at")
     private LocalDateTime bulletsGeneratedAt;
+
+    @Builder.Default
+    @Column(name = "bullets_status", length = 50)
+    private String bulletsStatus = "PENDING";
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

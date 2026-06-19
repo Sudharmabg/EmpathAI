@@ -83,6 +83,12 @@ def _build_assessment_summary(assessment: dict) -> str:
 
 
 def context_loader(state: ChatState) -> ChatState:
+    chat_history = state.get("chat_history", [])
+    if chat_history and len(chat_history) > 20:
+        chat_history = chat_history[-20:]
+        state["chat_history"] = chat_history
+        logger.info("Chat history capped to the last 20 messages (10 turns)")
+
     exams = state.get("upcoming_exams", [])
     today_tasks = state.get("today_tasks", [])
     goals = state.get("active_goals", [])

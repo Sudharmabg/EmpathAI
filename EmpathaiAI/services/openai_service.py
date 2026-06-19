@@ -20,10 +20,12 @@ import os
 import random
 import re
 from typing import AsyncIterator
+import time
 
 import tiktoken
 from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAI
+from services.metrics_service import record_success, record_failure
 
 from models.schemas import ChatRequest, ChatResponse
 from services.cache_service import add_to_cache, get_cached
@@ -351,12 +353,20 @@ def get_chat_response(request: ChatRequest) -> ChatResponse:
         request.message,
     )
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=2048,
-    )
+    start_time = time.time()
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=2048,
+        )
+        duration_ms = (time.time() - start_time) * 1000.0
+        record_success(duration_ms)
+    except Exception as e:
+        duration_ms = (time.time() - start_time) * 1000.0
+        record_failure(duration_ms)
+        raise e
     raw_reply      = response.choices[0].message.content.strip()
     flag_data      = _parse_flags(raw_reply)
     raw_no_flags   = _strip_flag_tags(raw_reply)
@@ -429,20 +439,28 @@ async def stream_chat_response(request: ChatRequest) -> AsyncIterator[str]:
 
     full_reply = ""
 
-    async with await async_client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=2048,
-        stream=True,
-    ) as stream:
-        async for chunk in stream:
-            delta = chunk.choices[0].delta.content if chunk.choices else None
-            if delta:
-                full_reply += delta
-                # SSE-escape newlines inside the token so the protocol isn't broken
-                safe = delta.replace("\n", "\\n")
-                yield f"data: {safe}\n\n"
+    start_time = time.time()
+    try:
+        async with await async_client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=2048,
+            stream=True,
+        ) as stream:
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    full_reply += delta
+                    # SSE-escape newlines inside the token so the protocol isn't broken
+                    safe = delta.replace("\n", "\\n")
+                    yield f"data: {safe}\n\n"
+        duration_ms = (time.time() - start_time) * 1000.0
+        record_success(duration_ms)
+    except Exception as e:
+        duration_ms = (time.time() - start_time) * 1000.0
+        record_failure(duration_ms)
+        raise e
 
     # ── Post-processing (after stream completes) ──────────────────────────────
     import json

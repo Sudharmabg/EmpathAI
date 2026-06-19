@@ -79,6 +79,7 @@ const [isConfirming, setIsConfirming] = useState(false)
     const [selectedFilter, setSelectedFilter] = useState('ALL')
     const [analytics, setAnalytics] = useState(null)
     const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false)
+    const lastFetchedAtRef = useRef(0)
 
     const showResponseSheetRef = useRef(showResponseSheet)
     useEffect(() => { showResponseSheetRef.current = showResponseSheet }, [showResponseSheet])
@@ -128,6 +129,7 @@ const [isConfirming, setIsConfirming] = useState(false)
             .then(data => {
                 const questionList = data?.content || data || []
                 setQuestions(questionList)
+                lastFetchedAtRef.current = Date.now()
             })
             .catch(err => { console.error('Questions fetch error:', err); setQuestions([]) })
 
@@ -233,6 +235,16 @@ const [isConfirming, setIsConfirming] = useState(false)
     }
 
     const handleOpenQuestionModal = (question = null) => {
+        if (Date.now() - lastFetchedAtRef.current > 30000) {
+            fetchQuestions(0, 200)
+                .then(data => {
+                    const questionList = data?.content || data || []
+                    setQuestions(questionList)
+                    lastFetchedAtRef.current = Date.now()
+                })
+                .catch(err => console.error('Questions auto-refetch error:', err))
+        }
+
         if (question) {
             setEditingQuestion(question)
             const opts = getOptionsArray(question).map(opt => opt.replace(/^[A-D]-\s*/, '').trim())
@@ -283,6 +295,15 @@ const handleSaveQuestion = () => {
             setIsSubmittingQuestion(false)  
             return
         }
+
+        const cleanedOptions = options.map(opt => opt.trim().toLowerCase())
+        const hasDuplicates = cleanedOptions.some((val, index) => cleanedOptions.indexOf(val) !== index)
+        if (hasDuplicates) {
+            alert('Each option text must be unique. Duplicate options are not allowed.')
+            setIsSubmittingQuestion(false)
+            return
+        }
+
         if (questionFormData.groups.length === 0) {
             alert('Please select at least one group')
             setIsSubmittingQuestion(false)
@@ -295,18 +316,27 @@ const handleSaveQuestion = () => {
             options: options.join(','),
         }
 
+        const rawOptions = [
+            questionFormData.option1,
+            questionFormData.option2,
+            questionFormData.option3,
+            questionFormData.option4
+        ];
+
         const buildAnswerOptionPayloads = (questionId) =>
-            options.map((opt, i) => {
+            rawOptions.slice(0, questionFormData.optionCount).map((opt, i) => {
                 const n = i + 1
+                if (!opt || !opt.trim()) return null;
                 return {
                     questionId,
-                    optionLabel: opt,
+                    optionLabel: opt.trim(),
+                    optionIndex: i,
                     overallMeaning: questionFormData[`option${n}OverallMeaning`] || '',
                     interpretation: questionFormData[`option${n}Interpretation`] || '',
                     tag: questionFormData[`option${n}Tag`] || '',
                     range: '',
                 }
-            }).filter(p => p.optionLabel.trim())
+            }).filter(p => p !== null)
 
         const saveAnswerOptions = (questionId) => {
             if (!questionId || typeof questionId === 'object') {
@@ -336,6 +366,7 @@ const handleSaveQuestion = () => {
         .then(data => {
             const list = data?.content || data || []
             if (list.length > 0) setQuestions(list)
+            lastFetchedAtRef.current = Date.now()
         })
         .catch(err => console.error('Refetch error:', err))
 

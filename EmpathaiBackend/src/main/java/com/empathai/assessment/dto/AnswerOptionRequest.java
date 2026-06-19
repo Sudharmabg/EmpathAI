@@ -11,6 +11,7 @@ public class AnswerOptionRequest {
 
 
     private Long questionId;
+    private Integer optionIndex;
     private String optionLabel;
 
     private String range;

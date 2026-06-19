@@ -55,7 +55,7 @@ function personalise (text, studentName) {
   const lower = firstName.toLowerCase()
   if (['you', 'your', 'they', 'their', 'he', 'she', 'his', 'her'].includes(lower)) return text
   const escaped = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return text
+  let resultText = text
     .replace(new RegExp(`\\b${escaped}'s\\b`, 'gi'), 'your')
     .replace(new RegExp(`\\b${escaped}\\b`, 'gi'), 'you')
     .replace(/\bshe's\b/gi, "you're")
@@ -68,6 +68,73 @@ function personalise (text, studentName) {
     .replace(/\bthey\b/gi, 'you')
     .replace(/\btheir\b/gi, 'your')
     .replace(/\bthem\b/gi, 'you')
+
+  // Verb map to fix subject-verb agreement (e.g., "you shows" -> "you show")
+  const verbMap = {
+    shows: 'show',
+    demonstrates: 'demonstrate',
+    feels: 'feel',
+    experiences: 'experience',
+    displays: 'display',
+    has: 'have',
+    is: 'are',
+    was: 'were',
+    does: 'do',
+    wants: 'want',
+    needs: 'need',
+    seems: 'seem',
+    struggles: 'struggle',
+    finds: 'find',
+    enjoys: 'enjoy',
+    manages: 'manage',
+    faces: 'face',
+    navigates: 'navigate',
+    expresses: 'express',
+    copes: 'cope',
+    reacts: 'react',
+    responds: 'respond',
+    seeks: 'seek',
+    prefers: 'prefer',
+    tends: 'tend',
+    exhibits: 'exhibit',
+    maintains: 'maintain',
+    hopes: 'hope',
+    appreciates: 'appreciate',
+    values: 'value',
+    understands: 'understand',
+    knows: 'know',
+    thinks: 'think',
+    uses: 'use',
+    makes: 'make',
+    takes: 'take',
+    keeps: 'keep',
+    gets: 'get',
+    goes: 'go',
+    comes: 'come',
+    helps: 'help',
+    gives: 'give',
+    allows: 'allow',
+    leads: 'lead',
+    creates: 'create',
+    develops: 'develop',
+    grows: 'grow',
+    builds: 'build'
+  }
+
+  // Fix verb agreement for "you [verb]"
+  resultText = resultText.replace(/\b(you)\s+(\w+)\b/gi, (match, p1, p2) => {
+    const lowerVerb = p2.toLowerCase()
+    if (verbMap[lowerVerb]) {
+      return p1 + ' ' + verbMap[lowerVerb]
+    }
+    return match
+  })
+
+  // Capitalize first letter of each sentence
+  resultText = resultText.replace(/^\s*[a-z]/, (m) => m.toUpperCase())
+  resultText = resultText.replace(/([.!?]\s+)([a-z])/g, (m, p1, p2) => p1 + p2.toUpperCase())
+
+  return resultText
 }
 function normalizeGroupName (raw) {
   if (!raw) return ''

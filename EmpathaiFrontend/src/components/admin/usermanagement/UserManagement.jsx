@@ -557,7 +557,7 @@ export default function UserManagement({ user }) {
                         <div className="flex items-center gap-3">
                             {(selectedSchool || selectedClass) && activeTab === 'student' && (
                                 <button onClick={handleBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                                    <XMarkIcon className="w-5 h-5 text-gray-600" />
+                                    <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
                                 </button>
                             )}
                             <h3 className="text-lg font-medium text-gray-900">

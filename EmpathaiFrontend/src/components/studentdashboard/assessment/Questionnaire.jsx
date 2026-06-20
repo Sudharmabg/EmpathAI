@@ -12,12 +12,60 @@ import {
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 
-function detectEmotion (label) {
-  const t = label.toLowerCase()
-  if (t.includes('very good') || t.includes('very well') || t.includes('very happy') || t.includes('nope')) return 'happy'
-  if (t.includes('okay') || t.includes('a little') || t.includes('somewhat')) return 'neutral'
-  if (t.includes('low') || t.includes('kind of') || t.includes('sometimes')) return 'concern'
-  return 'sad'
+function detectEmotion (label, questionText = '', tag = '') {
+  if (tag) {
+    const cleanTag = tag.trim().toLowerCase()
+    if (cleanTag === 'strength' || cleanTag === 'growth') {
+      return 'happy'
+    } else if (cleanTag === 'weakness' || cleanTag === 'risk') {
+      return 'sad'
+    } else if (cleanTag === 'neutral') {
+      return 'neutral'
+    }
+  }
+
+  const q = questionText.toLowerCase()
+  const l = label.toLowerCase()
+
+  const negativeIndicators = [
+    'sad', 'stressed', 'worried', 'anxious', 'trouble', 'down', 'lonely', 'angry', 
+    'hard', 'difficult', 'struggle', 'pressure', 'overwhelmed', 'concern', 'low',
+    'bad', 'hurt', 'pain', 'scared', 'afraid', 'upset', 'annoyed', 'frustrated'
+  ]
+  const isQuestionNegative = negativeIndicators.some(word => q.includes(word))
+
+  // Determine agreement strength
+  const strongYes = ['very', 'always', 'yes', 'constantly', 'extremely', 'a lot', 'all the time', 'often']
+  const strongNo = ['no', 'not really', 'never', 'nope', 'not at all', 'rarely', 'hardly', 'seldom']
+  const neutralOrMod = ['okay', 'a little', 'somewhat', 'sometimes', 'maybe', 'moderately']
+
+  let direction = 'agree' // default
+  if (strongNo.some(w => l.includes(w))) {
+    direction = 'disagree'
+  } else if (neutralOrMod.some(w => l.includes(w))) {
+    direction = 'neutral'
+  } else if (strongYes.some(w => l.includes(w))) {
+    direction = 'agree'
+  } else {
+    // semantic fallback
+    if (l.includes('good') || l.includes('happy') || l.includes('well') || l.includes('fine')) {
+      direction = 'agree'
+    } else if (l.includes('bad') || l.includes('sad') || l.includes('worry')) {
+      direction = 'disagree'
+    }
+  }
+
+  // Resolve final emotion state: 'happy', 'neutral', 'concern', 'sad'
+  if (isQuestionNegative) {
+    if (direction === 'disagree') return 'happy' // "Not sad" -> happy
+    if (direction === 'neutral') return 'concern' // "Sometimes sad" -> concern
+    return 'sad' // "Very sad" -> sad
+  } else {
+    // positive question, e.g. "Do you feel happy?"
+    if (direction === 'agree') return 'happy' // "Very happy" -> happy
+    if (direction === 'neutral') return 'neutral' // "Sometimes happy" -> neutral
+    return 'sad' // "Not happy" -> sad
+  }
 }
 
 const emojiSequences = {
@@ -132,9 +180,35 @@ function personalise (text, studentName) {
 
   // Capitalize first letter of each sentence
   resultText = resultText.replace(/^\s*[a-z]/, (m) => m.toUpperCase())
-  resultText = resultText.replace(/([.!?]\s+)([a-z])/g, (m, p1, p2) => p1 + p2.toUpperCase())
-
   return resultText
+}
+
+function getDisplayReportContent (report) {
+  if (!report) return { strengths: [], improvements: [], tips: [], plain: [], summaryText: '' }
+
+  let bulletsSource = report.bulletPoints || ''
+  let summarySource = report.summaryText || ''
+
+  if (report.editedSummaryText) {
+    const lines = report.editedSummaryText.split('\n')
+    const summaryMarker = lines.findIndex(l => l.trim().toLowerCase() === 'summary:')
+    if (summaryMarker !== -1) {
+      bulletsSource = lines.slice(0, summaryMarker).join('\n').trim()
+      summarySource = lines.slice(summaryMarker + 1).join('\n').trim()
+    } else {
+      bulletsSource = report.editedSummaryText.trim()
+      summarySource = ''
+    }
+  }
+
+  const parsed = parseBulletPoints(bulletsSource)
+  return {
+    strengths:    parsed.strengths,
+    improvements: parsed.improvements,
+    tips:         parsed.tips,
+    plain:        parsed.plain,
+    summaryText:  summarySource
+  }
 }
 function normalizeGroupName (raw) {
   if (!raw) return ''
@@ -160,20 +234,12 @@ export default function Questionnaire ({ user }) {
   const [showGrid, setShowGrid]                 = useState(true)
   
  
-  const _savedUser = localStorage.getItem('user')
-const _u = _savedUser ? JSON.parse(_savedUser) : user
-const _todayKey = `assessment_done_${_u?.id}_${new Date().toDateString()}`
-const alreadyDone = sessionStorage.getItem(_todayKey) === 'true'
-
-const [showReport, setShowReport]             = useState(alreadyDone)
-const [activeIntervention, setActiveIntervention] = useState(null)
-const [isTransitioning, setIsTransitioning]   = useState(false)
+  const [showReport, setShowReport]             = useState(false)
+  const [activeIntervention, setActiveIntervention] = useState(null)
+  const [isTransitioning, setIsTransitioning]   = useState(false)
 
 
-  const [displayEmoji, setDisplayEmoji]         = useState('')
   const [selectedOption, setSelectedOption]     = useState(null)
-  const [emojiOpacity, setEmojiOpacity]         = useState(0)
-  const [emojiScale, setEmojiScale]             = useState(0.5)
   const [apiQuestions, setApiQuestions]         = useState([])
   const [loading, setLoading]                   = useState(true)
   const [analysis, setAnalysis]                 = useState(null)
@@ -215,19 +281,22 @@ const [isTransitioning, setIsTransitioning]   = useState(false)
 fetchQuestionsByClass(className)
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
-          const mapped = data.map((q, i) => ({
-            id:       q.id || i + 1,
-            text:     q.questions || q.questionText || '',
-            groupMap: q.group_map || q.groupMap  || '',
-            groupMapId: q.groupMapId || q.group_map_id || null,
-            groupClassName: q.groupClassName || q.group_class_name || q.className || '',
-            options: [
-              { value: 8, label: (q.option_a || q.optionA || '').trim(), emotion: detectEmotion(q.option_a || q.optionA || '') },
-              { value: 6, label: (q.option_b || q.optionB || '').trim(), emotion: detectEmotion(q.option_b || q.optionB || '') },
-              { value: 3, label: (q.option_c || q.optionC || '').trim(), emotion: detectEmotion(q.option_c || q.optionC || '') },
-              { value: 1, label: (q.option_d || q.optionD || '').trim(), emotion: detectEmotion(q.option_d || q.optionD || '') }
-            ].filter(o => o.label !== '')
-          }))
+          const mapped = data.map((q, i) => {
+            const qText = q.questions || q.questionText || ''
+            return {
+              id:       q.id || i + 1,
+              text:     qText,
+              groupMap: q.group_map || q.groupMap  || '',
+              groupMapId: q.groupMapId || q.group_map_id || null,
+              groupClassName: q.groupClassName || q.group_class_name || q.className || '',
+              options: [
+                { value: 8, label: (q.option_a || q.optionA || '').trim(), emotion: detectEmotion(q.option_a || q.optionA || '', qText, q.option1Tag) },
+                { value: 6, label: (q.option_b || q.optionB || '').trim(), emotion: detectEmotion(q.option_b || q.optionB || '', qText, q.option2Tag) },
+                { value: 3, label: (q.option_c || q.optionC || '').trim(), emotion: detectEmotion(q.option_c || q.optionC || '', qText, q.option3Tag) },
+                { value: 1, label: (q.option_d || q.optionD || '').trim(), emotion: detectEmotion(q.option_d || q.optionD || '', qText, q.option4Tag) }
+              ].filter(o => o.label !== '')
+            }
+          })
           setApiQuestions(mapped)
         }
       })
@@ -236,6 +305,8 @@ fetchQuestionsByClass(className)
   }, [user])
 
   // Fetch past student responses on load to prefill questions
+  // Commented out to ensure feelings explorer starts as a fresh daily assessment instead of preselecting past options
+  /*
   useEffect(() => {
     const _su = localStorage.getItem('user')
     const _uu = _su ? JSON.parse(_su) : user
@@ -272,10 +343,11 @@ fetchQuestionsByClass(className)
     })
     .catch(err => console.error('[Questionnaire] Fetch past responses failed:', err))
   }, [apiQuestions, user])
+  */
 
   // ✅ NEW useEffect starts HERE — outside and after the previous one
   useEffect(() => {
-    if (!alreadyDone || apiQuestions.length === 0) return
+    if (apiQuestions.length === 0) return
     const _su = localStorage.getItem('user')
     const _uu = _su ? JSON.parse(_su) : user
     const token = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
@@ -291,28 +363,26 @@ fetchQuestionsByClass(className)
     .then(r => r.ok ? r.json() : null)
     .then(d => {
       if (d) {
-        const parsed = parseBulletPoints(d.bulletPoints || '')
+        setShowReport(true)
+        const displayContent = getDisplayReportContent(d)
         setAnalysis({
-          strengths:    parsed.strengths,
-          improvements: parsed.improvements,
-          tips:         parsed.tips,
-          plain:        parsed.plain,
-          summaryText:  d.summaryText || '',
+          strengths:    displayContent.strengths,
+          improvements: displayContent.improvements,
+          tips:         displayContent.tips,
+          plain:        displayContent.plain,
+          summaryText:  displayContent.summaryText,
           studentName:  `${_uu?.firstName || ''} ${_uu?.lastName || ''}`.trim()
         })
       }
     })
     .catch(err => console.error('[Questionnaire] Restore report failed:', err))
     .finally(() => setAnalysisLoading(false))
-  }, [alreadyDone, apiQuestions])
+  }, [apiQuestions])
 
   useEffect(() => {
     clearPendingTimers()
     isAnimatingRef.current = false
     setSelectedOption(null)
-    setDisplayEmoji('')
-    setEmojiOpacity(0)
-    setEmojiScale(0.5)
   }, [currentQuestion])
 
   useEffect(() => {
@@ -327,7 +397,7 @@ fetchQuestionsByClass(className)
   const currentQ        = activeQuestions[currentQuestion]
   const progress        = currentQ ? ((currentQuestion + 1) / activeQuestions.length) * 100 : 100
 
-  const saveResponseToDB = async (question, selectedLabel) => {
+  const saveResponseToDB = async (question, selectedLabel, resolvedEmotion) => {
     const savedUser = localStorage.getItem('user')
     const u = savedUser ? JSON.parse(savedUser) : user
 
@@ -362,7 +432,7 @@ fetchQuestionsByClass(className)
       questionText:  question.text,
       answer:        selectedLabel,
       responseValue: selectedLabel,
-      emotion:       detectEmotion(selectedLabel),
+      emotion:       resolvedEmotion || detectEmotion(selectedLabel, question.text),
       groupName,
       groupId,
       className:     resolvedClass,
@@ -388,45 +458,22 @@ fetchQuestionsByClass(className)
     setAnswers(updatedAnswers)
     setSelectedOption(index)
 
-    saveResponseToDB(currentQ, option.label)
+    saveResponseToDB(currentQ, option.label, option.emotion)
 
-    const sequence = emojiSequences[option.emotion] || ['😊']
-    setDisplayEmoji(sequence[0])
-    setEmojiOpacity(1)
-    setEmojiScale(1)
-
-    let step = 0
-
-    const playNext = () => {
-      step++
-      if (step < sequence.length) {
-        setEmojiScale(1.2)
-        safeTimeout(() => { setDisplayEmoji(sequence[step]); setEmojiScale(1) }, 150)
-        safeTimeout(playNext, 500)
-      } else {
+    // snappy transition to the next question after 800ms
+    safeTimeout(() => {
+      isAnimatingRef.current = false
+      const isLast = currentQuestion >= activeQuestions.length - 1
+      if (!isLast) {
+        setIsTransitioning(true)
         safeTimeout(() => {
-          setEmojiOpacity(0)
-          setEmojiScale(0.5)
-          safeTimeout(() => {
-            setDisplayEmoji('')
-            isAnimatingRef.current = false
-
-            const isLast = currentQuestion >= activeQuestions.length - 1
-            if (!isLast) {
-              setIsTransitioning(true)
-              safeTimeout(() => {
-                setCurrentQuestion(q => q + 1)
-                setIsTransitioning(false)
-              }, 300)
-            } else {
-              handleSubmit(updatedAnswers)
-            }
-          }, 600)
-        }, 400)
+          setCurrentQuestion(q => q + 1)
+          setIsTransitioning(false)
+        }, 300)
+      } else {
+        handleSubmit(updatedAnswers)
       }
-    }
-
-    safeTimeout(playNext, 500)
+    }, 800)
   }
 
   const handleNext = () => {
@@ -449,13 +496,8 @@ fetchQuestionsByClass(className)
   }
 
   const handleSubmit = async (finalAnswers) => {
-  setAnalysisLoading(true)
-setShowReport(true)
-const _su = localStorage.getItem('user')
-const _uu = _su ? JSON.parse(_su) : user
-const _key = `assessment_done_${_uu?.id}_${new Date().toDateString()}`
-sessionStorage.setItem(_key, 'true')
-
+    setAnalysisLoading(true)
+    setShowReport(true)
     const resolvedAnswers = finalAnswers || answersRef.current || answers
 
     try {
@@ -510,14 +552,14 @@ sessionStorage.setItem(_key, 'true')
 
       if (reportRes.ok) {
         const reportData = await reportRes.json()
-        const parsed = parseBulletPoints(reportData.bulletPoints || '')
+        const displayContent = getDisplayReportContent(reportData)
 
         setAnalysis({
-          strengths:    parsed.strengths,
-          improvements: parsed.improvements,
-          tips:         parsed.tips,
-          plain:        parsed.plain,
-          summaryText:  reportData.summaryText || '',
+          strengths:    displayContent.strengths,
+          improvements: displayContent.improvements,
+          tips:         displayContent.tips,
+          plain:        displayContent.plain,
+          summaryText:  displayContent.summaryText,
           studentName,
         })
       } else {
@@ -722,6 +764,17 @@ sessionStorage.setItem(_key, 'true')
 
   return (
     <div className="font-sans max-w-4xl mx-auto px-3 py-3 min-h-screen flex flex-col">
+      <style>{`
+        @keyframes emoji-pop {
+          0% { transform: scale(0); opacity: 0; }
+          45% { transform: scale(1.4) rotate(-5deg); opacity: 1; }
+          70% { transform: scale(1.1) rotate(5deg); }
+          100% { transform: scale(1.2) rotate(0deg); opacity: 1; }
+        }
+        .animate-emoji-pop {
+          animation: emoji-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+      `}</style>
       <div className="fixed inset-0 -z-10 bg-white" />
 
       <div className="mb-4 mt-4 pl-2">
@@ -806,10 +859,11 @@ sessionStorage.setItem(_key, 'true')
           <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 content-center">
             {currentQ.options.map((option, index) => {
               const isSelected = selectedOption === index || (selectedOption === null && answers[currentQ.id] === option.value)
+              const optionEmoji = emojiSequences[option.emotion]?.[0] || '😊'
               return (
                 <label
                   key={index}
-                  className={`flex items-center justify-between p-4 border-2 rounded-xl transition-all duration-300 group bg-white
+                  className={`relative overflow-visible flex items-center justify-between p-4 border-2 rounded-xl transition-all duration-300 group bg-white
                     ${isAnimatingRef.current ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}
                     ${isSelected
                       ? 'border-green-500 shadow-lg shadow-green-500/20 scale-[1.02]'
@@ -831,10 +885,16 @@ sessionStorage.setItem(_key, 'true')
                     </div>
                     <span className="font-medium text-sm text-gray-700">{option.label}</span>
                   </div>
-                  <div className="w-10 h-10 flex items-center justify-center">
-                    {isSelected && displayEmoji && (
-                      <span className="text-3xl transition-all duration-300" style={{ opacity: emojiOpacity, transform: `scale(${emojiScale})` }}>{displayEmoji}</span>
-                    )}
+                  <div className="w-10 h-10 flex items-center justify-center relative select-none">
+                    <span
+                      className={`text-2xl transition-all duration-300 transform origin-center
+                        ${isSelected
+                          ? 'animate-emoji-pop opacity-100 scale-125'
+                          : 'opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100 group-hover:rotate-6 text-gray-400 group-hover:text-gray-700'
+                        }`}
+                    >
+                      {optionEmoji}
+                    </span>
                   </div>
                 </label>
               )

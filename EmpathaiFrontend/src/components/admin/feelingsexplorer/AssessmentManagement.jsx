@@ -59,6 +59,14 @@ const [editingInsight, setEditingInsight] = useState(false)
 const [editedInsightText, setEditedInsightText] = useState('')
 const [isSavingInsight, setIsSavingInsight] = useState(false)
 const [isConfirming, setIsConfirming] = useState(false)
+const [toast, setToast] = useState(null) 
+const toastTimerRef = useRef(null)
+
+const showToast = (type, message) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast({ type, message })
+    toastTimerRef.current = setTimeout(() => setToast(null), 4000)
+}
     const [questionFormData, setQuestionFormData] = useState({
         question: '',
         domain: '',
@@ -146,22 +154,24 @@ const [isConfirming, setIsConfirming] = useState(false)
     }, [])
 
     useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (e.key === 'Escape') {
-                if (isQuestionModalOpen) {
-                    setIsQuestionModalOpen(false)
-                } else if (isGroupModalOpen) {
-                    setIsGroupModalOpen(false)
-                } else if (showResponseSheet) {
-                    setShowResponseSheet(false)
-                } else if (insightModal.open) {
-                    setInsightModal({ open: false, data: null, parsed: null, studentName: '' })
-                }
+    const handleKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            if (isQuestionModalOpen) {
+                setIsQuestionModalOpen(false)
+            } else if (isGroupModalOpen) {
+                setIsGroupModalOpen(false)
+            } else if (showResponseSheet) {
+                setShowResponseSheet(false)
+            } else if (insightModal.open) {
+                setInsightModal({ open: false, data: null, parsed: null, studentName: '' })
+            } else if (toast) {
+                setToast(null)
             }
         }
-        window.addEventListener('keydown', handleKeyDown)
-        return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [isQuestionModalOpen, isGroupModalOpen, showResponseSheet, insightModal])
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+}, [isQuestionModalOpen, isGroupModalOpen, showResponseSheet, insightModal, toast])
 
     const loadAnalytics = (filter, groupId) => {
         if (groupId) {
@@ -291,7 +301,7 @@ const handleSaveQuestion = () => {
         ].slice(0, questionFormData.optionCount).filter(opt => opt.trim())
 
         if (!questionFormData.question || options.length < 2) {
-            alert('Please provide a question and at least 2 options')
+            showToast('error', 'Please provide a question and at least 2 options')
             setIsSubmittingQuestion(false)  
             return
         }
@@ -299,13 +309,13 @@ const handleSaveQuestion = () => {
         const cleanedOptions = options.map(opt => opt.trim().toLowerCase())
         const hasDuplicates = cleanedOptions.some((val, index) => cleanedOptions.indexOf(val) !== index)
         if (hasDuplicates) {
-            alert('Each option text must be unique. Duplicate options are not allowed.')
+            showToast('error', 'Each option text must be unique. Duplicate options are not allowed.')
             setIsSubmittingQuestion(false)
             return
         }
 
         if (questionFormData.groups.length === 0) {
-            alert('Please select at least one group')
+            showToast('error', 'Please select at least one group')
             setIsSubmittingQuestion(false)
             return
         }
@@ -385,9 +395,9 @@ const handleSaveQuestion = () => {
             newGroupIds.forEach(gid => tasks.push(createQuestion({ ...questionData, groupMapId: gid })))
 
             Promise.all(tasks)
-                .then(() => saveAnswerOptions(editingQuestion.id))
-                .then(() => { setIsSubmittingQuestion(false); setIsQuestionModalOpen(false); refetchQuestions() })
-                .catch(err => { console.error('❌ Question update failed:', err); setIsSubmittingQuestion(false); setIsQuestionModalOpen(false) })}  else {
+    .then(() => saveAnswerOptions(editingQuestion.id))
+    .then(() => { setIsSubmittingQuestion(false); setIsQuestionModalOpen(false); refetchQuestions(); showToast('success', 'Question updated successfully') })
+    .catch(err => { console.error('❌ Question update failed:', err); setIsSubmittingQuestion(false); setIsQuestionModalOpen(false); showToast('error', 'Failed to update question') }) }else {
             const groupIds = questionFormData.groups.map(id => Number(id))
             Promise.all(groupIds.map(gid => createQuestion({ ...questionData, groupMapId: gid })))
                 .then(createdList => {
@@ -398,13 +408,13 @@ const handleSaveQuestion = () => {
                         return saveAnswerOptions(qid)
                     }))
                 })
-                .then(() => { setIsSubmittingQuestion(false); setIsQuestionModalOpen(false); refetchQuestions() })
-                .catch(err => { console.error('❌ Question NOT saved:', err); setIsSubmittingQuestion(false); setIsQuestionModalOpen(false) })
+                .then(() => { setIsSubmittingQuestion(false); setIsQuestionModalOpen(false); refetchQuestions(); showToast('success', 'Question added successfully') })
+.catch(err => { console.error('❌ Question NOT saved:', err); setIsSubmittingQuestion(false); setIsQuestionModalOpen(false); showToast('error', 'Failed to add question') })
         }
     }
 
     const handleSaveGroup = () => {
-        if (!groupFormData.name.trim()) { alert('Please provide a group name'); return }
+        if (!groupFormData.name.trim()) { showToast('error', 'Please provide a group name'); return }
         const ordinalPart = groupFormData.name.replace(/^Class\s+/, '').trim()
         const classNameForDB = ordinalPart + ' Standard'
         const groupData = {
@@ -430,9 +440,9 @@ const handleSaveQuestion = () => {
     const handleDeleteGroup = (groupId) => {
         const group = groups.find(g => g.id === groupId)
         if (!group) return
-        if (group.isDefault === true || group.isDefault === 'true') { alert('Cannot delete default groups'); return }
+        if (group.isDefault === true || group.isDefault === 'true') { showToast('error', 'Cannot delete default groups'); return }
         const hasQuestions = questions.some(q => String(q.groupMapId) === String(groupId))
-        if (hasQuestions) { alert('Cannot delete group with existing questions.'); return }
+        if (hasQuestions) { showToast('error', 'Cannot delete group with existing questions.'); return }
         if (window.confirm(`Delete group "${group.name}"?`)) {
             setGroups(prev => prev.filter(g => g.id !== groupId))
             if (selectedGroup === groupId) setSelectedGroup(null)
@@ -624,6 +634,26 @@ const parseBulletPoints = (raw) => {
 
     return (
         <div>
+            {toast && (
+    <div className="fixed top-5 right-5 z-[60] animate-fade-in">
+        <div className={`flex items-start gap-3 px-4 py-3 rounded-lg shadow-lg border max-w-sm ${
+            toast.type === 'success'
+                ? 'bg-green-50 border-green-200 text-green-800'
+                : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+            <span className="text-lg leading-none mt-0.5">
+                {toast.type === 'success' ? '✅' : '⚠️'}
+            </span>
+            <p className="text-sm font-medium flex-1">{toast.message}</p>
+            <button
+                onClick={() => setToast(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+            >
+                <XMarkIcon className="w-4 h-4" />
+            </button>
+        </div>
+    </div>
+)}
             {/* Header */}
             <div className="mb-10">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

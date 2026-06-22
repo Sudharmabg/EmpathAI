@@ -24,7 +24,7 @@ public class AuthController {
 
     // ── JWT cookie settings ───────────────────────────────────────────────────
     private static final String COOKIE_NAME    = "jwt";
-    private static final int    COOKIE_MAX_AGE = 60 * 60; // 1 hour — matches jwt.expiration-ms
+    private static final int    COOKIE_MAX_AGE = 2 * 24 * 60 * 60; // 2 days — matches jwt.expiration-ms
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(

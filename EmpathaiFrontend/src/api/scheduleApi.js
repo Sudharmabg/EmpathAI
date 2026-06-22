@@ -12,16 +12,16 @@ export async function getDayTasks(studentId, day) {
     return res.data;
 }
 
-export async function addTask(studentId, dayOfWeek, title, startTime, endTime, notes) {
+export async function addTask(studentId, dayOfWeek, title, startTime, endTime, notes, detectedType) {
     const res = await apiPost('/api/schedule/task', {
-        studentId, dayOfWeek, title, startTime, endTime, notes: notes || ''
+        studentId, dayOfWeek, title, startTime, endTime, notes: notes || '', detectedType
     });
     return res.data;
 }
 
-export async function editTask(taskId, studentId, dayOfWeek, title, startTime, endTime, notes) {
+export async function editTask(taskId, studentId, dayOfWeek, title, startTime, endTime, notes, detectedType) {
     const res = await apiPut(`/api/schedule/task/${taskId}`, {
-        studentId, dayOfWeek, title, startTime, endTime, notes: notes || ''
+        studentId, dayOfWeek, title, startTime, endTime, notes: notes || '', detectedType
     });
     return res.data;
 }

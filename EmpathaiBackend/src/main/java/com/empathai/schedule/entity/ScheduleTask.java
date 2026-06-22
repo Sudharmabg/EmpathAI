@@ -35,7 +35,7 @@ public class ScheduleTask extends BaseEntity {
     @Column(name = "end_time", nullable = false, length = 5)
     private String endTime;
 
-    @Column(name = "detected_type", length = 10)
+    @Column(name = "detected_type", length = 20)
     private String detectedType;
 
     @Column(name = "notes", length = 1000)

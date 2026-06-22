@@ -18,4 +18,6 @@ public class StudentSchedulePreferenceRequest {
 
     // List of busy slots the student has marked
     private List<BusySlotDTO> busySlots;
+
+    private String lastRelaxActivity;
 }

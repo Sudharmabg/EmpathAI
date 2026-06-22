@@ -57,10 +57,10 @@ public class FlaggedChatController {
     /**
      * POST /api/flagged-chats/{id}/assign
      * Assign a psychologist to a flagged case (sets status → ASSIGNED).
-     * Access: SchoolAdmin, SuperAdmin
+     * Access: SuperAdmin
      */
     @PostMapping("/{id}/assign")
-    @PreAuthorize("hasAnyRole('SCHOOL_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<FlaggedChatResponse> assign(
             @PathVariable Long id,
             @Valid @RequestBody AssignRequest request

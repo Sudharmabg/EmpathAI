@@ -43,6 +43,13 @@ _EMOTIONAL_KEYWORDS: frozenset[str] = frozenset({
     # relationships / social
     "bully", "bullied", "bullying", "fight", "abuse", "abused",
     "friend", "friendship", "crush", "relationship", "parents",
+    # transliterated Hindi / Hinglish distress & emotions
+    "marna", "marne", "maut", "zindagi khatam", "jindagi khatam", "akelapan", 
+    "pareshan", "akela", "tension", "chinta", "dard", "udhas", "udas", "rona", 
+    "ro raha", "ro rahi", "gussa", "darr", "dar",
+    # transliterated Bengali / Benglish distress & emotions
+    "bachte", "sesh", "moron", "morte", "ekla", "koshto", "kanna", "hatah", 
+    "hataash", "bhoy", "abhimaan", "rag",
 })
 
 _SCHEDULE_KEYWORDS: frozenset[str] = frozenset({
@@ -55,7 +62,9 @@ _SCHEDULE_KEYWORDS: frozenset[str] = frozenset({
 _FIRST_PERSON_FEEL: re.Pattern = re.compile(
     r"\b(i feel|i am feeling|i'm feeling|i felt|am i|my mood|"
     r"i have been|i've been|i can't|i cannot|i don't know|"
-    r"my life|my problem|my issue|my situation|help me with my)\b",
+    r"my life|my problem|my issue|my situation|help me with my|"
+    r"mujhe|mera|meri|mere|main|mai|mujhe lagta|mujhe lag raha|"
+    r"ami|amar|amake|amaye)\b",
     re.IGNORECASE,
 )
 
@@ -73,6 +82,12 @@ def fast_path_classifier(state: ChatState) -> ChatState:
     """
     message: str = state.get("message", "")
     words         = message.split()
+
+    # ── Gate 0: non-ASCII scripts (Hindi, Bengali, etc.) ──────────────────────
+    if any(ord(char) > 127 for char in message):
+        state["fast_path"] = False
+        logger.info("Fast path: SLOW (non-ASCII script detected)")
+        return state
 
     # ── Gate 1: length ────────────────────────────────────────────────────────
     if len(words) > _MAX_WORDS_FOR_FAST_PATH:

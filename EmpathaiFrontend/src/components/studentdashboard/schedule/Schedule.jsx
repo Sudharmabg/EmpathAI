@@ -23,7 +23,28 @@ import chatService from '../../../services/chatService'
 // TIME SELECT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function TimeSelect({ value, onChange, label }) {
+function TimeSelect({ value, onChange, label, is24h }) {
+    if (is24h) {
+        const toH = (v) => { if (!v) return '12'; return v.split(':')[0] }
+        const toM = (v) => { if (!v) return '00'; return v.split(':')[1] }
+        const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+        const minutes = ['00','05','10','15','20','25','30','35','40','45','50','55']
+        const emit = (h, m) => {
+            onChange(`${h}:${m}`)
+        }
+        const sel = "flex-1 px-2 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm font-bold text-gray-700 bg-white appearance-none text-center cursor-pointer"
+        return (
+            <div>
+                {label && <label className="block text-sm font-bold text-gray-700 mb-1">{label}</label>}
+                <div className="flex gap-1.5 items-center">
+                    <select value={toH(value)}  onChange={e => emit(e.target.value, toM(value))} className={sel}>{hours.map(h => <option key={h}>{h}</option>)}</select>
+                    <span className="text-gray-400 font-black text-sm">:</span>
+                    <select value={toM(value)}  onChange={e => emit(toH(value), e.target.value)} className={sel}>{minutes.map(m => <option key={m}>{m}</option>)}</select>
+                </div>
+            </div>
+        )
+    }
+
     const toH  = (v) => { if (!v) return '12'; const [h] = v.split(':').map(Number); return h % 12 === 0 ? '12' : String(h % 12) }
     const toM  = (v) => { if (!v) return '00'; return v.split(':')[1] }
     const toAP = (v) => { if (!v) return 'AM'; const [h] = v.split(':').map(Number); return h >= 12 ? 'PM' : 'AM' }
@@ -1084,6 +1105,29 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
     const [recsTrigger, setRecsTrigger]               = useState(0)
     const [suggestionStates, setSuggestionStates]     = useState({})
     const [suggestionTimePicker, setSuggestionTimePicker] = useState(null)
+    const [showRecModal, setShowRecModal]             = useState(false)
+    const [recModalData, setRecModalData]             = useState({
+        taskType: '',
+        originalTitle: '',
+        titleInput: '',
+        subjectSelect: 'Mathematics',
+        startTime: '15:00',
+        endTime: '15:45',
+        notes: '',
+        error: '',
+        warnings: []
+    })
+    const [successMessage, setSuccessMessage]         = useState('')
+    const [showConfirmModal, setShowConfirmModal]     = useState(false)
+    const [confirmModalConfig, setConfirmModalConfig] = useState({
+        title: '',
+        message: '',
+        confirmText: '',
+        confirmBg: '',
+        onConfirm: () => {}
+    })
+    const [showWarningModal, setShowWarningModal]     = useState(false)
+    const [warningModalMessage, setWarningModalMessage] = useState('')
 
     const [prefStatus, setPrefStatus]                 = useState('checking')
     const [preferredStudyTime, setPreferredStudyTime] = useState(null)
@@ -1214,6 +1258,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
     const typeColors = {
         Study:   { bg:'bg-blue-500',    light:'bg-blue-100',   text:'text-blue-700',   border:'border-blue-200' },
         Wellness:{ bg:'bg-emerald-500',  light:'bg-emerald-100',text:'text-emerald-700',border:'border-emerald-200' },
+        Intervention: { bg:'bg-purple-500', light:'bg-purple-100', text:'text-purple-700', border:'border-purple-200' },
         Other:   { bg:'bg-violet-400',   light:'bg-violet-100', text:'text-violet-600', border:'border-violet-200' },
     }
     const urgencyColors = {
@@ -1224,6 +1269,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
     const suggestionTypeStyle = {
         STUDY:   { badge: 'bg-blue-100 text-blue-700 border-blue-200' },
         WELLNESS:{ badge: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+        INTERVENTION: { badge: 'bg-purple-100 text-purple-700 border-purple-200' },
         OTHER:   { badge: 'bg-violet-100 text-violet-700 border-violet-200' },
     }
     const getSuggestionStyle = (taskType) => suggestionTypeStyle[taskType] || suggestionTypeStyle.OTHER
@@ -1262,40 +1308,88 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         return tryFindSlot(dayStartMins, 22*60)
     }, [normTasks, blockedWindows, busySlotBlocks, activeDay, currentTimeMins, preferredStudyTime])
 
-    const handleQuickAdd = async (suggestion, index) => {
+    const handleRecommendationClick = (suggestion) => {
         if (activeDayIsLocked) return
-        const key = suggestion.title; const durationMins = suggestion.estimatedMinutes || 45
-        const slot = findFreeSlot(durationMins, suggestion.taskType)
-        if (!slot) { setSuggestionTimePicker({index,startTime:'15:00',endTime:'15:45',error:'No auto-slot found. Pick a time manually.'}); return }
-        setSuggestionStates(p => ({...p,[key]:'adding'}))
-        try {
-            const saved = await addTask(user.id, activeDay, suggestion.title, slot.startTime, slot.endTime, '')
-            setTasks(prev => ({...prev,[activeDay]:[...prev[activeDay],{...saved,completed:false}]}))
-            setSuggestions(prev => prev.filter((_,i) => i!==index))
-            setSuggestionStates(p => ({...p,[key]:'added'}))
-            setTimeout(() => setRecsTrigger(t => t+1), 400)
-        } catch (err) {
-            setSuggestionStates(p => ({...p,[key]:'idle'}))
-            setSuggestionTimePicker({index,startTime:slot.startTime,endTime:slot.endTime,error:err.message||'Could not auto-schedule. Pick a time manually.'})
+        const durationMins = suggestion.estimatedMinutes || 30
+        const slot = findFreeSlot(durationMins, suggestion.taskType) || { startTime: '15:00', endTime: '15:45' }
+        
+        let titleInputVal = suggestion.title
+        if (suggestion.taskType === 'STUDY') {
+            titleInputVal = ''
+        } else if (suggestion.taskType === 'WELLNESS' && suggestion.title === 'Relax') {
+            titleInputVal = ''
         }
+
+        setRecModalData({
+            taskType: suggestion.taskType,
+            originalTitle: suggestion.title,
+            titleInput: titleInputVal,
+            subjectSelect: 'Mathematics',
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            notes: '',
+            error: '',
+            warnings: []
+        })
+        setShowRecModal(true)
     }
 
-    const confirmTimePicker = async () => {
-        if (!suggestionTimePicker || activeDayIsLocked) return
-        const { index, startTime, endTime } = suggestionTimePicker; const suggestion = suggestions[index]; const key = suggestion.title
-        if (toMins(endTime)<=toMins(startTime))       { setSuggestionTimePicker(p=>({...p,error:'End time must be after start time.'})); return }
-        if (isBlockedBySchool(startTime,endTime))      { setSuggestionTimePicker(p=>({...p,error:'This slot is blocked.'})); return }
-        if (hasOverlap(activeDay,startTime,endTime))   { setSuggestionTimePicker(p=>({...p,error:'This slot overlaps with another task.'})); return }
-        setSuggestionStates(p => ({...p,[key]:'adding'}))
+    const saveRecommendationTask = async () => {
+        if (activeDayIsLocked) return
+        setRecModalData(p => ({ ...p, error: '', warnings: [] }))
+
+        let finalTitle = ''
+        if (recModalData.taskType === 'STUDY') {
+            const subject = recModalData.subjectSelect === 'Other' ? recModalData.titleInput : recModalData.subjectSelect
+            if (!subject || !subject.trim()) {
+                setRecModalData(p => ({ ...p, error: 'Please enter or select a subject.' }))
+                return
+            }
+            finalTitle = `Study session - ${subject.trim()}`
+        } else if (recModalData.taskType === 'WELLNESS') {
+            if (!recModalData.titleInput || !recModalData.titleInput.trim()) {
+                setRecModalData(p => ({ ...p, error: 'Please enter a relaxing activity name.' }))
+                return
+            }
+            finalTitle = recModalData.titleInput.trim()
+        } else {
+            if (!recModalData.titleInput || !recModalData.titleInput.trim()) {
+                setRecModalData(p => ({ ...p, error: 'Please enter the activity name.' }))
+                return
+            }
+            finalTitle = recModalData.titleInput.trim()
+        }
+
+        const { startTime, endTime, notes } = recModalData
+        if (toMins(endTime) <= toMins(startTime)) {
+            setRecModalData(p => ({ ...p, error: 'End time must be after start time.' }))
+            return
+        }
+        if (isBlockedBySchool(startTime, endTime)) {
+            setRecModalData(p => ({ ...p, error: 'This time slot is blocked.' }))
+            return
+        }
+        if (hasOverlap(activeDay, startTime, endTime)) {
+            setRecModalData(p => ({ ...p, error: 'This slot overlaps with another task.' }))
+            return
+        }
+
+        setIsSaving(true)
         try {
-            const saved = await addTask(user.id, activeDay, suggestion.title, startTime, endTime, '')
-            setTasks(prev => ({...prev,[activeDay]:[...prev[activeDay],{...saved,completed:false}]}))
-            setSuggestions(prev => prev.filter((_,i) => i!==index)); setSuggestionTimePicker(null)
-            setTimeout(() => setRecsTrigger(t => t+1), 400)
-            if (saved.warnings?.length>0) { setDayWarnings(saved.warnings); setTimeout(()=>setDayWarnings([]),6000) }
+            const saved = await addTask(user.id, activeDay, finalTitle, startTime, endTime, notes, recModalData.taskType)
+            setTasks(prev => ({ ...prev, [activeDay]: [...prev[activeDay], { ...saved, completed: false }] }))
+            setShowRecModal(false)
+            setSuccessMessage("Activity added successfully!")
+            setTimeout(() => setSuccessMessage(''), 3000)
+            if (saved.warnings?.length > 0) {
+                setDayWarnings(saved.warnings)
+                setTimeout(() => setDayWarnings([]), 6000)
+            }
+            setTimeout(() => setRecsTrigger(t => t + 1), 400)
         } catch (err) {
-            setSuggestionTimePicker(p=>({...p,error:err.message||'Could not save task.'}))
-            setSuggestionStates(p=>({...p,[key]:'idle'}))
+            setRecModalData(p => ({ ...p, error: err.message || 'Could not save task.' }))
+        } finally {
+            setIsSaving(false)
         }
     }
 
@@ -1308,6 +1402,8 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         try {
             const saved = await addTask(user.id, activeDay, newTask.title, newTask.startTime, newTask.endTime, newTask.notes)
             setTasks(prev => ({...prev,[activeDay]:[...prev[activeDay],{...saved,completed:false}]}))
+            setSuccessMessage("Activity added successfully!")
+            setTimeout(() => setSuccessMessage(''), 3000)
             if (saved.warnings?.length>0) {
                 setAddWarnings(saved.warnings); setDayWarnings(saved.warnings)
                 setTimeout(()=>{ setAddWarnings([]); setShowAddTask(false); setNewTask({startTime:'09:00',endTime:'10:00',title:'',notes:''}) }, 4000)
@@ -1318,22 +1414,63 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         finally { setIsSaving(false) }
     }
 
-    const handleDelete = async (e, id) => {
+    const handleDelete = (e, id) => {
         e.stopPropagation(); if (activeDayIsLocked) return
-        try {
-            await deleteTask(id)
-            setTasks(prev => ({...prev,[activeDay]:prev[activeDay].filter(t=>t.id!==id)}))
-            if (expandedTask===id) setExpandedTask(null)
-            setTimeout(()=>setRecsTrigger(t=>t+1), 400)
-        } catch (err) { console.error('Delete failed:', err.message) }
+        const task = tasks[activeDay]?.find(t => String(t.id) === String(id))
+        if (!task) return
+
+        setConfirmModalConfig({
+            title: 'Delete Task?',
+            message: `Are you sure you want to delete "${task.title}"? This action cannot be undone.`,
+            confirmText: 'Yes, Delete',
+            confirmBg: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
+            onConfirm: async () => {
+                try {
+                    await deleteTask(id)
+                    setTasks(prev => ({...prev,[activeDay]:prev[activeDay].filter(t=>String(t.id)!==String(id))}))
+                    if (expandedTask===id) setExpandedTask(null)
+                    setTimeout(()=>setRecsTrigger(t=>t+1), 400)
+                } catch (err) { console.error('Delete failed:', err.message) }
+                setShowConfirmModal(false)
+            }
+        })
+        setShowConfirmModal(true)
     }
 
     const toggleDone = async (id) => {
         if (activeDayIsLocked) return
-        try {
-            const saved = await toggleTaskComplete(id)
-            setTasks(prev => ({...prev,[activeDay]:prev[activeDay].map(t => t.id===id?{...t,completed:saved.completed}:t)}))
-        } catch (err) { console.error('Toggle failed:', err.message) }
+        const task = tasks[activeDay]?.find(t => String(t.id) === String(id))
+        if (!task) return
+
+        const isFutureDay = weekIdx(activeDay) > getTodayWeekIdx()
+        const isToday = weekIdx(activeDay) === getTodayWeekIdx()
+        const now = new Date()
+        const currentMins = now.getHours() * 60 + now.getMinutes()
+        const taskStartMins = toMins(task.startTime)
+
+        if (isFutureDay || (isToday && currentMins < taskStartMins)) {
+            setWarningModalMessage("You cannot mark a task as completed before its scheduled start time.")
+            setShowWarningModal(true)
+            return
+        }
+
+        const willComplete = !task.completed
+        setConfirmModalConfig({
+            title: willComplete ? 'Complete Task?' : 'Mark Incomplete?',
+            message: willComplete 
+                ? `Are you sure you want to mark "${task.title}" as completed?` 
+                : `Are you sure you want to mark "${task.title}" as incomplete?`,
+            confirmText: willComplete ? 'Yes, Complete' : 'Yes, Incomplete',
+            confirmBg: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
+            onConfirm: async () => {
+                try {
+                    const saved = await toggleTaskComplete(id)
+                    setTasks(prev => ({ ...prev, [activeDay]: prev[activeDay].map(t => String(t.id) === String(id) ? { ...t, completed: saved.completed } : t) }))
+                } catch (err) { console.error('Toggle failed:', err.message) }
+                setShowConfirmModal(false)
+            }
+        })
+        setShowConfirmModal(true)
     }
 
     const openEdit = (e, task) => {
@@ -1436,6 +1573,13 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
 
     return (
         <div className="font-lora relative">
+
+            {successMessage && (
+                <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-emerald-500 text-white font-bold px-6 py-3 rounded-full shadow-2xl transition-all duration-300">
+                    <CheckCircleIcon className="w-5 h-5 text-white" />
+                    <span>{successMessage}</span>
+                </div>
+            )}
 
             {showEditPrefs && (
                 <PreferencesModal
@@ -1785,7 +1929,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                                 <div key={s.title} className="group">
                                                     <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border-2 transition-all duration-200 ${
                                                         state==='added'?'bg-green-50 border-green-200':state==='error'?'bg-red-50 border-red-200':
-                                                        isPickerOpen?'bg-white border-violet-300 shadow-sm':'bg-white border-gray-100 hover:border-violet-200 hover:shadow-sm'
+                                                        'bg-white border-gray-100 hover:border-violet-200 hover:shadow-sm'
                                                     }`}>
                                                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-base ${s.taskType==='WELLNESS'?'bg-emerald-100':s.taskType==='OTHER'?'bg-violet-100':'bg-blue-100'}`}>{typeEmoji}</div>
                                                         <div className="flex-1 min-w-0">
@@ -1799,28 +1943,12 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                                         </div>
                                                         {state==='adding' && <div className="w-16 h-8 flex items-center justify-center"><div className="w-4 h-4 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin"/></div>}
                                                         {state==='added' && <div className="w-16 h-8 bg-green-500 rounded-xl flex items-center justify-center"><CheckCircleIcon className="w-4 h-4 text-white"/></div>}
-                                                        {(state==='idle'||state==='error') && !isPickerOpen && (
-                                                            <button onClick={() => handleQuickAdd(s,i)} className="shrink-0 flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors shadow-sm">
+                                                        {(state==='idle'||state==='error') && (
+                                                            <button onClick={() => handleRecommendationClick(s)} className="shrink-0 flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors shadow-sm">
                                                                 <PlusIcon className="w-3.5 h-3.5"/>Add
                                                             </button>
                                                         )}
                                                     </div>
-                                                    {isPickerOpen && (
-                                                        <div className="mx-1 mt-1 bg-violet-50 border-2 border-violet-200 rounded-xl p-4">
-                                                            <p className="text-xs text-violet-600 font-bold mb-3">📅 Pick a time for "{s.title}"</p>
-                                                            <div className="grid grid-cols-2 gap-3 mb-3">
-                                                                <TimeSelect label="Start Time" value={suggestionTimePicker.startTime} onChange={v=>setSuggestionTimePicker(p=>({...p,startTime:v,error:''}))}/>
-                                                                <TimeSelect label="End Time" value={suggestionTimePicker.endTime} onChange={v=>setSuggestionTimePicker(p=>({...p,endTime:v,error:''}))}/>
-                                                            </div>
-                                                            {suggestionTimePicker.error && <p className="text-xs text-red-500 font-medium mb-2">⚠️ {suggestionTimePicker.error}</p>}
-                                                            <div className="flex gap-2">
-                                                                <button onClick={() => setSuggestionTimePicker(null)} className="flex-1 py-2 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
-                                                                <button onClick={confirmTimePicker} className="flex-1 py-2 rounded-xl text-sm font-bold bg-violet-600 text-white hover:bg-violet-700 flex items-center justify-center gap-1">
-                                                                    <PlusIcon className="w-3.5 h-3.5"/> Add to Plan
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    )}
                                                 </div>
                                             )
                                         })}
@@ -1837,6 +1965,118 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                     </div>
                 </div>
             </div>
+
+            {/* ── Recommendation Detail Modal ── */}
+            {showRecModal && !activeDayIsLocked && (
+                <div 
+                    onClick={() => setShowRecModal(false)}
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                >
+                    <div 
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl relative"
+                    >
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="text-xl font-black text-black">
+                                {recModalData.taskType === 'STUDY' ? 'Schedule Study Session' :
+                                 recModalData.taskType === 'WELLNESS' ? 'Schedule Relaxing Activity' :
+                                 'Schedule Assigned Intervention'}
+                            </h3>
+                            <button 
+                                onClick={() => setShowRecModal(false)}
+                                className="p-1 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+                            >
+                                <XMarkIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            {recModalData.taskType === 'STUDY' && (
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Select Subject</label>
+                                        <select 
+                                            value={recModalData.subjectSelect} 
+                                            onChange={e => setRecModalData({ ...recModalData, subjectSelect: e.target.value, error: '' })}
+                                            className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm bg-white"
+                                        >
+                                            <option value="Mathematics">Mathematics</option>
+                                            <option value="Science">Science</option>
+                                            <option value="SST">SST (Social Studies)</option>
+                                            <option value="English">English</option>
+                                            <option value="Hindi">Hindi</option>
+                                            <option value="Other">Other (Custom Subject)</option>
+                                        </select>
+                                    </div>
+                                    {recModalData.subjectSelect === 'Other' && (
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 mb-1">Enter Subject Name</label>
+                                            <input 
+                                                autoFocus 
+                                                type="text" 
+                                                value={recModalData.titleInput} 
+                                                onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })} 
+                                                placeholder="e.g. History, Art, etc." 
+                                                className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm"
+                                            />
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {recModalData.taskType === 'WELLNESS' && (
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Relaxing Activity Name</label>
+                                    <input 
+                                        autoFocus 
+                                        type="text" 
+                                        value={recModalData.titleInput} 
+                                        onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })} 
+                                        placeholder="e.g. Paint a portrait, Play guitar, etc." 
+                                        className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm"
+                                    />
+                                </div>
+                            )}
+
+                            {recModalData.taskType !== 'STUDY' && recModalData.taskType !== 'WELLNESS' && (
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Intervention Name</label>
+                                    <input 
+                                        type="text" 
+                                        value={recModalData.titleInput} 
+                                        onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })} 
+                                        placeholder="Assigned Intervention" 
+                                        className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm bg-gray-50 text-gray-600"
+                                        disabled={true}
+                                    />
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <TimeSelect label="Start Time" value={recModalData.startTime} onChange={v => setRecModalData({ ...recModalData, startTime: v, error: '' })} is24h={true}/>
+                                <TimeSelect label="End Time" value={recModalData.endTime} onChange={v => setRecModalData({ ...recModalData, endTime: v, error: '' })} is24h={true}/>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">Notes <span className="text-gray-400 font-medium">(optional)</span></label>
+                                <textarea 
+                                    value={recModalData.notes} 
+                                    onChange={e => setRecModalData({ ...recModalData, notes: e.target.value })} 
+                                    rows={2} 
+                                    className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none resize-none text-sm"
+                                />
+                            </div>
+
+                            {recModalData.error && <div className="bg-red-50 border-2 border-red-200 rounded-xl px-4 py-2 text-red-600 text-sm font-medium">⚠️ {recModalData.error}</div>}
+                        </div>
+                        <div className="flex gap-3 mt-6">
+                            <button onClick={() => setShowRecModal(false)} className="flex-1 px-4 py-2 rounded-xl font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
+                            <button onClick={saveRecommendationTask} disabled={isSaving} className="flex-1 bg-black text-white px-4 py-2 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50">
+                                {isSaving ? 'Saving...' : 'Add to Plan'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── Edit Task Modal ── */}
             {editingTask && !activeDayIsLocked && (
@@ -2052,6 +2292,66 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 }}
     />
 )}
+
+            {/* ── Confirmation Modal ── */}
+            {showConfirmModal && (
+                <div 
+                    onClick={() => setShowConfirmModal(false)}
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+                >
+                    <div 
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-100 shadow-2xl flex flex-col items-center text-center animate-scale-up"
+                    >
+                        <div className="w-12 h-12 rounded-full bg-violet-50 flex items-center justify-center mb-4">
+                            <SparklesIcon className="w-6 h-6 text-violet-600 animate-pulse" />
+                        </div>
+                        <h3 className="text-lg font-black text-black mb-2">{confirmModalConfig.title}</h3>
+                        <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">
+                            {confirmModalConfig.message}
+                        </p>
+                        <div className="flex gap-3 w-full">
+                            <button 
+                                onClick={() => setShowConfirmModal(false)} 
+                                className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 border border-gray-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={confirmModalConfig.onConfirm} 
+                                className={`flex-1 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md ${confirmModalConfig.confirmBg}`}
+                            >
+                                {confirmModalConfig.confirmText}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Warning Modal ── */}
+            {showWarningModal && (
+                <div 
+                    onClick={() => setShowWarningModal(false)}
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+                >
+                    <div 
+                        onClick={e => e.stopPropagation()}
+                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-red-100 shadow-2xl flex flex-col items-center text-center animate-scale-up"
+                    >
+                        <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4 text-red-500 text-xl animate-bounce">⚠️</div>
+                        <h3 className="text-lg font-black text-black mb-2">Notice</h3>
+                        <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">
+                            {warningModalMessage}
+                        </p>
+                        <button 
+                            onClick={() => setShowWarningModal(false)} 
+                            className="w-full bg-black text-white px-4 py-2.5 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-md"
+                        >
+                            Okay
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

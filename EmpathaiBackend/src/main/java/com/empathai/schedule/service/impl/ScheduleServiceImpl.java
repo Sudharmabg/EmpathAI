@@ -8,6 +8,8 @@ import com.empathai.schedule.dto.TaskRequest;
 import com.empathai.schedule.dto.TaskResponse;
 import com.empathai.schedule.entity.ScheduleTask;
 import com.empathai.schedule.repository.ScheduleTaskRepository;
+import com.empathai.schedule.repository.StudentSchedulePreferenceRepository;
+import com.empathai.schedule.entity.StudentSchedulePreference;
 import com.empathai.schedule.service.IScheduleService;
 import com.empathai.schedule.service.ScheduleRuleEngine;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +32,7 @@ public class ScheduleServiceImpl implements IScheduleService {
     private final ScheduleTaskRepository taskRepository;
     private final StudentRepository studentRepository;
     private final ScheduleRuleEngine ruleEngine;
+    private final StudentSchedulePreferenceRepository preferenceRepository;
 
     // ─────────────────────────────────────────────────────────────────────────
     // ADD TASK
@@ -48,8 +51,13 @@ public class ScheduleServiceImpl implements IScheduleService {
             throw new EmpathaiException(result.getErrors().get(0), "RULE_VIOLATION");
         }
 
-        // auto-detect type silently — never exposed to frontend
-        String detectedType = ruleEngine.detectType(request.getTitle());
+        // auto-detect type silently if not provided, otherwise use passed type
+        String detectedType = request.getDetectedType();
+        if (detectedType == null || detectedType.isBlank()) {
+            detectedType = ruleEngine.detectType(request.getTitle());
+        } else {
+            detectedType = detectedType.toUpperCase();
+        }
 
         java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
         ScheduleTask task = ScheduleTask.builder()
@@ -67,6 +75,10 @@ public class ScheduleServiceImpl implements IScheduleService {
         ScheduleTask saved = taskRepository.save(task);
         log.info("Task added: studentId={} day={} title={} type={}",
                 saved.getStudentId(), saved.getDayOfWeek(), saved.getTitle(), saved.getDetectedType());
+
+        if ("WELLNESS".equalsIgnoreCase(detectedType)) {
+            saveLastRelaxActivity(request.getStudentId(), request.getTitle());
+        }
 
         return toResponse(saved, result.getWarnings());
     }
@@ -91,7 +103,12 @@ public class ScheduleServiceImpl implements IScheduleService {
             throw new EmpathaiException(result.getErrors().get(0), "RULE_VIOLATION");
         }
 
-        String detectedType = ruleEngine.detectType(request.getTitle());
+        String detectedType = request.getDetectedType();
+        if (detectedType == null || detectedType.isBlank()) {
+            detectedType = ruleEngine.detectType(request.getTitle());
+        } else {
+            detectedType = detectedType.toUpperCase();
+        }
 
         existing.setTitle(request.getTitle());
         existing.setStartTime(request.getStartTime());
@@ -102,6 +119,10 @@ public class ScheduleServiceImpl implements IScheduleService {
 
         ScheduleTask saved = taskRepository.save(existing);
         log.info("Task edited: id={} title={} type={}", taskId, saved.getTitle(), saved.getDetectedType());
+
+        if ("WELLNESS".equalsIgnoreCase(detectedType)) {
+            saveLastRelaxActivity(request.getStudentId(), request.getTitle());
+        }
 
         return toResponse(saved, result.getWarnings());
     }
@@ -196,5 +217,20 @@ public class ScheduleServiceImpl implements IScheduleService {
                 .detectedType(task.getDetectedType())
                 .warnings(warnings)
                 .build();
+    }
+
+    private void saveLastRelaxActivity(Long studentId, String title) {
+        try {
+            StudentSchedulePreference preference = preferenceRepository.findByStudentId(studentId)
+                    .orElseGet(() -> StudentSchedulePreference.builder()
+                            .studentId(studentId)
+                            .preferredStudyTime("MORNING")
+                            .build());
+            preference.setLastRelaxActivity(title);
+            preferenceRepository.save(preference);
+            log.info("Saved last relax activity preference: studentId={}, title={}", studentId, title);
+        } catch (Exception e) {
+            log.error("Failed to save last relax activity for studentId={}", studentId, e);
+        }
     }
 }

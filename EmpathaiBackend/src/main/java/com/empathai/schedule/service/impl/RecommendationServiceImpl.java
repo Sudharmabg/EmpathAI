@@ -219,348 +219,43 @@ public class RecommendationServiceImpl implements IRecommendationService {
         // ── Upcoming exams ─────────────────────────────────────────────────────
         List<ExamDateResponse> upcomingExams = getUpcomingExams(schoolId, className);
 
-        // ── Goals ──────────────────────────────────────────────────────────────
-        List<StudentGoal> goals =
-                studentGoalRepository.findByStudentIdAndActiveTrue(studentId);
-        Set<String> goalSubjects = goals.stream()
-                .map(StudentGoal::getSubjectTag)
-                .collect(Collectors.toSet());
+        List<TaskSuggestion> finalSuggestions = new ArrayList<>();
 
-        // ── Weekly coverage — uses alias map ───────────────────────────────────
-        LocalDate weekStart = LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
-        List<ScheduleTask> weekTasks = scheduleTaskRepository.findByStudentIdAndWeekStartDate(studentId, weekStart);
-        Map<String, Long> subjectWeekCount = new HashMap<>();
-        for (String subject : WEEKLY_SUBJECTS) {
-            long count = weekTasks.stream()
-                    .filter(t -> t.getTitle() != null)
-                    // ✅ uses alias map instead of simple contains()
-                    .filter(t -> extractSubjectsFromTitle(t.getTitle()).contains(subject))
-                    .count();
-            subjectWeekCount.put(subject, count);
+        // 1. Study Suggestion
+        finalSuggestions.add(TaskSuggestion.builder()
+                .title("Study")
+                .subjectName(null)
+                .estimatedMinutes(45)
+                .taskType("STUDY")
+                .reasonLabel("Select subject & time")
+                .score(100)
+                .build());
+
+        // 2. Relax Suggestion
+        String relaxTitle = "Relax";
+        if (prefOpt.isPresent() && prefOpt.get().getLastRelaxActivity() != null && !prefOpt.get().getLastRelaxActivity().isBlank()) {
+            relaxTitle = prefOpt.get().getLastRelaxActivity();
         }
-        Set<String> coveredSubjects = subjectWeekCount.entrySet().stream()
-                .filter(e -> e.getValue() > 0)
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toSet());
-        log.info("📗 Weekly: {} | Covered: {}", subjectWeekCount, coveredSubjects);
+        finalSuggestions.add(TaskSuggestion.builder()
+                .title(relaxTitle)
+                .subjectName(null)
+                .estimatedMinutes(30)
+                .taskType("WELLNESS")
+                .reasonLabel("Stay balanced")
+                .score(90)
+                .build());
 
-        // ── Today's tasks ──────────────────────────────────────────────────────
-        List<ScheduleTask> todayTasks =
-                scheduleTaskRepository.findByStudentIdAndDayOfWeekAndWeekStartDate(studentId, dayOfWeek, weekStart);
+        // 3. Intervention Suggestion
+        finalSuggestions.add(TaskSuggestion.builder()
+                .title("Activity")
+                .subjectName(null)
+                .estimatedMinutes(30)
+                .taskType("INTERVENTION")
+                .reasonLabel("Assigned by counselor")
+                .score(80)
+                .build());
 
-        // ── RULE 10: Max 8 tasks ───────────────────────────────────────────────
-        int todayTotalTasks    = todayTasks.size();
-        int remainingTaskSlots = Math.max(0, 8 - todayTotalTasks);
-        if (remainingTaskSlots <= 0) {
-            log.info("🚫 Rule 10: Max 8 tasks reached.");
-            return ScheduleRecommendationResponse.builder()
-                    .blockedWindows(blockedWindows)
-                    .upcomingExams(upcomingExams)
-                    .suggestions(Collections.emptyList())
-                    .preferredStudyTime(preferredStudyTime)
-                    .busySlots(todayBusySlots)
-                    .build();
-        }
-
-        // ── RULE 2: Daily study cap ────────────────────────────────────────────
-        int todayStudyMins = todayTasks.stream()
-                .filter(t -> "study".equalsIgnoreCase(t.getDetectedType()))
-                .mapToInt(t -> toMins(t.getEndTime()) - toMins(t.getStartTime()))
-                .filter(d -> d > 0)
-                .sum();
-        int maxDailyMins       = getMaxDailyStudyMins(className, isWeekend(dayOfWeek));
-        int remainingStudyMins = Math.max(0, maxDailyMins - todayStudyMins);
-
-        // ── RULE 7: Max 3 study sessions ──────────────────────────────────────
-        int todayStudySessions    = (int) todayTasks.stream()
-                .filter(t -> "study".equalsIgnoreCase(t.getDetectedType())).count();
-        int remainingStudySessions = Math.max(0, 3 - todayStudySessions);
-
-        // ── RULE 3: Max single session ─────────────────────────────────────────
-        int maxSessionMins = getMaxSessionMins(className);
-        boolean canAddStudy = remainingStudySessions > 0 && remainingStudyMins >= 15;
-
-        // ── Type counts ────────────────────────────────────────────────────────
-        int todayWellnessCount = (int) todayTasks.stream()
-                .filter(t -> "wellness".equalsIgnoreCase(t.getDetectedType())).count();
-        int todayOtherCount    = (int) todayTasks.stream()
-                .filter(t -> "other".equalsIgnoreCase(t.getDetectedType())).count();
-
-        // ── RULE 12: Consecutive study days ───────────────────────────────────
-        int consecutiveStudyDays =
-                countConsecutiveStudyDays(studentId, dayOfWeek, weekTasks);
-
-        // ── RULE 9: Today's titles and subjects — uses alias map ───────────────
-        Set<String> todayTitles = todayTasks.stream()
-                .filter(t -> t.getTitle() != null)
-                .map(t -> t.getTitle().toLowerCase().trim())
-                .collect(Collectors.toSet());
-
-        // ✅ Uses alias map — "Math revision" now correctly maps to "Mathematics"
-        Set<String> todaySubjects = todayTasks.stream()
-                .filter(t -> t.getTitle() != null)
-                .flatMap(t -> extractSubjectsFromTitle(t.getTitle()).stream())
-                .collect(Collectors.toSet());
-
-        // ✅ Goal subjects also use alias map
-        goalSubjects.forEach(gs -> todayTasks.stream()
-                .filter(t -> t.getTitle() != null &&
-                        extractSubjectsFromTitle(t.getTitle()).contains(gs))
-                .findFirst()
-                .ifPresent(t -> todaySubjects.add(gs)));
-
-        log.info("📊 Today: {}tasks, {}study({}min/{}max), {}wellness, {}other | " +
-                        "consecutive={} | slots={}",
-                todayTotalTasks, todayStudySessions, todayStudyMins, maxDailyMins,
-                todayWellnessCount, todayOtherCount, consecutiveStudyDays, remainingTaskSlots);
-
-        // ══════════════════════════════════════════════════════════════════════
-        // BUILD SUGGESTION POOLS SEPARATELY
-        // ══════════════════════════════════════════════════════════════════════
-
-        List<TaskSuggestion> studySuggestions   = new ArrayList<>();
-        List<TaskSuggestion> wellnessSuggestions = new ArrayList<>();
-        List<TaskSuggestion> otherSuggestions    = new ArrayList<>();
-
-        // ── STUDY POOL ─────────────────────────────────────────────────────────
-
-        if (canAddStudy) {
-            int sessionMins = Math.min(maxSessionMins, Math.max(15, remainingStudyMins));
-            Map<String, TaskSuggestion> studyMap = new LinkedHashMap<>();
-
-            Set<String> examSubjects = upcomingExams.stream()
-                    .map(e -> e.getSubjectName().toLowerCase())
-                    .collect(Collectors.toSet());
-
-            LocalDate today = LocalDate.now();
-            Set<String> activeGoalSubjectsLower = goals.stream()
-                    .filter(g -> g.getTargetDate() == null || !today.isAfter(g.getTargetDate()))
-                    .map(g -> g.getSubjectTag().toLowerCase())
-                    .collect(Collectors.toSet());
-
-            log.info("📌 Exam: {} | Goals: {}", examSubjects, activeGoalSubjectsLower);
-
-            // Weekly subjects
-            for (String subject : WEEKLY_SUBJECTS) {
-                if (todaySubjects.contains(subject)) continue;
-                String title = "Study session — " + subject;
-                if (todayTitles.contains(title.toLowerCase().trim())) continue;
-
-                String  sl       = subject.toLowerCase();
-                boolean isExam   = examSubjects.contains(sl);
-                boolean isGoal   = activeGoalSubjectsLower.contains(sl);
-                boolean isCovered = coveredSubjects.contains(subject);
-
-                if (!isExam && !isGoal && isCovered) continue;
-
-                int    score  = isCovered ? 10 : 12;
-                String reason = isCovered
-                        ? "Weekly subject"
-                        : "Weekly subject — not covered yet";
-
-                studyMap.put(sl, TaskSuggestion.builder()
-                        .title(title).subjectName(subject).reasonLabel(reason)
-                        .estimatedMinutes(sessionMins).taskType("STUDY").score(score)
-                        .build());
-            }
-
-            // Goals
-            for (String gs : goalSubjects) {
-                if (todaySubjects.contains(gs)) continue;
-                String key    = gs.toLowerCase();
-                boolean active = goals.stream()
-                        .filter(g -> g.getSubjectTag().equalsIgnoreCase(gs))
-                        .anyMatch(g -> g.getTargetDate() == null
-                                || !today.isAfter(g.getTargetDate()));
-                if (!active) continue;
-
-                TaskSuggestion existing = studyMap.get(key);
-                if (existing != null) {
-                    existing.setScore(existing.getScore() + 20);
-                    goals.stream()
-                            .filter(g -> g.getSubjectTag().equalsIgnoreCase(gs)
-                                    && g.getTargetDate() != null)
-                            .findFirst()
-                            .ifPresent(g -> {
-                                long dl = ChronoUnit.DAYS.between(today, g.getTargetDate());
-                                existing.setReasonLabel(dl <= 7
-                                        ? "Goal deadline in " + dl + " day" + (dl == 1 ? "" : "s")
-                                        : "Matches your goal");
-                            });
-                } else {
-                    String title = "Study session — " + gs;
-                    if (todayTitles.contains(title.toLowerCase().trim())) continue;
-                    String reason = "Matches your goal";
-                    Optional<StudentGoal> mg = goals.stream()
-                            .filter(g -> g.getSubjectTag().equalsIgnoreCase(gs)
-                                    && g.getTargetDate() != null)
-                            .findFirst();
-                    if (mg.isPresent()) {
-                        long dl = ChronoUnit.DAYS.between(today, mg.get().getTargetDate());
-                        if (dl <= 7)
-                            reason = "Goal deadline in " + dl + " day" + (dl == 1 ? "" : "s");
-                    }
-                    studyMap.put(key, TaskSuggestion.builder()
-                            .title(title).subjectName(gs).reasonLabel(reason)
-                            .estimatedMinutes(sessionMins).taskType("STUDY").score(20)
-                            .build());
-                }
-            }
-
-            // Homework
-            if (!upcomingExams.isEmpty()) {
-                String hwTitle = "Complete homework";
-                if (!todayTitles.contains(hwTitle.toLowerCase().trim())
-                        && !studyMap.containsKey("homework")) {
-                    studyMap.put("homework", TaskSuggestion.builder()
-                            .title(hwTitle).subjectName("Homework")
-                            .reasonLabel("Exam preparation")
-                            .estimatedMinutes(sessionMins).taskType("STUDY").score(6)
-                            .build());
-                }
-            }
-
-            // Exams
-            Set<String> processedExams = new HashSet<>();
-            for (ExamDateResponse exam : upcomingExams) {
-                String key = exam.getSubjectName().toLowerCase();
-                if (processedExams.contains(key)
-                        || todaySubjects.contains(exam.getSubjectName())) continue;
-                processedExams.add(key);
-
-                int    boost = "URGENT".equals(exam.getUrgency()) ? 50 : 25;
-                String label = "Exam in " + exam.getDaysRemaining()
-                        + " day" + (exam.getDaysRemaining() == 1 ? "" : "s");
-
-                TaskSuggestion existing = studyMap.get(key);
-                if (existing != null) {
-                    existing.setScore(existing.getScore() + boost);
-                    existing.setReasonLabel(label);
-                    existing.setTitle("Revise — " + exam.getSubjectName());
-                } else {
-                    String title = "Revise — " + exam.getSubjectName();
-                    if (todayTitles.contains(title.toLowerCase().trim())) continue;
-                    studyMap.put(key, TaskSuggestion.builder()
-                            .title(title).subjectName(exam.getSubjectName())
-                            .reasonLabel(label)
-                            .estimatedMinutes(sessionMins).taskType("STUDY").score(boost)
-                            .build());
-                }
-            }
-
-            studySuggestions = new ArrayList<>(studyMap.values());
-            studySuggestions.sort(
-                    Comparator.comparingInt(TaskSuggestion::getScore).reversed());
-            log.info("📚 Study pool: {} items", studySuggestions.size());
-            studySuggestions.forEach(s -> log.info("      {} | {} | score={}",
-                    s.getTitle(), s.getReasonLabel(), s.getScore()));
-        }
-
-        // ── WELLNESS POOL ──────────────────────────────────────────────────────
-
-        int maxWellness  = consecutiveStudyDays >= 3 ? 4
-                : todayWellnessCount == 0 ? 3 : 2;
-        int wellnessToAdd = Math.max(0, maxWellness - todayWellnessCount);
-
-        List<String> wellnessPool = new ArrayList<>(WELLNESS_TASKS);
-        Collections.shuffle(wellnessPool);
-        for (String title : wellnessPool) {
-            if (wellnessSuggestions.size() >= wellnessToAdd) break;
-            if (todayTitles.contains(title.toLowerCase().trim())) continue;
-            wellnessSuggestions.add(TaskSuggestion.builder()
-                    .title(title).subjectName(null)
-                    .reasonLabel(consecutiveStudyDays >= 3
-                            ? "3 study days in a row — rest up!"
-                            : "Stay balanced")
-                    .estimatedMinutes(20).taskType("WELLNESS")
-                    .score(consecutiveStudyDays >= 3 ? 40 : 15)
-                    .build());
-        }
-        log.info("🧘 Wellness pool: {} items", wellnessSuggestions.size());
-
-        // ── OTHER POOL ─────────────────────────────────────────────────────────
-
-        int maxOther  = 3;
-        int otherToAdd = Math.max(0, maxOther - todayOtherCount);
-
-        List<String> otherPool = new ArrayList<>(OTHER_TASKS);
-        Collections.shuffle(otherPool);
-        for (String title : otherPool) {
-            if (otherSuggestions.size() >= otherToAdd) break;
-            if (todayTitles.contains(title.toLowerCase().trim())) continue;
-            otherSuggestions.add(TaskSuggestion.builder()
-                    .title(title).subjectName(null).reasonLabel("Daily routine")
-                    .estimatedMinutes(30).taskType("OTHER").score(8)
-                    .build());
-        }
-        log.info("📋 Other pool: {} items", otherSuggestions.size());
-
-        // ══════════════════════════════════════════════════════════════════════
-        // MERGE — guarantee minimum wellness + other slots
-        // ══════════════════════════════════════════════════════════════════════
-
-        List<TaskSuggestion> allSuggestions = new ArrayList<>();
-
-        int minWellnessSlots = Math.min(wellnessSuggestions.size(),
-                Math.min(2, remainingTaskSlots));
-        int minOtherSlots    = Math.min(otherSuggestions.size(),
-                Math.min(1, Math.max(0, remainingTaskSlots - minWellnessSlots)));
-        int studySlots       = Math.max(0,
-                remainingTaskSlots - minWellnessSlots - minOtherSlots);
-
-        // Add study
-        int studyAdded = 0;
-        for (TaskSuggestion s : studySuggestions) {
-            if (studyAdded >= studySlots) break;
-            allSuggestions.add(s);
-            studyAdded++;
-        }
-
-        // Add guaranteed wellness
-        int wellnessAdded = 0;
-        for (TaskSuggestion s : wellnessSuggestions) {
-            if (wellnessAdded >= minWellnessSlots) break;
-            allSuggestions.add(s);
-            wellnessAdded++;
-        }
-
-        // Add guaranteed other
-        int otherAdded = 0;
-        for (TaskSuggestion s : otherSuggestions) {
-            if (otherAdded >= minOtherSlots) break;
-            allSuggestions.add(s);
-            otherAdded++;
-        }
-
-        // Fill remaining slots with leftovers
-        List<TaskSuggestion> leftovers = new ArrayList<>();
-        if (studyAdded < studySuggestions.size())
-            leftovers.addAll(studySuggestions.subList(studyAdded, studySuggestions.size()));
-        if (wellnessAdded < wellnessSuggestions.size())
-            leftovers.addAll(wellnessSuggestions.subList(wellnessAdded, wellnessSuggestions.size()));
-        if (otherAdded < otherSuggestions.size())
-            leftovers.addAll(otherSuggestions.subList(otherAdded, otherSuggestions.size()));
-
-        leftovers.sort(Comparator.comparingInt(TaskSuggestion::getScore).reversed());
-        for (TaskSuggestion s : leftovers) {
-            if (allSuggestions.size() >= remainingTaskSlots) break;
-            allSuggestions.add(s);
-        }
-
-        // Final sort
-        allSuggestions.sort(Comparator.comparingInt(TaskSuggestion::getScore).reversed());
-
-        List<TaskSuggestion> finalSuggestions = allSuggestions.stream()
-                .limit(remainingTaskSlots)
-                .collect(Collectors.toList());
-
-        log.info("✨ Final: {} suggestions (study={}, wellness={}, other={}, slots={})",
-                finalSuggestions.size(), studyAdded, wellnessAdded,
-                otherAdded, remainingTaskSlots);
-        finalSuggestions.forEach(s -> log.info("   → [{}] {} | {} | {}m | score={}",
-                s.getTaskType(), s.getTitle(), s.getReasonLabel(),
-                s.getEstimatedMinutes(), s.getScore()));
-        log.info("══════════════════════════════════════════════════════════");
+        log.info("✨ Final: {} suggestions returned", finalSuggestions.size());
 
         return ScheduleRecommendationResponse.builder()
                 .blockedWindows(blockedWindows)

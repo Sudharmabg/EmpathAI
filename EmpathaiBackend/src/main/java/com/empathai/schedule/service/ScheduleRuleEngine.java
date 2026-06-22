@@ -365,45 +365,89 @@ public class ScheduleRuleEngine {
         }
     }
 
+    private static final java.util.Map<String, String> RULE_SUBJECT_MAP = new java.util.HashMap<>() {{
+        put("math",              "Mathematics");
+        put("maths",             "Mathematics");
+        put("mathematics",       "Mathematics");
+        put("algebra",           "Mathematics");
+        put("geometry",          "Mathematics");
+        put("arithmetic",        "Mathematics");
+        put("trigonometry",      "Mathematics");
+        put("calculus",          "Mathematics");
+        put("science",           "Science");
+        put("sci",               "Science");
+        put("physics",           "Science");
+        put("phy",               "Science");
+        put("chemistry",         "Science");
+        put("chem",              "Science");
+        put("biology",           "Science");
+        put("bio",               "Science");
+        put("english",           "English");
+        put("eng",               "English");
+        put("grammar",           "English");
+        put("literature",        "English");
+        put("reading",           "English");
+        put("writing",           "English");
+        put("comprehension",     "English");
+        put("hindi",             "Hindi");
+        put("हिंदी",              "Hindi");
+        put("sst",               "Social Studies");
+        put("social",            "Social Studies");
+        put("social studies",    "Social Studies");
+        put("history",           "Social Studies");
+        put("geography",         "Social Studies");
+        put("geo",               "Social Studies");
+        put("civics",            "Social Studies");
+        put("economics",         "Social Studies");
+        put("political science", "Social Studies");
+    }};
+
+    private String extractSubjectFromTitle(String title) {
+        if (title == null) return null;
+        String lower = title.toLowerCase().trim();
+        for (java.util.Map.Entry<String, String> entry : RULE_SUBJECT_MAP.entrySet()) {
+            if (lower.contains(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
     /**
-     * Rule 12 — Soft Warning: 3 Consecutive Study Days (priority 12)
-     * LET prev3Days = 3 days before current day
-     * IF ALL of prev3Days had at least one study task THEN warn
+     * Rule 12 — Soft Warning: Study same subject for 3 days in a week (priority 12)
      */
     private void applyRule12_ConsecutiveDaysWarning(RuleResult result, TaskRequest request) {
-        List<String> weekOrder = List.of(
-                "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday");
-
-        int todayIdx = weekOrder.indexOf(request.getDayOfWeek());
-        if (todayIdx < 0) return;
-
-        boolean alreadyWarned = false;
-        int consecutiveCount = 0;
-
-
-        List<String> prevDays = IntStream.rangeClosed(1, 3)
-                .mapToObj(i -> weekOrder.get((todayIdx - i + 7) % 7))
-                .toList();
+        String newSubject = extractSubjectFromTitle(request.getTitle());
+        if (newSubject == null) return;
 
         java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
-        List<ScheduleTask> prevWeekTasks = taskRepository
-                .findByStudentIdAndDayOfWeekInAndDetectedTypeAndWeekStartDate(
-                        request.getStudentId(), prevDays, "STUDY", weekStart);
+        List<ScheduleTask> weekTasks = taskRepository.findByStudentIdAndWeekStartDate(request.getStudentId(), weekStart);
 
-        for (int i = 1; i <= 3; i++) {
-            String prevDay = weekOrder.get((todayIdx - i + 7) % 7);
-            boolean hasStudy = prevWeekTasks.stream()
-                    .anyMatch(t -> t.getDayOfWeek().equals(prevDay));
-            if (hasStudy) {
-                consecutiveCount++;
-            } else {
-                break;
+        // Map containing set of days for each subject
+        java.util.Map<String, java.util.Set<String>> subjectDays = new java.util.HashMap<>();
+
+        // Add the task from the request
+        subjectDays.computeIfAbsent(newSubject, k -> new java.util.HashSet<>()).add(request.getDayOfWeek());
+
+        // Add all existing STUDY tasks from the week (except the one being edited)
+        for (ScheduleTask task : weekTasks) {
+            if (request.getExcludeTaskId() != null && task.getId().equals(request.getExcludeTaskId())) {
+                continue;
+            }
+            if ("STUDY".equalsIgnoreCase(task.getDetectedType())) {
+                String sub = extractSubjectFromTitle(task.getTitle());
+                if (sub != null) {
+                    subjectDays.computeIfAbsent(sub, k -> new java.util.HashSet<>()).add(task.getDayOfWeek());
+                }
             }
         }
 
-        if (consecutiveCount >= 3) {
+        // Check if the subject from request is studied for 3 or more days
+        java.util.Set<String> days = subjectDays.get(newSubject);
+        if (days != null && days.size() >= 3) {
             result.getWarnings().add(
-                    "⚠ You've studied 3 days in a row. Consider a lighter day today for better retention.");
+                "⚠ " + newSubject + " should not be studied for 3 days in a week. Consider balancing your schedule with other subjects."
+            );
         }
     }
 

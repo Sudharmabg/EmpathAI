@@ -13,7 +13,7 @@ import {
     ArrowPathIcon,
     XMarkIcon
 } from '@heroicons/react/24/outline'
-import { apiGet } from '../../api/apiClient'
+import { apiGet, apiPost, apiPut } from '../../api/apiClient'
 
 // ── Transcript Modal ──────────────────────────────────────────────────────────
 function TranscriptModal({ flagId, studentName, onClose }) {
@@ -169,6 +169,217 @@ function TranscriptModal({ flagId, studentName, onClose }) {
     )
 }
 
+// ── Action Modal ──────────────────────────────────────────────────────────────
+function ActionModal({ chat, onActionSuccess, onClose }) {
+    const [psychologists, setPsychologists] = useState([])
+    const [selectedPsychId, setSelectedPsychId] = useState(chat.assignedPsychologistId || '')
+    const [loading, setLoading] = useState(false)
+    const [fetchingPsychs, setFetchingPsychs] = useState(false)
+    const [actionError, setActionError] = useState(null)
+
+    const savedUser = JSON.parse(localStorage.getItem('user') || '{}')
+    const isSuperAdmin = savedUser.role === 'SUPER_ADMIN'
+
+    useEffect(() => {
+        if (isSuperAdmin) {
+            const fetchPsychologists = async () => {
+                setFetchingPsychs(true)
+                try {
+                    const data = await apiGet('/api/users/psychologists?page=0&size=100')
+                    setPsychologists(data?.content ?? data ?? [])
+                } catch (err) {
+                    console.error('Failed to load psychologists:', err)
+                } finally {
+                    setFetchingPsychs(false)
+                }
+            }
+            fetchPsychologists()
+        }
+    }, [isSuperAdmin])
+
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') onClose()
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [onClose])
+
+    const handleAssign = async () => {
+        if (!selectedPsychId) {
+            setActionError('Please select a psychologist.')
+            return
+        }
+        setLoading(true)
+        setActionError(null)
+        try {
+            await apiPost(`/api/flagged-chats/${chat.id}/assign`, {
+                psychologistId: parseInt(selectedPsychId, 10)
+            })
+            onActionSuccess()
+        } catch (err) {
+            console.error('Failed to assign psychologist:', err)
+            setActionError(err.message || 'Failed to assign psychologist.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleStatusUpdate = async (status) => {
+        setLoading(true)
+        setActionError(null)
+        try {
+            await apiPut(`/api/flagged-chats/${chat.id}/status`, { status })
+            onActionSuccess()
+        } catch (err) {
+            console.error('Failed to update status:', err)
+            setActionError(err.message || 'Failed to update status.')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col p-6 relative"
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Close Button */}
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-400 hover:text-gray-600"
+                >
+                    <XMarkIcon className="w-5 h-5" />
+                </button>
+
+                {/* Header */}
+                <div className="mb-4">
+                    <h3 className="text-base font-bold text-gray-900">Manage Support Alert</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                        Student: <span className="font-semibold text-gray-800">{chat.studentName ?? `Student #${chat.studentId}`}</span>
+                    </p>
+                </div>
+
+                {/* Error Alert */}
+                {actionError && (
+                    <div className="mb-4 bg-red-50 text-red-700 text-xs p-3 rounded-lg border border-red-100 flex items-start gap-1.5 font-bold">
+                        <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>{actionError}</span>
+                    </div>
+                )}
+
+                {/* Details / Status Info */}
+                <div className="space-y-4 flex-1">
+                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-xs space-y-2">
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">Current Status:</span>
+                            <span className="font-bold text-gray-700 uppercase">{chat.status}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-400">Risk Severity:</span>
+                            <span className="font-bold text-red-600 capitalize">{chat.severity}</span>
+                        </div>
+                        {chat.assignedPsychologistName && (
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">Assigned Psychologist:</span>
+                                <span className="font-semibold text-gray-700">{chat.assignedPsychologistName}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Action 1: Change Status */}
+                    <div className="space-y-2">
+                        <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Status Actions</h4>
+                        <div className="flex gap-2">
+                            {chat.status !== 'RESOLVED' ? (
+                                <button
+                                    onClick={() => handleStatusUpdate('RESOLVED')}
+                                    disabled={loading}
+                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl text-xs transition disabled:opacity-50 flex justify-center items-center gap-1 shadow-sm"
+                                >
+                                    Mark as Resolved
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => handleStatusUpdate('PENDING')}
+                                    disabled={loading}
+                                    className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 rounded-xl text-xs transition disabled:opacity-50 flex justify-center items-center gap-1 shadow-sm"
+                                >
+                                    Re-open (Set Pending)
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Action 2: Assign Psychologist */}
+                    <div className="space-y-2 pt-2 border-t border-gray-100">
+                        <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Psychologist Assignment</h4>
+                        
+                        {isSuperAdmin ? (
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-[10px] text-gray-400 mb-1 font-semibold uppercase">
+                                        Select Psychologist
+                                    </label>
+                                    {fetchingPsychs ? (
+                                        <div className="flex items-center gap-1 text-xs text-gray-400 py-1.5">
+                                            <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                                            <span>Loading psychologists...</span>
+                                        </div>
+                                    ) : (
+                                        <select
+                                            value={selectedPsychId}
+                                            onChange={e => setSelectedPsychId(e.target.value)}
+                                            disabled={loading}
+                                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-purple-500 font-bold"
+                                        >
+                                            <option value="">-- Choose Psychologist --</option>
+                                            {psychologists.map(p => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name} ({p.email})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={handleAssign}
+                                    disabled={loading || !selectedPsychId}
+                                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-xl text-xs transition disabled:opacity-50 flex justify-center items-center gap-1 shadow-sm"
+                                >
+                                    {loading ? (
+                                        <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                        chat.assignedPsychologistId ? 'Re-assign Case' : 'Assign Case'
+                                    )}
+                                </button>
+                            </div>
+                        ) : (
+                            <p className="text-[11px] text-gray-400 italic">
+                                Only Super Administrators can assign or re-assign psychologists to cases.
+                            </p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-3">
+                    <button
+                        onClick={onClose}
+                        className="text-xs bg-gray-100 text-gray-600 px-4 py-2 rounded-lg hover:bg-gray-200 transition"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function FlaggedChats() {
     const [flaggedChats, setFlaggedChats] = useState([])
@@ -176,6 +387,7 @@ export default function FlaggedChats() {
     const [loading, setLoading]           = useState(true)
     const [error, setError]               = useState(null)
     const [transcript, setTranscript]     = useState(null)
+    const [actionChat, setActionChat]     = useState(null)
 
     const fetchData = useCallback(async () => {
         setLoading(true)
@@ -250,6 +462,17 @@ export default function FlaggedChats() {
                     flagId={transcript.flagId}
                     studentName={transcript.studentName}
                     onClose={() => setTranscript(null)}
+                />
+            )}
+
+            {actionChat && (
+                <ActionModal
+                    chat={actionChat}
+                    onActionSuccess={() => {
+                        setActionChat(null)
+                        fetchData()
+                    }}
+                    onClose={() => setActionChat(null)}
                 />
             )}
 
@@ -382,7 +605,10 @@ export default function FlaggedChats() {
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <button className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700 transition shadow-sm flex items-center gap-1 ml-auto">
+                                                    <button
+                                                        onClick={() => setActionChat(chat)}
+                                                        className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-purple-700 transition shadow-sm flex items-center gap-1 ml-auto"
+                                                    >
                                                         Action <ChevronRightIcon className="w-3 h-3" />
                                                     </button>
                                                 </td>

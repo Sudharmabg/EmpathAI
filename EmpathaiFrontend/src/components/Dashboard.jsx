@@ -120,6 +120,16 @@ export default function Dashboard({ user, onLogout }) {
   const [tasks, setTasks] = useState(emptyWeek)
   const [tasksLoading, setTasksLoading] = useState(false)
   const [tasksError, setTasksError] = useState('')
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [confirmModalConfig, setConfirmModalConfig] = useState({
+    title: '',
+    message: '',
+    confirmText: '',
+    confirmBg: '',
+    onConfirm: () => {}
+  })
+  const [showWarningModal, setShowWarningModal] = useState(false)
+  const [warningModalMessage, setWarningModalMessage] = useState('')
 
   const [notifications] = useState([
     { id: 1, title: 'New Math Quiz Available!', time: '10 mins ago', type: 'academic', read: false },
@@ -138,12 +148,51 @@ export default function Dashboard({ user, onLogout }) {
   }, [user?.id])
 
   const toggleTaskComplete = async (day, taskId) => {
-    try {
-      const saved = await apiToggleTaskComplete(taskId)
-      setTasks(prev => ({ ...prev, [day]: prev[day].map(t => t.id === taskId ? { ...t, completed: saved.completed } : t) }))
-    } catch (err) {
-      console.error('Failed to toggle task', err)
+    const task = tasks[day]?.find(t => String(t.id) === String(taskId))
+    if (!task) return
+
+    const toMins = (t) => { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+m }
+
+    const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    const todayName = (() => {
+      const DAYS_JS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      return DAYS_JS[new Date().getDay()]
+    })()
+    
+    const taskDayIdx = DAYS_ORDER.indexOf(day)
+    const todayIdx = DAYS_ORDER.indexOf(todayName)
+    
+    const isFutureDay = taskDayIdx > todayIdx
+    const isToday = taskDayIdx === todayIdx
+    const now = new Date()
+    const currentMins = now.getHours() * 60 + now.getMinutes()
+    const taskStartMins = toMins(task.startTime)
+
+    if (isFutureDay || (isToday && currentMins < taskStartMins)) {
+      setWarningModalMessage("You cannot mark a task as completed before its scheduled start time.")
+      setShowWarningModal(true)
+      return
     }
+
+    const willComplete = !task.completed
+    setConfirmModalConfig({
+      title: willComplete ? 'Complete Task?' : 'Mark Incomplete?',
+      message: willComplete 
+        ? `Are you sure you want to mark "${task.title}" as completed?` 
+        : `Are you sure you want to mark "${task.title}" as incomplete?`,
+      confirmText: willComplete ? 'Yes, Complete' : 'Yes, Incomplete',
+      confirmBg: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
+      onConfirm: async () => {
+        try {
+          const saved = await apiToggleTaskComplete(taskId)
+          setTasks(prev => ({ ...prev, [day]: prev[day].map(t => String(t.id) === String(taskId) ? { ...t, completed: saved.completed } : t) }))
+        } catch (err) {
+          console.error('Failed to toggle task', err)
+        }
+        setShowConfirmModal(false)
+      }
+    })
+    setShowConfirmModal(true)
   }
 
   const scheduledSubjects = getScheduledSubjectsForDay(tasks, activeDay)
@@ -369,6 +418,64 @@ useEffect(() => {
             <button onClick={() => setActiveHeaderModal(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl">×</button>
             {activeHeaderModal === 'rewards' && <BadgesModal user={user} />}
             {activeHeaderModal === 'notifications' && <NotificationsModal notifications={notifications} />}
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirmation Modal ── */}
+      {showConfirmModal && (
+        <div 
+          onClick={() => setShowConfirmModal(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        >
+          <div 
+            onClick={e => e.stopPropagation()}
+            className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-100 shadow-2xl flex flex-col items-center text-center"
+          >
+            <div className="w-12 h-12 rounded-full bg-violet-50 flex items-center justify-center mb-4 text-violet-600 text-xl">✨</div>
+            <h3 className="text-lg font-black text-black mb-2">{confirmModalConfig.title}</h3>
+            <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">
+              {confirmModalConfig.message}
+            </p>
+            <div className="flex gap-3 w-full">
+              <button 
+                onClick={() => setShowConfirmModal(false)} 
+                className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 border border-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmModalConfig.onConfirm} 
+                className={`flex-1 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md ${confirmModalConfig.confirmBg}`}
+              >
+                {confirmModalConfig.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Warning Modal ── */}
+      {showWarningModal && (
+        <div 
+          onClick={() => setShowWarningModal(false)}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+        >
+          <div 
+            onClick={e => e.stopPropagation()}
+            className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-red-100 shadow-2xl flex flex-col items-center text-center animate-scale-up"
+          >
+            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4 text-red-500 text-xl animate-bounce">⚠️</div>
+            <h3 className="text-lg font-black text-black mb-2">Notice</h3>
+            <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">
+              {warningModalMessage}
+            </p>
+            <button 
+              onClick={() => setShowWarningModal(false)} 
+              className="w-full bg-black text-white px-4 py-2.5 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-md"
+            >
+              Okay
+            </button>
           </div>
         </div>
       )}

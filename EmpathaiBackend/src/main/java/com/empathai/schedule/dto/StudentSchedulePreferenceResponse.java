@@ -16,4 +16,5 @@ public class StudentSchedulePreferenceResponse {
     private String preferredStudyTime;
     private List<BusySlotDTO> busySlots;
     private Boolean onboardingComplete;
+    private String lastRelaxActivity;
 }

@@ -76,6 +76,9 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
         preference.setPreferredStudyTime(request.getPreferredStudyTime());
         preference.setBusySlots(busySlotsJson);
         preference.setOnboardingComplete(true);
+        if (request.getLastRelaxActivity() != null) {
+            preference.setLastRelaxActivity(request.getLastRelaxActivity());
+        }
 
         StudentSchedulePreference saved = preferenceRepository.save(preference);
 
@@ -449,6 +452,7 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
                 .preferredStudyTime(pref.getPreferredStudyTime())
                 .busySlots(deserializeBusySlots(pref.getBusySlots()))
                 .onboardingComplete(pref.getOnboardingComplete())
+                .lastRelaxActivity(pref.getLastRelaxActivity())
                 .build();
     }
 

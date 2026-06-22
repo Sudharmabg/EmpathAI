@@ -10,5 +10,6 @@ public class TaskRequest {
     private String startTime;   // "HH:MM" 24hr format
     private String endTime;     // "HH:MM" 24hr format
     private String notes;
+    private String detectedType;
     private Long excludeTaskId; // used on edit — exclude this task from overlap/duplicate checks
 }

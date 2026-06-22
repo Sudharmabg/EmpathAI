@@ -29,6 +29,9 @@ public class StudentSchedulePreference extends BaseEntity {
     @Column(name = "busy_slots", columnDefinition = "TEXT")
     private String busySlots;
 
+    @Column(name = "last_relax_activity")
+    private String lastRelaxActivity;
+
     @Builder.Default
     @Column(name = "onboarding_complete", nullable = false)
     private Boolean onboardingComplete = false;

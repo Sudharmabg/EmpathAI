@@ -131,6 +131,8 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
                 .orElseThrow(() -> new EmpathaiException(
                         "Student not found: " + request.getStudentId(), "NOT_FOUND"));
 
+        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+
         String className  = student.getClassName();
         Long   schoolId   = student.getSchoolId();
         String studentGrade = className;
@@ -154,7 +156,7 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
         // Only delete tasks for target days so manual tasks on other days are safe
         for (String day : targetDays) {
             List<ScheduleTask> existing =
-                    taskRepository.findByStudentIdAndDayOfWeek(request.getStudentId(), day);
+                    taskRepository.findByStudentIdAndDayOfWeekAndWeekStartDate(request.getStudentId(), day, weekStart);
             taskRepository.deleteAll(existing);
         }
 
@@ -186,7 +188,7 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
             List<ScheduleTask> dayTasks = generateDayTasks(
                     request.getStudentId(), day, suggestions,
                     occupiedSlots, windowStartHour, windowEndHour,
-                    studentGrade, weekWarnings
+                    studentGrade, weekWarnings, weekStart
             );
 
             // Save all tasks for this day
@@ -230,7 +232,8 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
             int windowStartHour,
             int windowEndHour,
             String studentGrade,
-            List<String> weekWarnings) {
+            List<String> weekWarnings,
+            java.time.LocalDate weekStart) {
 
         List<ScheduleTask> result = new ArrayList<>();
 
@@ -301,6 +304,7 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
 
             ScheduleTask task = ScheduleTask.builder()
                     .studentId(studentId)
+                    .weekStartDate(weekStart)
                     .dayOfWeek(day)
                     .title(suggestion.getTitle())
                     .startTime(startTime)

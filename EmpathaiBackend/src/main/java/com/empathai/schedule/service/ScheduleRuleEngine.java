@@ -72,8 +72,9 @@ public class ScheduleRuleEngine {
         boolean isStudy   = isStudyTask(request.getTitle());
         boolean isWeekend = isWeekend(request.getDayOfWeek());
 
+        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
         List<ScheduleTask> dayTasks = taskRepository
-                .findByStudentIdAndDayOfWeek(request.getStudentId(), request.getDayOfWeek());
+                .findByStudentIdAndDayOfWeekAndWeekStartDate(request.getStudentId(), request.getDayOfWeek(), weekStart);
 
         ClassConfig config = resolveClassConfig(studentGrade);
 
@@ -384,9 +385,10 @@ public class ScheduleRuleEngine {
                 .mapToObj(i -> weekOrder.get((todayIdx - i + 7) % 7))
                 .toList();
 
+        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
         List<ScheduleTask> prevWeekTasks = taskRepository
-                .findByStudentIdAndDayOfWeekInAndDetectedType(
-                        request.getStudentId(), prevDays, "STUDY");
+                .findByStudentIdAndDayOfWeekInAndDetectedTypeAndWeekStartDate(
+                        request.getStudentId(), prevDays, "STUDY", weekStart);
 
         for (int i = 1; i <= 3; i++) {
             String prevDay = weekOrder.get((todayIdx - i + 7) % 7);

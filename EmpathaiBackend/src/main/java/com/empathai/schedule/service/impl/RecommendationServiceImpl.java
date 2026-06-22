@@ -227,7 +227,8 @@ public class RecommendationServiceImpl implements IRecommendationService {
                 .collect(Collectors.toSet());
 
         // ── Weekly coverage — uses alias map ───────────────────────────────────
-        List<ScheduleTask> weekTasks = scheduleTaskRepository.findByStudentId(studentId);
+        LocalDate weekStart = LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        List<ScheduleTask> weekTasks = scheduleTaskRepository.findByStudentIdAndWeekStartDate(studentId, weekStart);
         Map<String, Long> subjectWeekCount = new HashMap<>();
         for (String subject : WEEKLY_SUBJECTS) {
             long count = weekTasks.stream()
@@ -245,7 +246,7 @@ public class RecommendationServiceImpl implements IRecommendationService {
 
         // ── Today's tasks ──────────────────────────────────────────────────────
         List<ScheduleTask> todayTasks =
-                scheduleTaskRepository.findByStudentIdAndDayOfWeek(studentId, dayOfWeek);
+                scheduleTaskRepository.findByStudentIdAndDayOfWeekAndWeekStartDate(studentId, dayOfWeek, weekStart);
 
         // ── RULE 10: Max 8 tasks ───────────────────────────────────────────────
         int todayTotalTasks    = todayTasks.size();

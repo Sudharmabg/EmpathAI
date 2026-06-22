@@ -10,18 +10,18 @@ import java.util.List;
 public interface ScheduleTaskRepository extends JpaRepository<ScheduleTask, Long> {
 
     // all tasks for a student on a specific day
-    List<ScheduleTask> findByStudentIdAndDayOfWeek(Long studentId, String dayOfWeek);
+    List<ScheduleTask> findByStudentIdAndDayOfWeekAndWeekStartDate(Long studentId, String dayOfWeek, java.time.LocalDate weekStartDate);
 
     // full week for a student
-    List<ScheduleTask> findByStudentId(Long studentId);
+    List<ScheduleTask> findByStudentIdAndWeekStartDate(Long studentId, java.time.LocalDate weekStartDate);
 
     // tasks for a student on a day by detected type (used by rule engine)
-    List<ScheduleTask> findByStudentIdAndDayOfWeekAndDetectedType(
-            Long studentId, String dayOfWeek, String detectedType);
+    List<ScheduleTask> findByStudentIdAndDayOfWeekAndDetectedTypeAndWeekStartDate(
+            Long studentId, String dayOfWeek, String detectedType, java.time.LocalDate weekStartDate);
 
-    List<ScheduleTask> findByStudentIdAndDayOfWeekInAndDetectedType(
-            Long studentId, List<String> prevDays, String study);
+    List<ScheduleTask> findByStudentIdAndDayOfWeekInAndDetectedTypeAndWeekStartDate(
+            Long studentId, List<String> prevDays, String study, java.time.LocalDate weekStartDate);
 
     // ── NEW: for weekly task count in ChatService ─────────────────────────────
-    List<ScheduleTask> findByStudentIdAndDayOfWeekIn(Long studentId, List<String> daysOfWeek);
+    List<ScheduleTask> findByStudentIdAndDayOfWeekInAndWeekStartDate(Long studentId, List<String> daysOfWeek, java.time.LocalDate weekStartDate);
 }

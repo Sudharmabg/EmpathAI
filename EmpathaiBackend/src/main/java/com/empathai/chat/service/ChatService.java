@@ -372,8 +372,9 @@ public class ChatService {
             String today = LocalDate.now().getDayOfWeek()
                     .getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH);
             today = today.substring(0, 1).toUpperCase() + today.substring(1).toLowerCase();
+            LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
             List<ScheduleTask> tasks = scheduleTaskRepository
-                    .findByStudentIdAndDayOfWeek(studentId, today);
+                    .findByStudentIdAndDayOfWeekAndWeekStartDate(studentId, today, weekStart);
             return tasks.stream().map(t -> {
                 Map<String, Object> map = new HashMap<>();
                 map.put("title",        t.getTitle());
@@ -458,8 +459,9 @@ public class ChatService {
             List<String> weekDays = List.of(
                     "Monday", "Tuesday", "Wednesday",
                     "Thursday", "Friday", "Saturday", "Sunday");
+            LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
             return (int) scheduleTaskRepository
-                    .findByStudentIdAndDayOfWeekIn(studentId, weekDays)
+                    .findByStudentIdAndDayOfWeekInAndWeekStartDate(studentId, weekDays, weekStart)
                     .stream()
                     .filter(ScheduleTask::isCompleted)
                     .count();
@@ -474,8 +476,9 @@ public class ChatService {
             List<String> weekDays = List.of(
                     "Monday", "Tuesday", "Wednesday",
                     "Thursday", "Friday", "Saturday", "Sunday");
+            LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
             return scheduleTaskRepository
-                    .findByStudentIdAndDayOfWeekIn(studentId, weekDays)
+                    .findByStudentIdAndDayOfWeekInAndWeekStartDate(studentId, weekDays, weekStart)
                     .size();
         } catch (Exception e) {
             log.warn("Failed to fetch total tasks count: {}", e.getMessage());

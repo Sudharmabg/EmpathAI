@@ -20,6 +20,9 @@ public class ScheduleTask extends BaseEntity {
     @Column(name = "student_id", nullable = false)
     private Long studentId;
 
+    @Column(name = "week_start_date")
+    private java.time.LocalDate weekStartDate;
+
     @Column(name = "day_of_week", nullable = false, length = 10)
     private String dayOfWeek;
 

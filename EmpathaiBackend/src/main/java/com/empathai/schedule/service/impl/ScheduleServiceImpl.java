@@ -51,8 +51,10 @@ public class ScheduleServiceImpl implements IScheduleService {
         // auto-detect type silently — never exposed to frontend
         String detectedType = ruleEngine.detectType(request.getTitle());
 
+        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
         ScheduleTask task = ScheduleTask.builder()
                 .studentId(request.getStudentId())
+                .weekStartDate(weekStart)
                 .dayOfWeek(request.getDayOfWeek())
                 .title(request.getTitle())
                 .startTime(request.getStartTime())
@@ -137,7 +139,8 @@ public class ScheduleServiceImpl implements IScheduleService {
 
     @Override
     public List<TaskResponse> getTasksForDay(Long studentId, String day) {
-        return taskRepository.findByStudentIdAndDayOfWeek(studentId, day)
+        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        return taskRepository.findByStudentIdAndDayOfWeekAndWeekStartDate(studentId, day, weekStart)
                 .stream()
                 .sorted((a, b) -> a.getStartTime().compareTo(b.getStartTime()))
                 .map(t -> toResponse(t, List.of()))
@@ -150,7 +153,8 @@ public class ScheduleServiceImpl implements IScheduleService {
 
     @Override
     public Map<String, List<TaskResponse>> getWeekTasks(Long studentId) {
-        List<ScheduleTask> allTasks = taskRepository.findByStudentId(studentId);
+        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        List<ScheduleTask> allTasks = taskRepository.findByStudentIdAndWeekStartDate(studentId, weekStart);
         Map<String, List<ScheduleTask>> tasksByDay = allTasks.stream()
                 .collect(Collectors.groupingBy(ScheduleTask::getDayOfWeek));
 

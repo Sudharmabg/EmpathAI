@@ -92,19 +92,18 @@ export default function Dashboard({ user, onLogout }) {
   const { tab } = useParams()
   const navigate = useNavigate()
 
-  // Normalise: if the URL has an unknown tab, fall back to overview
   const activeTab = VALID_TABS.includes(tab) ? tab : 'overview'
-
-  // This replaces every `setActiveTab(id)` call across the whole file.
-  // Navigating to /student/:id updates the URL, which re-renders with the new tab.
   const setActiveTab = (id) => navigate(`/student/${id}`)
 
-  // ── Everything below is unchanged ────────────────────────────────────────
+  // ── State ─────────────────────────────────────────────────────────────────
   const [activeHeaderModal, setActiveHeaderModal] = useState(null)
   const [chatMessage, setChatMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [showScheduleDropdown, setShowScheduleDropdown] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
+
+  // ✅ XP state — initialized from user object returned at login
+  const [xp, setXp] = useState(user?.xp || 0)
 
   const [activeDay, setActiveDay] = useState(() => {
     const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -141,6 +140,10 @@ export default function Dashboard({ user, onLogout }) {
     try {
       const saved = await apiToggleTaskComplete(taskId)
       setTasks(prev => ({ ...prev, [day]: prev[day].map(t => t.id === taskId ? { ...t, completed: saved.completed } : t) }))
+      // ✅ Update XP if task was completed
+      if (saved.completed && saved.xpEarned > 0) {
+        setXp(prev => prev + saved.xpEarned)
+      }
     } catch (err) {
       console.error('Failed to toggle task', err)
     }
@@ -165,19 +168,21 @@ export default function Dashboard({ user, onLogout }) {
     const map = { chat: 'chatbuddy', schedule: 'schedule', tasks: 'schedule', feelings: 'questionnaire', activities: 'activities' }
     for (const [k, v] of Object.entries(map)) { if (q.includes(k)) { setActiveTab(v); return } }
   }
-useEffect(() => {
-  const tabLabel = sidebarItems.find(i => i.id === activeTab)?.name || activeTab
-  const studentId = user?.id || ''
-  const className = user?.className || ''
-  const start = Date.now()
 
-  trackTabView(tabLabel, studentId, className)
+  useEffect(() => {
+    const tabLabel = sidebarItems.find(i => i.id === activeTab)?.name || activeTab
+    const studentId = user?.id || ''
+    const className = user?.className || ''
+    const start = Date.now()
 
-  return () => {
-    const seconds = Math.round((Date.now() - start) / 1000)
-    trackTimeSpent(tabLabel, studentId, seconds)
-  }
-}, [activeTab])
+    trackTabView(tabLabel, studentId, className)
+
+    return () => {
+      const seconds = Math.round((Date.now() - start) / 1000)
+      trackTimeSpent(tabLabel, studentId, seconds)
+    }
+  }, [activeTab])
+
   return (
     <div className="min-h-screen bg-gray-50 font-lora">
 
@@ -215,10 +220,10 @@ useEffect(() => {
           {/* Right actions */}
           <div className="flex items-center space-x-5">
 
-            {/* XP */}
+            {/* ✅ XP — now dynamic */}
             <div className="flex items-center bg-yellow-400/10 border border-yellow-400/20 rounded-full px-4 py-1.5 shadow-sm">
               <BoltIcon className="w-4 h-4 text-yellow-500 mr-2" />
-              <span className="text-yellow-700 font-bold text-sm">385 XP</span>
+              <span className="text-yellow-700 font-bold text-sm">{xp} XP</span>
             </div>
 
             {/* Schedule dropdown */}
@@ -319,16 +324,17 @@ useEffect(() => {
               <div className="bg-red-50 border-2 border-red-200 rounded-2xl px-6 py-4 text-red-600 font-medium text-sm text-center">{tasksError}</div>
             ) : (
               <Schedule
-    user={user}
-    tasks={tasks}
-    setTasks={setTasks}
-    activeDay={activeDay}
-    setActiveDay={setActiveDay}
-    onOpenChatBuddy={(message) => {
-        if (message) setChatMessage(message)
-        setActiveTab('chatbuddy')
-    }}
-/>
+                user={user}
+                tasks={tasks}
+                setTasks={setTasks}
+                activeDay={activeDay}
+                setActiveDay={setActiveDay}
+                onXpEarned={(earned) => setXp(prev => prev + earned)}
+                onOpenChatBuddy={(message) => {
+                  if (message) setChatMessage(message)
+                  setActiveTab('chatbuddy')
+                }}
+              />
             )
           )}
           {activeTab === 'questionnaire' && <Questionnaire user={user} />}
@@ -346,11 +352,11 @@ useEffect(() => {
         {/* Right sidebar — overview only */}
         {activeTab === 'overview' && (
           <aside className="w-80 bg-white border-l border-gray-200 p-6">
-            <RightSidebarPanel 
-              user={user} 
-              tasks={tasks} 
-              todayDayName={todayDayName} 
-              onToggleTask={toggleTaskComplete} 
+            <RightSidebarPanel
+              user={user}
+              tasks={tasks}
+              todayDayName={todayDayName}
+              onToggleTask={toggleTaskComplete}
             />
           </aside>
         )}
@@ -358,11 +364,11 @@ useEffect(() => {
 
       {/* ── Modals ── */}
       {activeHeaderModal && (
-        <div 
+        <div
           onClick={() => setActiveHeaderModal(null)}
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         >
-          <div 
+          <div
             onClick={e => e.stopPropagation()}
             className="bg-white border-2 border-purple-200 rounded-2xl shadow-xl p-8 w-full max-w-lg relative max-h-[90vh] overflow-y-auto"
           >

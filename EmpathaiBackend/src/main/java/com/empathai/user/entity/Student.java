@@ -39,8 +39,6 @@ public class Student extends User {
     @Column(name = "date_of_birth")
     private String dateOfBirth;
 
-
-
     @Column(name = "parent_name")
     private String parentName;
 
@@ -59,6 +57,10 @@ public class Student extends User {
     /** Total time spent on the platform in seconds. */
     @Column(name = "time_spent", nullable = false, columnDefinition = "BIGINT DEFAULT 0")
     private Long timeSpent = 0L;
+
+    /** XP points earned by the student. */
+    @Column(name = "xp", nullable = false, columnDefinition = "INT DEFAULT 0")
+    private Integer xp = 0;
 
     // ── Constructor ────────────────────────────────────────────────────────
 

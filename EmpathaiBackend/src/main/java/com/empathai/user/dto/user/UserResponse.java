@@ -6,17 +6,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Full user response — used only for:
- *   - GET /api/users/{id}  (edit/detail screen)
- *   - POST /api/users       (create response)
- *   - PUT /api/users/{id}   (update response)
- *   - GET /api/users/me
- *
- * List endpoints use role-specific lean DTOs instead:
- *   - StudentSummaryResponse, SchoolAdminResponse,
- *     PsychologistResponse, ContentAdminResponse
- */
 @Data
 @Builder
 @NoArgsConstructor
@@ -47,4 +36,7 @@ public class UserResponse {
     private Integer interventionSessionCount;
     private String intervention;
     private Long timeSpent;
+
+    // ✅ XP points earned by the student
+    private Integer xp;
 }

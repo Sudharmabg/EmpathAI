@@ -43,14 +43,15 @@ public class ScheduleServiceImpl implements IScheduleService {
     public TaskResponse addTask(TaskRequest request) {
         String studentGrade = getStudentGrade(request.getStudentId());
 
-        // run all 12 rules
         RuleResult result = ruleEngine.validate(request, studentGrade);
 
-        // if any hard block error exists — reject
         if (result.hasErrors()) {
             throw new EmpathaiException(result.getErrors().get(0), "RULE_VIOLATION");
         }
 
+<<<<<<< HEAD
+        String detectedType = ruleEngine.detectType(request.getTitle());
+=======
         // auto-detect type silently if not provided, otherwise use passed type
         String detectedType = request.getDetectedType();
         if (detectedType == null || detectedType.isBlank()) {
@@ -58,6 +59,7 @@ public class ScheduleServiceImpl implements IScheduleService {
         } else {
             detectedType = detectedType.toUpperCase();
         }
+>>>>>>> 27769a253f6926e6af04d5afd95e5788956fd62f
 
         java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
         ScheduleTask task = ScheduleTask.builder()
@@ -93,7 +95,6 @@ public class ScheduleServiceImpl implements IScheduleService {
         ScheduleTask existing = taskRepository.findById(taskId)
                 .orElseThrow(() -> new EmpathaiException("Task not found", "NOT_FOUND"));
 
-        // set excludeTaskId so overlap/duplicate checks skip this task's own entry
         request.setExcludeTaskId(taskId);
 
         String studentGrade = getStudentGrade(request.getStudentId());
@@ -128,7 +129,7 @@ public class ScheduleServiceImpl implements IScheduleService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // TOGGLE COMPLETE
+    // TOGGLE COMPLETE — awards +10 XP when task is marked complete
     // ─────────────────────────────────────────────────────────────────────────
 
     @Override
@@ -136,8 +137,26 @@ public class ScheduleServiceImpl implements IScheduleService {
     public TaskResponse toggleComplete(Long taskId) {
         ScheduleTask task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new EmpathaiException("Task not found", "NOT_FOUND"));
-        task.setCompleted(!task.isCompleted());
-        return toResponse(taskRepository.save(task), List.of());
+
+        boolean nowCompleted = !task.isCompleted();
+        task.setCompleted(nowCompleted);
+        ScheduleTask saved = taskRepository.save(task);
+
+        // ── Award 10 XP when task is marked complete ──────────────────────
+        int xpEarned = 0;
+        if (nowCompleted) {
+            Student student = studentRepository.findById(task.getStudentId())
+                    .orElseThrow(() -> new EmpathaiException("Student not found", "NOT_FOUND"));
+            student.setXp(student.getXp() + 10);
+            studentRepository.save(student);
+            xpEarned = 10;
+            log.info("✅ +10 XP awarded to studentId={} for completing task '{}'",
+                    task.getStudentId(), task.getTitle());
+        }
+
+        TaskResponse response = toResponse(saved, List.of());
+        response.setXpEarned(xpEarned);
+        return response;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -193,7 +212,6 @@ public class ScheduleServiceImpl implements IScheduleService {
         ));
     }
 
-
     // ─────────────────────────────────────────────────────────────────────────
     // HELPERS
     // ─────────────────────────────────────────────────────────────────────────
@@ -201,7 +219,7 @@ public class ScheduleServiceImpl implements IScheduleService {
     private String getStudentGrade(Long studentId) {
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new EmpathaiException("Student not found", "NOT_FOUND"));
-        return student.getClassName();  // grade column removed — className holds the class info
+        return student.getClassName();
     }
 
     private TaskResponse toResponse(ScheduleTask task, List<String> warnings) {
@@ -216,8 +234,12 @@ public class ScheduleServiceImpl implements IScheduleService {
                 .completed(task.isCompleted())
                 .detectedType(task.getDetectedType())
                 .warnings(warnings)
+                .xpEarned(0)
                 .build();
     }
+<<<<<<< HEAD
+}
+=======
 
     private void saveLastRelaxActivity(Long studentId, String title) {
         try {
@@ -234,3 +256,4 @@ public class ScheduleServiceImpl implements IScheduleService {
         }
     }
 }
+>>>>>>> 27769a253f6926e6af04d5afd95e5788956fd62f

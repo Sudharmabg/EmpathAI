@@ -401,6 +401,7 @@ public class UserService {
                     .interventionSessionCount(s.getInterventionSessionCount())
                     .intervention(s.getIntervention())
                     .timeSpent(s.getTimeSpent());
+                    .xp(s.getXp());
         }
 
         return builder.build();

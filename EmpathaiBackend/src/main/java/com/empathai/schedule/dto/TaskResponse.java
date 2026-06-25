@@ -16,11 +16,9 @@ public class TaskResponse {
     private String endTime;
     private String notes;
     private boolean completed;
-
-    // ✅ ADDED: Auto-detected type from backend ("STUDY", "WELLNESS", "OTHER")
-    // This was being calculated but not sent to frontend
     private String detectedType;
-
-    // warnings from soft rules — shown on frontend but task still saved
     private List<String> warnings;
+
+    // ✅ XP earned when this task was completed (0 if unchecked or not completed)
+    private int xpEarned;
 }

@@ -1078,7 +1078,7 @@ const jsToWeekIdx     = (jsDay) => (jsDay === 0 ? 6 : jsDay - 1)
 const weekIdx         = (day)   => DAYS.indexOf(day)
 const getTodayWeekIdx = ()      => jsToWeekIdx(new Date().getDay())
 
-export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, user, onOpenChatBuddy }) {
+export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, user, onOpenChatBuddy,onXpEarned }) {
 
     const [showAddTask, setShowAddTask]               = useState(false)
     const [newTask, setNewTask]                       = useState({ startTime: '09:00', endTime: '10:00', title: '', notes: '' })

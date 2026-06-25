@@ -122,9 +122,7 @@ public class AssessmentReportService {
     }
 
     public Optional<AssessmentReportResponse> getReport(String studentId, Long groupId) {
-        return reportRepo
-                .findByStudentIdAndGroupIdAndSessionDate(studentId, groupId, LocalDate.now())
-                .map(this::toResponse);
+        return getLatestReport(studentId, groupId);
     }
 
     public List<AssessmentReportResponse> getReportsByClass(String className) {

@@ -400,7 +400,7 @@ public class UserService {
                     .loginCount(s.getLoginCount())
                     .interventionSessionCount(s.getInterventionSessionCount())
                     .intervention(s.getIntervention())
-                    .timeSpent(s.getTimeSpent());
+                    .timeSpent(s.getTimeSpent())
                     .xp(s.getXp());
         }
 

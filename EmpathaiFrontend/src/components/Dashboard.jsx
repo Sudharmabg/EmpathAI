@@ -147,17 +147,6 @@ export default function Dashboard({ user, onLogout }) {
   }, [user?.id])
 
   const toggleTaskComplete = async (day, taskId) => {
-<<<<<<< HEAD
-    try {
-      const saved = await apiToggleTaskComplete(taskId)
-      setTasks(prev => ({ ...prev, [day]: prev[day].map(t => t.id === taskId ? { ...t, completed: saved.completed } : t) }))
-      // ✅ Update XP if task was completed
-      if (saved.completed && saved.xpEarned > 0) {
-        setXp(prev => prev + saved.xpEarned)
-      }
-    } catch (err) {
-      console.error('Failed to toggle task', err)
-=======
     const task = tasks[day]?.find(t => String(t.id) === String(taskId))
     if (!task) return
 
@@ -178,11 +167,10 @@ export default function Dashboard({ user, onLogout }) {
     const currentMins = now.getHours() * 60 + now.getMinutes()
     const taskStartMins = toMins(task.startTime)
 
-    if (isFutureDay || (isToday && currentMins < taskStartMins)) {
+    if (!task.completed && (isFutureDay || (isToday && currentMins < taskStartMins))) {
       setWarningModalMessage("You cannot mark a task as completed before its scheduled start time.")
       setShowWarningModal(true)
       return
->>>>>>> 27769a253f6926e6af04d5afd95e5788956fd62f
     }
 
     const willComplete = !task.completed
@@ -197,6 +185,10 @@ export default function Dashboard({ user, onLogout }) {
         try {
           const saved = await apiToggleTaskComplete(taskId)
           setTasks(prev => ({ ...prev, [day]: prev[day].map(t => String(t.id) === String(taskId) ? { ...t, completed: saved.completed } : t) }))
+          // ✅ Update XP if task was completed
+          if (saved.completed && saved.xpEarned > 0) {
+            setXp(prev => prev + saved.xpEarned)
+          }
         } catch (err) {
           console.error('Failed to toggle task', err)
         }

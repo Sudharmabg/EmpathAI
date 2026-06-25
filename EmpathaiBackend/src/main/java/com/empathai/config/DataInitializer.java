@@ -39,13 +39,16 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         // Super Admin
-        if (!userRepository.existsByEmail(adminEmail)) {
+        User existingAdmin = userRepository.findByEmail(adminEmail).orElse(null);
+        if (existingAdmin == null) {
             SuperAdmin superAdmin = new SuperAdmin(adminEmail, passwordEncoder.encode(adminPassword), adminName);
             superAdmin.setUsername(adminEmail);
             userRepository.save(superAdmin);
             log.info("✅ Super Admin created: {}", adminEmail);
         } else {
-            log.info("ℹ️  Super Admin already exists: {}", adminEmail);
+            existingAdmin.setPassword(passwordEncoder.encode(adminPassword));
+            userRepository.save(existingAdmin);
+            log.info("✅ Super Admin password synced/reset: {}", adminEmail);
         }
 
         // Schedule: class configs and rules

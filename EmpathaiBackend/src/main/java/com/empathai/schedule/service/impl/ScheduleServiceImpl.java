@@ -49,9 +49,6 @@ public class ScheduleServiceImpl implements IScheduleService {
             throw new EmpathaiException(result.getErrors().get(0), "RULE_VIOLATION");
         }
 
-<<<<<<< HEAD
-        String detectedType = ruleEngine.detectType(request.getTitle());
-=======
         // auto-detect type silently if not provided, otherwise use passed type
         String detectedType = request.getDetectedType();
         if (detectedType == null || detectedType.isBlank()) {
@@ -59,7 +56,6 @@ public class ScheduleServiceImpl implements IScheduleService {
         } else {
             detectedType = detectedType.toUpperCase();
         }
->>>>>>> 27769a253f6926e6af04d5afd95e5788956fd62f
 
         java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
         ScheduleTask task = ScheduleTask.builder()
@@ -237,10 +233,6 @@ public class ScheduleServiceImpl implements IScheduleService {
                 .xpEarned(0)
                 .build();
     }
-<<<<<<< HEAD
-}
-=======
-
     private void saveLastRelaxActivity(Long studentId, String title) {
         try {
             StudentSchedulePreference preference = preferenceRepository.findByStudentId(studentId)
@@ -256,4 +248,3 @@ public class ScheduleServiceImpl implements IScheduleService {
         }
     }
 }
->>>>>>> 27769a253f6926e6af04d5afd95e5788956fd62f

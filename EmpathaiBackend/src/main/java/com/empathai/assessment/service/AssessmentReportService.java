@@ -33,7 +33,7 @@ public class AssessmentReportService {
     private final AnswerOptionService answerOptionService;
     private final ChromaDBService chromaDBService;
     private final AssessmentReportHistoryRepository reportHistoryRepo;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${openai.api.key:}")
@@ -51,7 +51,6 @@ public class AssessmentReportService {
                 .collect(Collectors.joining("\n"));
     }
 
-    @Transactional
     public AssessmentReportResponse generateReport(AssessmentReportRequest request) {
         LocalDate today = LocalDate.now();
 

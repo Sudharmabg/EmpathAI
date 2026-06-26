@@ -144,6 +144,11 @@ def signal_handler(signum, frame):
         logger.info("PostgreSQL connection pool closed successfully via signal handler.")
     except Exception as exc:
         logger.error("Error closing connection pool: %s", exc)
+    try:
+        from services.cache_service import close_executor
+        close_executor()
+    except Exception as exc:
+        logger.error("Error shutting down cache executor: %s", exc)
 
 try:
     signal.signal(signal.SIGINT, signal_handler)
@@ -161,3 +166,8 @@ async def shutdown_event_handler():
         logger.info("PostgreSQL connection pool closed successfully via shutdown event.")
     except Exception as exc:
         logger.error("Error closing connection pool: %s", exc)
+    try:
+        from services.cache_service import close_executor
+        close_executor()
+    except Exception as exc:
+        logger.error("Error shutting down cache executor: %s", exc)

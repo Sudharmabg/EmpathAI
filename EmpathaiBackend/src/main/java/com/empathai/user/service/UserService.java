@@ -38,7 +38,6 @@ public class UserService {
     // CREATE / UPDATE / DELETE
     // ─────────────────────────────────────────────────────────────
 
-    @Transactional
     public UserResponse createUser(UserRequest request) {
         if (request.getUsername() == null || request.getUsername().isBlank()) {
             request = UserRequest.builder()

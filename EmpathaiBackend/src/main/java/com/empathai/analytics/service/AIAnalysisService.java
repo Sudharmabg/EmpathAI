@@ -24,7 +24,7 @@ public class AIAnalysisService {
 
     private final ChromaDBService chromaDBService;
     private final AssessmentResponseRepository assessmentResponseRepository;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AnalysisResult analyzeStudentAnswers(AnalysisRequest request) {

@@ -28,7 +28,7 @@ public class AnswerOptionService {
     private final AnswerOptionRepository answerOptionRepo;
     private final AssessmentQuestionRepository questionRepo;
     private final LlmMetricsTracker metricsTracker;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     @Value("${openai.api.key:}")
     private String openaiApiKey;

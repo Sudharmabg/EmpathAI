@@ -28,6 +28,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
+import jakarta.annotation.PostConstruct;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -48,6 +49,13 @@ public class ChatService {
     private final UserRepository userRepository;
     private final WebClient.Builder webClientBuilder;
     private final FlaggedChatService flaggedChatService;
+
+    private WebClient webClient;
+
+    @PostConstruct
+    public void init() {
+        this.webClient = webClientBuilder.build();
+    }
 
     // ── Repositories for context enrichment ───────────────────────────────────
     private final ScheduleTaskRepository scheduleTaskRepository;
@@ -70,7 +78,6 @@ public class ChatService {
     // SEND MESSAGE (ChatBuddy — goes through Python LangGraph pipeline)
     // ─────────────────────────────────────────────────────────────────────────
 
-    @Transactional
     public ChatMessageResponse sendMessage(
             Long studentId,
             String message,
@@ -165,7 +172,7 @@ public class ChatService {
                 requestId = java.util.UUID.randomUUID().toString();
             }
 
-            aiResponse = webClientBuilder.build()
+            aiResponse = this.webClient
                     .post()
                     .uri(aiServiceUrl + "/chat")
                     .header("X-Request-ID", requestId)

@@ -1,5 +1,6 @@
 package com.empathai.assessment.service;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -9,12 +10,13 @@ import java.util.*;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ChromaDBService {
 
     @Value("${chromadb.url}")
     private String chromaDbUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private static final String COLLECTION = "psychologist_overviews";
 
     public List<String> getRelevantOverviews(String studentAnswersText, int topN) {

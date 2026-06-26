@@ -28,6 +28,7 @@ logger = logging.getLogger("cache_service")
 # ── Config ────────────────────────────────────────────────────────────────────
 SIMILARITY_THRESHOLD = 0.92
 _MODEL_NAME = "all-MiniLM-L6-v2"
+MAX_CACHE_SIZE = 1000
 
 # ── Internal state ────────────────────────────────────────────────────────────
 _model = None
@@ -35,6 +36,11 @@ _cache: list[dict] = []          # [{embedding, answer, mode}, ...]
 _emb_matrix: np.ndarray | None = None   # (N, D) — all embeddings stacked
 _lock = threading.Lock()
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="cache")
+
+def close_executor():
+    """Shut down the background executor pool."""
+    logger.info("Shutting down cache service ThreadPoolExecutor...")
+    _executor.shutdown(wait=False)
 
 
 # ── Model loading — runs at import time ───────────────────────────────────────
@@ -107,6 +113,8 @@ def add_to_cache(question: str, answer: str, mode: str) -> None:
     try:
         emb = _model.encode(question, normalize_embeddings=True)
         with _lock:
+            if len(_cache) >= MAX_CACHE_SIZE:
+                _cache.pop(0)  # Evict oldest (FIFO)
             _cache.append({"embedding": emb, "answer": answer, "mode": mode})
             _rebuild_matrix()
         logger.debug("Cache now has %d entries.", len(_cache))

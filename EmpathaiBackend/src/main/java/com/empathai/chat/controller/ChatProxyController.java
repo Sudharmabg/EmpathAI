@@ -9,7 +9,11 @@ import reactor.core.publisher.Mono;
 @RestController
 public class ChatProxyController {
 
-    private final WebClient webClient = WebClient.create("http://localhost:8000");
+    private final WebClient webClient;
+
+    public ChatProxyController(WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder.baseUrl("http://localhost:8000").build();
+    }
 
     @PostMapping("/api/chat/chat")
     public Mono<String> chat(

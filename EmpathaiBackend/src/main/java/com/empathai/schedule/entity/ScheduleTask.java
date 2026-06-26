@@ -5,7 +5,10 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "schedule_tasks")
+@Table(name = "schedule_tasks", indexes = {
+        @Index(name = "idx_schedule_tasks_student", columnList = "student_id"),
+        @Index(name = "idx_schedule_tasks_week", columnList = "week_start_date")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -29,11 +32,11 @@ public class ScheduleTask extends BaseEntity {
     @Column(name = "title", nullable = false)
     private String title;
 
-    @Column(name = "start_time", nullable = false, length = 5)
-    private String startTime;
+    @Column(name = "start_time", nullable = false)
+    private java.time.LocalTime startTime;
 
-    @Column(name = "end_time", nullable = false, length = 5)
-    private String endTime;
+    @Column(name = "end_time", nullable = false)
+    private java.time.LocalTime endTime;
 
     @Column(name = "detected_type", length = 20)
     private String detectedType;

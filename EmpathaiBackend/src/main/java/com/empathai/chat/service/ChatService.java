@@ -536,15 +536,14 @@ public class ChatService {
     }
 
 
-    private Double calculateSleepHours(String bedtime, String wakeTime) {
+    private Double calculateSleepHours(java.time.LocalTime bed, java.time.LocalTime wake) {
         try {
-            java.time.LocalTime bed  = java.time.LocalTime.parse(bedtime);
-            java.time.LocalTime wake = java.time.LocalTime.parse(wakeTime);
+            if (bed == null || wake == null) return null;
             long minutes = java.time.Duration.between(bed, wake).toMinutes();
             if (minutes < 0) minutes += 24 * 60; // overnight
             return Math.round((minutes / 60.0) * 10.0) / 10.0;
         } catch (Exception e) {
-            log.warn("Could not parse sleep times bedtime={} wakeTime={}", bedtime, wakeTime);
+            log.warn("Could not calculate sleep hours bedtime={} wakeTime={}", bed, wake);
             return null;
         }
     }

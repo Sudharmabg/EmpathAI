@@ -424,7 +424,7 @@ public class AssessmentReportService {
                 .bulletPoints(r.getBulletPoints())
                 .editedSummaryText(r.getEditedSummaryText())
                 .editedBy(r.getEditedBy())
-                .confirmed(r.getConfirmed() != null ? r.getConfirmed() : "N")
+                .confirmed(r.isConfirmed() ? "Y" : "N")
                 .chromaSynced(r.getChromaSynced())
                 .createdAt(r.getCreatedAt())
                 .build();
@@ -451,7 +451,7 @@ public class AssessmentReportService {
         }
 
         String changeTypeSnapshot;
-        if ("Y".equalsIgnoreCase(report.getConfirmed())) {
+        if (report.isConfirmed()) {
             changeTypeSnapshot = "CONFIRMED";
         } else if (report.getEditedSummaryText() != null) {
             changeTypeSnapshot = "HUMAN_EDITED";
@@ -488,7 +488,7 @@ public class AssessmentReportService {
         AssessmentReport report = reportRepo.findById(reportId)
                 .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("AssessmentReport not found: " + reportId));
         saveHistorySnapshot(report);
-        report.setConfirmed("Y");
+        report.setConfirmed(true);
         report.setEditedBy(confirmedBy);
         log.info("Insight confirmed for reportId={} by {}", reportId, confirmedBy);
         return toResponse(reportRepo.save(report));

@@ -44,7 +44,8 @@ public class AIAnalysisService {
         // Step 2 — Build combined answers text for ChromaDB search
         StringBuilder answersText = new StringBuilder();
         for (AssessmentResponse r : responses) {
-            answersText.append("Question: ").append(r.getQuestionText())
+            String qText = r.getQuestion() != null ? r.getQuestion().getQuestionText() : "";
+            answersText.append("Question: ").append(qText)
                     .append(" | Student answered: ").append(r.getResponseValue())
                     .append("\n");
         }

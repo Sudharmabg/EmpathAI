@@ -63,8 +63,8 @@ public class ScheduleServiceImpl implements IScheduleService {
                 .weekStartDate(weekStart)
                 .dayOfWeek(request.getDayOfWeek())
                 .title(request.getTitle())
-                .startTime(request.getStartTime())
-                .endTime(request.getEndTime())
+                .startTime(request.getStartTime() != null ? java.time.LocalTime.parse(request.getStartTime()) : null)
+                .endTime(request.getEndTime() != null ? java.time.LocalTime.parse(request.getEndTime()) : null)
                 .notes(request.getNotes())
                 .detectedType(detectedType)
                 .completed(false)
@@ -108,8 +108,8 @@ public class ScheduleServiceImpl implements IScheduleService {
         }
 
         existing.setTitle(request.getTitle());
-        existing.setStartTime(request.getStartTime());
-        existing.setEndTime(request.getEndTime());
+        existing.setStartTime(request.getStartTime() != null ? java.time.LocalTime.parse(request.getStartTime()) : null);
+        existing.setEndTime(request.getEndTime() != null ? java.time.LocalTime.parse(request.getEndTime()) : null);
         existing.setNotes(request.getNotes());
         existing.setDayOfWeek(request.getDayOfWeek());
         existing.setDetectedType(detectedType);
@@ -224,8 +224,8 @@ public class ScheduleServiceImpl implements IScheduleService {
                 .studentId(task.getStudentId())
                 .dayOfWeek(task.getDayOfWeek())
                 .title(task.getTitle())
-                .startTime(task.getStartTime())
-                .endTime(task.getEndTime())
+                .startTime(task.getStartTime() != null ? task.getStartTime().toString() : "")
+                .endTime(task.getEndTime() != null ? task.getEndTime().toString() : "")
                 .notes(task.getNotes())
                 .completed(task.isCompleted())
                 .detectedType(task.getDetectedType())

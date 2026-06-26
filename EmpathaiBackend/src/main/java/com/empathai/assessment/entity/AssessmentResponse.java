@@ -2,10 +2,14 @@ package com.empathai.assessment.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import com.empathai.user.entity.Student;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "student_responses")
+@Table(name = "student_responses", indexes = {
+        @Index(name = "idx_student_responses_student", columnList = "student_id"),
+        @Index(name = "idx_student_responses_group", columnList = "group_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -20,14 +24,16 @@ public class AssessmentResponse {
     @Column(name = "student_id")
     private Long studentId;
 
-    @Column(name = "student_name")
-    private String studentName;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_id", insertable = false, updatable = false)
+    private Student student;
 
     @Column(name = "question_id")
     private Long questionId;
 
-    @Column(name = "question_text", columnDefinition = "TEXT")
-    private String questionText;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "question_id", insertable = false, updatable = false)
+    private AssessmentQuestion question;
 
     @Column(name = "response_value")
     private String responseValue;
@@ -38,19 +44,10 @@ public class AssessmentResponse {
     @Column(name = "group_id")
     private Long groupId;
 
-    @Column(name = "group_name")
-    private String groupName;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id", insertable = false, updatable = false)
+    private AssessmentGroup group;
 
-    @Column(name = "class_name")
-    private String className;
-
-    @Column(name = "gender")
-    private String gender;
-
-    @Column(name = "age")
-    private Integer age;
-    @Column(name = "school_name")
-    private String schoolName;
     @Column(name = "submitted_at", updatable = false)
     private LocalDateTime submittedAt;
 

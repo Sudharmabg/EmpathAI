@@ -4,10 +4,14 @@ import com.empathai.user.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Entity
-@Table(name = "sleep_entries")
+@Table(name = "sleep_entries", indexes = {
+        @Index(name = "idx_sleep_student", columnList = "student_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,11 +26,13 @@ public class SleepEntry extends BaseEntity {
     @Column(name = "student_id", nullable = false)
     private Long studentId;
 
-    @Column(name = "bedtime", nullable = false, length = 10)
-    private String bedtime;
+    @Column(name = "bedtime", nullable = false)
+    @JsonFormat(pattern = "HH:mm")
+    private LocalTime bedtime;
 
-    @Column(name = "wake_time", nullable = false, length = 10)
-    private String wakeTime;
+    @Column(name = "wake_time", nullable = false)
+    @JsonFormat(pattern = "HH:mm")
+    private LocalTime wakeTime;
 
     @Column(name = "quality", nullable = false, length = 20)
     private String quality;

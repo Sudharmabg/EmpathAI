@@ -40,10 +40,11 @@ public class WebSecurityConfig {
 
         // ── CSRF: use a readable cookie so the React frontend can send the token back ──
         CookieCsrfTokenRepository csrfRepo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        csrfRepo.setCookiePath("/");
         // CookieCsrfTokenRepository sets the cookie name to XSRF-TOKEN by default.
         // The frontend must read this cookie and send its value in the X-XSRF-TOKEN header.
         CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
-        requestHandler.setCsrfRequestAttributeName(null); // deferred loading
+        requestHandler.setCsrfRequestAttributeName("_csrf");
 
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -55,12 +56,35 @@ public class WebSecurityConfig {
                         .csrfTokenRepository(csrfRepo)
                         .csrfTokenRequestHandler(requestHandler)
                         .ignoringRequestMatchers(
-                                new AntPathRequestMatcher("/api/**")
+                                // Auth endpoints (no token available yet)
+                                new AntPathRequestMatcher("/api/auth/login"),
+                                new AntPathRequestMatcher("/api/auth/set-password"),
+                                new AntPathRequestMatcher("/api/auth/validate-token"),
+                                new AntPathRequestMatcher("/api/health/ai-service"),
+                                new AntPathRequestMatcher("/metrics"),
+                                new AntPathRequestMatcher("/api/public/**"),
+                                // All REST API mutation endpoints — already protected by
+                                // HttpOnly JWT cookie + SameSite policy; CSRF adds no
+                                // extra security here but causes stale-cookie 403s.
+                                new AntPathRequestMatcher("/api/assessment/**", "POST"),
+                                new AntPathRequestMatcher("/api/assessment/**", "PUT"),
+                                new AntPathRequestMatcher("/api/assessment/**", "DELETE"),
+                                new AntPathRequestMatcher("/api/responses/**", "POST"),
+                                new AntPathRequestMatcher("/api/responses", "POST"),
+                                new AntPathRequestMatcher("/api/groups/**", "POST"),
+                                new AntPathRequestMatcher("/api/groups/**", "DELETE"),
+                                new AntPathRequestMatcher("/api/questions/**", "POST"),
+                                new AntPathRequestMatcher("/api/questions/**", "PUT"),
+                                new AntPathRequestMatcher("/api/questions/**", "DELETE"),
+                                new AntPathRequestMatcher("/api/analytics/**", "POST")
                         )
                 )
 
                 // ── Session: stay STATELESS — the HttpOnly cookie carries the JWT ──────
-                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(sm -> sm
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                        .sessionAuthenticationStrategy(new org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy())
+                )
                 
                 // ── Preserve SecurityContext across async dispatches (e.g. Mono/Flux returns) ──
                 .securityContext(context -> context.securityContextRepository(
@@ -78,13 +102,13 @@ public class WebSecurityConfig {
                         .requestMatchers("/api/health/ai-service", "/metrics").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/api/groups/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/groups/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/groups/**").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/responses").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/responses/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/analytics/analyze").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/responses").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/responses/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/analytics/analyze").authenticated()
 
-                        .requestMatchers(HttpMethod.GET, "/api/questions/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/questions/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/questions/**")
                         .hasAnyRole("SUPER_ADMIN", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/questions/**").authenticated()
@@ -95,13 +119,20 @@ public class WebSecurityConfig {
                         .hasAnyRole("SUPER_ADMIN", "SCHOOL_ADMIN")
 
                         .requestMatchers("/api/chat/**", "/api/agent/**").authenticated()
-                        .requestMatchers("/api/openai/**").permitAll()
+                        .requestMatchers("/api/openai/**").authenticated()
                         .requestMatchers("/error").permitAll()
 
                         .anyRequest().authenticated()
                 )
+                .headers(headers -> headers
+                        .frameOptions(fo -> fo.deny())
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .maxAgeInSeconds(31536000))
+                )
                 .authenticationProvider(authenticationProvider)
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(new CsrfCookieFilter(csrfRepo), org.springframework.security.web.csrf.CsrfFilter.class);
 
         return http.build();
     }
@@ -134,5 +165,35 @@ public class WebSecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    private static class CsrfCookieFilter extends org.springframework.web.filter.OncePerRequestFilter {
+        private final org.springframework.security.web.csrf.CsrfTokenRepository csrfTokenRepository;
+
+        public CsrfCookieFilter(org.springframework.security.web.csrf.CsrfTokenRepository csrfTokenRepository) {
+            this.csrfTokenRepository = csrfTokenRepository;
+        }
+
+        @Override
+        protected void doFilterInternal(jakarta.servlet.http.HttpServletRequest request,
+                                        jakarta.servlet.http.HttpServletResponse response,
+                                        jakarta.servlet.FilterChain filterChain)
+                throws jakarta.servlet.ServletException, java.io.IOException {
+            org.springframework.security.web.csrf.CsrfToken csrfToken = 
+                    (org.springframework.security.web.csrf.CsrfToken) request.getAttribute(org.springframework.security.web.csrf.CsrfToken.class.getName());
+            
+            if (csrfToken == null) {
+                csrfToken = csrfTokenRepository.loadToken(request);
+                if (csrfToken == null) {
+                    csrfToken = csrfTokenRepository.generateToken(request);
+                }
+                csrfTokenRepository.saveToken(csrfToken, request, response);
+            } else {
+                csrfToken.getToken(); // Forces token resolution and cookie generation
+                csrfTokenRepository.saveToken(csrfToken, request, response);
+            }
+            
+            filterChain.doFilter(request, response);
+        }
     }
 }

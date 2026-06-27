@@ -52,9 +52,14 @@ public class ChatService {
 
     private WebClient webClient;
 
+    @Value("${chatbot.ai-service.api-key:empathai-internal-key-2026}")
+    private String internalApiKey;
+
     @PostConstruct
     public void init() {
-        this.webClient = webClientBuilder.build();
+        this.webClient = webClientBuilder
+                .defaultHeader("X-Internal-Token", internalApiKey)
+                .build();
     }
 
     // ── Repositories for context enrichment ───────────────────────────────────

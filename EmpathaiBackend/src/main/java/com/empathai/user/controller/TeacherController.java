@@ -119,7 +119,7 @@ public class TeacherController {
     private String generateTempPassword() {
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         StringBuilder sb = new StringBuilder();
-        Random random = new Random();
+        java.security.SecureRandom random = new java.security.SecureRandom();
         for (int i = 0; i < 12; i++) sb.append(chars.charAt(random.nextInt(chars.length())));
         return sb.toString();
     }

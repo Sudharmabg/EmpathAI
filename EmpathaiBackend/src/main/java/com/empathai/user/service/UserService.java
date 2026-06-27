@@ -340,6 +340,13 @@ public class UserService {
         return mapToFullResponse(user);
     }
 
+    public UserResponse getUserByEmailOrUsername(String emailOrUsername) {
+        User user = userRepository.findByEmail(emailOrUsername)
+                .or(() -> userRepository.findByUsername(emailOrUsername))
+                .orElseThrow(() -> new EmpathaiException("User not found with identifier: " + emailOrUsername));
+        return mapToFullResponse(user);
+    }
+
     public List<UserResponse> getAllUsers() {
         return userRepository.findAll().stream()
                 .map(this::mapToFullResponse).collect(Collectors.toList());

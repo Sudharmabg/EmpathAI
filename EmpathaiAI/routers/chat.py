@@ -16,7 +16,7 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Header, status
 from fastapi.responses import StreamingResponse
 
 from graph.pipeline import pipeline
@@ -25,7 +25,16 @@ from models.schemas import ChatRequest, ChatResponse
 from services.cache_service import add_to_cache, get_cached
 from services.openai_service import stream_chat_response
 
-router = APIRouter()
+INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "empathai-internal-key-2026")
+
+async def verify_internal_token(x_internal_token: str = Header(None)):
+    if x_internal_token != INTERNAL_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing internal service token"
+        )
+
+router = APIRouter(dependencies=[Depends(verify_internal_token)])
 logger = logging.getLogger("chat_router")
 
 # Thread pool for running the blocking LangGraph pipeline without stalling
@@ -217,12 +226,52 @@ async def chat_stream(request: ChatRequest):
 @router.post("/agent")
 async def agent_chat(body: dict):
     """
-    Forwards OpenAI-format requests (with tools) directly to OpenAI.
+    Forwards validated and sanitized OpenAI-format requests (with tools) to OpenAI.
     Used by the Schedule Assistant for function calling.
     """
     try:
-        response = _openai_client.chat.completions.create(**body)
+        # Validate model
+        allowed_models = {"gpt-4o", "gpt-4o-mini"}
+        model = body.get("model", "gpt-4o-mini")
+        if model not in allowed_models:
+            raise HTTPException(status_code=400, detail=f"Model '{model}' is not allowed.")
+
+        # Validate tools
+        allowed_tools = {"add_task", "edit_task", "delete_task", "mark_task_complete"}
+        tools = body.get("tools")
+        if tools:
+            for tool in tools:
+                if not isinstance(tool, dict) or tool.get("type") != "function":
+                    raise HTTPException(status_code=400, detail="Invalid tool definition type.")
+                func = tool.get("function", {})
+                tool_name = func.get("name")
+                if tool_name not in allowed_tools:
+                    raise HTTPException(status_code=400, detail=f"Tool '{tool_name}' is not allowed.")
+
+        # Validate max_tokens
+        max_tokens = body.get("max_tokens", 1024)
+        if not isinstance(max_tokens, int) or max_tokens > 2048 or max_tokens < 1:
+            raise HTTPException(status_code=400, detail="Invalid max_tokens value.")
+
+        # Rebuild safe payload
+        safe_payload = {
+            "model": model,
+            "messages": body.get("messages", []),
+            "max_tokens": max_tokens,
+        }
+        if tools:
+            safe_payload["tools"] = tools
+        if "tool_choice" in body:
+            safe_payload["tool_choice"] = body["tool_choice"]
+        if "temperature" in body:
+            temp = body["temperature"]
+            if isinstance(temp, (int, float)) and 0.0 <= temp <= 2.0:
+                safe_payload["temperature"] = temp
+
+        response = _openai_client.chat.completions.create(**safe_payload)
         return response.model_dump()
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Error in /agent: %s", str(exc), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Agent error: {str(exc)}")

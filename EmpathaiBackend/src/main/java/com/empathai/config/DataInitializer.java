@@ -45,10 +45,6 @@ public class DataInitializer implements CommandLineRunner {
             superAdmin.setUsername(adminEmail);
             userRepository.save(superAdmin);
             log.info("✅ Super Admin created: {}", adminEmail);
-        } else {
-            existingAdmin.setPassword(passwordEncoder.encode(adminPassword));
-            userRepository.save(existingAdmin);
-            log.info("✅ Super Admin password synced/reset: {}", adminEmail);
         }
 
         log.info("✅ SuperAdmin check complete. Other static data is initialized via data.sql.");

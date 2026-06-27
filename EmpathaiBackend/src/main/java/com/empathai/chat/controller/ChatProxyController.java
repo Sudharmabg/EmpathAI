@@ -11,8 +11,13 @@ public class ChatProxyController {
 
     private final WebClient webClient;
 
-    public ChatProxyController(WebClient.Builder webClientBuilder) {
-        this.webClient = webClientBuilder.baseUrl("http://localhost:8000").build();
+    public ChatProxyController(
+            WebClient.Builder webClientBuilder,
+            @org.springframework.beans.factory.annotation.Value("${chatbot.ai-service.url:http://localhost:8000}") String aiServiceUrl,
+            @org.springframework.beans.factory.annotation.Value("${chatbot.ai-service.api-key:empathai-internal-key-2026}") String internalApiKey) {
+        this.webClient = webClientBuilder.baseUrl(aiServiceUrl)
+                .defaultHeader("X-Internal-Token", internalApiKey)
+                .build();
     }
 
     @PostMapping("/api/chat/chat")

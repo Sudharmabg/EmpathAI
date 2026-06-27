@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { fetchQuestionsByClass, createResponse } from '../../../api/Assessmentmanagement'
+import { apiRequest, apiDelete } from '../../../api/apiClient'
 import {
   ClipboardDocumentListIcon,
   ChevronRightIcon,
@@ -357,9 +358,7 @@ fetchQuestionsByClass(className)
     if (!studentId || !groupId) { setAnalysisLoading(false); return }
 
     setAnalysisLoading(true)
-    fetch(`/api/assessment/reports/student/${encodeURIComponent(studentId)}/group/${groupId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    apiRequest(`/api/assessment/reports/student/${encodeURIComponent(studentId)}/group/${groupId}`)
     .then(r => r.ok ? r.json() : null)
     .then(d => {
       if (d) {
@@ -528,18 +527,16 @@ fetchQuestionsByClass(className)
 
       if (studentId && groupId) {
         try {
-          await fetch(
-            `/api/assessment/reports/student/${encodeURIComponent(studentId)}/group/${groupId}/today`,
-            { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+          await apiDelete(
+            `/api/assessment/reports/student/${encodeURIComponent(studentId)}/group/${groupId}/today`
           )
         } catch (e) {
           console.warn('[Questionnaire] Cache clear skipped (non-fatal):', e.message)
         }
       }
 
-      const reportRes = await fetch('/api/assessment/reports/generate', {
+      const reportRes = await apiRequest('/api/assessment/reports/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           studentId,
           studentName,

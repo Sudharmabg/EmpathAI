@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, FolderPlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { apiRequest } from '../../../api/apiClient'
 import {
     fetchGroups,
     fetchQuestions,
@@ -554,10 +555,7 @@ const handleSaveQuestion = () => {
     const filteredSheet = sheetStudents.filter(s => matchesGender(s) && filterByDate(s))
 
     const fetchSummaryForStudent = (studentId, groupId) => {
-        const token = localStorage.getItem('token') || localStorage.getItem('access_token') || ''
-        fetch(`/api/assessment/reports/student/${encodeURIComponent(studentId)}/group/${groupId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-        })
+        apiRequest(`/api/assessment/reports/student/${encodeURIComponent(studentId)}/group/${groupId}`)
             .then(r => r.ok ? r.json() : null)
             .then(d => {
                 if (!d) return
@@ -782,12 +780,8 @@ const parseBulletPoints = (raw) => {
                                     const resolvedClassName = studentRow.className ||
                                         groupObj?.className || groupObj?.name || ''
 
-                                    fetch('/api/assessment/reports/generate', {
+                                    apiRequest('/api/assessment/reports/generate', {
                                         method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            Authorization: `Bearer ${token}`
-                                        },
                                         body: JSON.stringify({
                                             studentId: sid,
                                             studentName: studentRow.studentName || '',

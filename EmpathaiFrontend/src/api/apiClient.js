@@ -17,10 +17,8 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 // Spring sets a readable cookie called XSRF-TOKEN.
 // We must echo its value in the X-XSRF-TOKEN header on every non-GET request.
 function getCsrfToken() {
-  const match = document.cookie
-    .split('; ')
-    .find(row => row.startsWith('XSRF-TOKEN='));
-  return match ? decodeURIComponent(match.split('=')[1]) : null;
+  const match = document.cookie.match(/(^|;)\s*XSRF-TOKEN\s*=\s*([^;]+)/);
+  return match ? decodeURIComponent(match[2].trim()) : null;
 }
 
 // ── Core fetch wrapper ────────────────────────────────────────────────────────

@@ -177,7 +177,11 @@ public class AssessmentReportService {
 
         Map<String, String> fallback = new LinkedHashMap<>();
         fallback.put("summary", "Assessment completed. Please speak with your teacher or counsellor for detailed feedback.");
-        fallback.put("bullets", "");
+        fallback.put("bullets", 
+                "✅ Great effort on completing all sections of the assessment.\n" +
+                "✅ Helpful responses provided for understanding your current feelings.\n" +
+                "🔹 Keep practicing your daily check-ins to track your mood changes.\n" +
+                "💡 Box Breathing exercises can help calm your mind when feeling overwhelmed.");
 
         if (openaiApiKey == null || openaiApiKey.isBlank()) {
             log.warn("OPENAI_API_KEY not set — returning fallback report");

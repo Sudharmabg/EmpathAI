@@ -63,8 +63,16 @@ export function getSchools() {
     return apiGet('/api/schools');
 }
 
+export function getSchoolById(id) {
+    return apiGet('/api/schools/' + id);
+}
+
 export function createSchool(data) {
     return apiPost('/api/schools', data);
+}
+
+export function updateSchool(id, data) {
+    return apiPut('/api/schools/' + id, data);
 }
 
 export function deleteSchool(id) {

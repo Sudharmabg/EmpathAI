@@ -18,6 +18,9 @@ public class SchoolAdmin extends User {
     @Column(name = "school_id")
     private Long schoolId;
 
+    @Column(name = "phone_number")
+    private String phoneNumber;
+
     public SchoolAdmin(String email, String password, String name) {
         super(email, password, name, UserRole.SCHOOL_ADMIN);
     }

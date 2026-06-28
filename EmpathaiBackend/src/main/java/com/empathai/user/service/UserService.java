@@ -102,6 +102,7 @@ public class UserService {
                         passwordProvided ? request.getPassword() : UUID.randomUUID().toString());
                 SchoolAdmin sa = new SchoolAdmin(request.getEmail(), encodedPassword, request.getName());
                 sa.setSchoolId(schoolId);
+                if (request.getPhoneNumber() != null) sa.setPhoneNumber(request.getPhoneNumber());
                 user = sa;
             }
 
@@ -173,6 +174,7 @@ public class UserService {
             if (request.getPhoneNumber() != null) ca.setPhoneNumber(request.getPhoneNumber());
         } else if (user instanceof SchoolAdmin sa) {
             if (schoolId != null) sa.setSchoolId(schoolId);
+            if (request.getPhoneNumber() != null) sa.setPhoneNumber(request.getPhoneNumber());
         } else if (user instanceof Teacher t) {
             if (request.getPhoneNumber() != null) t.setPhoneNumber(request.getPhoneNumber());
             if (schoolId != null) t.setSchoolId(schoolId);
@@ -286,6 +288,7 @@ public class UserService {
                             .username(sa.getUsername()).active(true)
                             .schoolId(sa.getSchoolId())
                             .school(sa.getSchoolId() != null ? schoolNameById.get(sa.getSchoolId()) : null)
+                            .phoneNumber(sa.getPhoneNumber())
                             .build();
                 }).collect(Collectors.toList());
 
@@ -381,10 +384,13 @@ public class UserService {
                 .username(user.getUsername()).role(user.getRole())
                 .active(true);
 
-        if (user instanceof SchoolAdmin sa && sa.getSchoolId() != null) {
-            builder.schoolId(sa.getSchoolId());
-            schoolRepository.findById(sa.getSchoolId())
-                    .ifPresent(s -> builder.school(s.getName()));
+        if (user instanceof SchoolAdmin sa) {
+            if (sa.getSchoolId() != null) {
+                builder.schoolId(sa.getSchoolId());
+                schoolRepository.findById(sa.getSchoolId())
+                        .ifPresent(s -> builder.school(s.getName()));
+            }
+            builder.phoneNumber(sa.getPhoneNumber());
         } else if (user instanceof Psychologist p) {
             builder.phoneNumber(p.getPhoneNumber());
         } else if (user instanceof ContentAdmin ca) {

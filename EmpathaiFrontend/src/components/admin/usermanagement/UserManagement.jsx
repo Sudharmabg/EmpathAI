@@ -10,7 +10,7 @@ import {
 import {
     getStudents, getSchoolAdmins, getPsychologists, getContentAdmins,
     createUser, updateUser, deleteUser, resetPassword,
-    getSchools, createSchool, deleteSchool, getUserById,
+    getSchools, getSchoolById, createSchool, updateSchool, deleteSchool, getUserById,
     getClassesBySchool, getStudentsByClass, getStudentDetail
 } from '../../../api/usermanagementapi.js'
 
@@ -103,10 +103,10 @@ export default function UserManagement({ user }) {
         { id: 'psychologist',  label: 'Psychologists' },
         { id: 'content_admin', label: 'Content Admins' },
         { id: 'schools',       label: 'Schools' },
-        { id: 'teacher',       label: 'Teachers' },
+        // { id: 'teacher',       label: 'Teachers' },
     ].filter(r => {
         if (user?.role === 'SUPER_ADMIN') return true
-        if (user?.role === 'SCHOOL_ADMIN') return r.id === 'student' || r.id === 'teacher'
+        if (user?.role === 'SCHOOL_ADMIN') return r.id === 'student' // || r.id === 'teacher'
         return false
     })
 
@@ -160,7 +160,10 @@ export default function UserManagement({ user }) {
         setApiError(null)
         try {
             const res = await getSchools()
-            const list = res || []
+            let list = res || []
+            if (user?.role === 'SCHOOL_ADMIN') {
+                list = list.filter(s => s.id === user.schoolId || s.name === user.school)
+            }
             setSchoolsData(list)
             schoolsForFormRef.current = list
         } catch (err) {
@@ -230,9 +233,14 @@ export default function UserManagement({ user }) {
         setUsers([])
         setClassesData([])
         setStudentsData([])
-        if (activeTab === 'student' || activeTab === 'schools') loadSchools()
-        else if (activeTab === 'teacher') { }
-        else loadNonStudentTab()
+
+        if (activeTab === 'student' || activeTab === 'schools' || activeTab === 'school_admin') {
+            loadSchools()
+        }
+        
+        if (activeTab !== 'teacher' && activeTab !== 'student' && activeTab !== 'schools') {
+            loadNonStudentTab()
+        }
     }, [activeTab, loadSchools, loadNonStudentTab])
 
     useEffect(() => {
@@ -246,6 +254,13 @@ export default function UserManagement({ user }) {
             loadClasses(selectedSchool.id || selectedSchool)
         }
     }, [selectedSchool, activeTab, loadClasses])
+
+    // Auto-select school for SCHOOL_ADMIN to skip the school grid
+    useEffect(() => {
+        if (activeTab === 'student' && user?.role === 'SCHOOL_ADMIN' && schoolsData.length === 1 && !selectedSchool) {
+            setSelectedSchool(schoolsData[0])
+        }
+    }, [schoolsData, activeTab, user, selectedSchool])
 
     useEffect(() => {
         if (selectedSchool && selectedClass && activeTab === 'student')
@@ -291,9 +306,13 @@ export default function UserManagement({ user }) {
             let full = item
             if (item.id) {
                 try {
-                    full = await getUserById(item.id)
+                    if (activeTab === 'schools') {
+                        full = await getSchoolById(item.id)
+                    } else {
+                        full = await getUserById(item.id)
+                    }
                 } catch (e) {
-                    console.error('Failed to fetch full user', e)
+                    console.error('Failed to fetch full details', e)
                 }
             }
             setEditingUser(full)
@@ -307,7 +326,7 @@ export default function UserManagement({ user }) {
                 school: full.school || '',
                 parentName: full.parentName || '',
                 parentPhone: full.parentPhone || '',
-                phoneNumber: full.phoneNumber || '',
+                phoneNumber: activeTab === 'schools' ? (full.contactNumber || full.phoneNumber || '') : (full.phoneNumber || ''),
                 dateOfBirth: full.dateOfBirth || '',
                 gender: full.gender || '',
                 contactName: full.contactName || '',
@@ -368,12 +387,21 @@ export default function UserManagement({ user }) {
         setSaving(true)
         try {
             if (activeTab === 'schools') {
-                await createSchool({
-                    name: formData.name,
-                    contactNumber: formData.phoneNumber,
-                    contactName: formData.contactName,
-                    email: formData.email,
-                })
+                if (editingUser) {
+                    await updateSchool(editingUser.id, {
+                        name: formData.name,
+                        contactNumber: formData.phoneNumber,
+                        contactName: formData.contactName,
+                        email: formData.email,
+                    })
+                } else {
+                    await createSchool({
+                        name: formData.name,
+                        contactNumber: formData.phoneNumber,
+                        contactName: formData.contactName,
+                        email: formData.email,
+                    })
+                }
             } else {
                 const payload = {
                     name: formData.name,
@@ -555,7 +583,7 @@ export default function UserManagement({ user }) {
                 <>
                     <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div className="flex items-center gap-3">
-                            {(selectedSchool || selectedClass) && activeTab === 'student' && (
+                            {(selectedSchool || selectedClass) && activeTab === 'student' && (user?.role !== 'SCHOOL_ADMIN' || selectedClass) && (
                                 <button onClick={handleBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                                     <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
                                 </button>
@@ -700,7 +728,7 @@ export default function UserManagement({ user }) {
                                                             <tr className="bg-gray-50">
                                                                 <td colSpan={5} className="px-8 py-4">
                                                                     {expandedUserData[u.id] ? (
-                                                                        <div className="grid grid-cols-5 gap-4">
+                                                                        <div className="grid grid-cols-4 gap-4">
                                                                             <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
                                                                                 <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Gender</p>
                                                                                 <p className="text-sm font-semibold text-gray-800">{expandedUserData[u.id].gender || '—'}</p>
@@ -716,10 +744,6 @@ export default function UserManagement({ user }) {
                                                                             <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
                                                                                 <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Intervention</p>
                                                                                 <p className="text-sm font-semibold text-gray-800">{expandedUserData[u.id].interventionSessionCount ?? 0}</p>
-                                                                            </div>
-                                                                            <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-                                                                                <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-1">Time Spent</p>
-                                                                                <p className="text-sm font-semibold text-gray-800">{formatTimeSpent(expandedUserData[u.id].timeSpent)}</p>
                                                                             </div>
                                                                         </div>
                                                                     ) : (
@@ -785,6 +809,9 @@ export default function UserManagement({ user }) {
                                         <thead className="bg-gray-50">
                                             <tr>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                                {activeTab === 'school_admin' && (
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">School Name</th>
+                                                )}
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                                                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                                             </tr>
@@ -792,7 +819,20 @@ export default function UserManagement({ user }) {
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {filteredUsers.map(u => (
                                                 <tr key={u.id} className="hover:bg-gray-50">
-                                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">{u.name}</td>
+                                                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                                                        {u.name}
+                                                    </td>
+                                                    {activeTab === 'school_admin' && (
+                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                            {u.school ? (
+                                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                                    {u.school}
+                                                                </span>
+                                                            ) : (
+                                                                '—'
+                                                            )}
+                                                        </td>
+                                                    )}
                                                     <td className="px-6 py-4 text-sm text-gray-500">{u.email}</td>
                                                     <td className="px-6 py-4 text-sm text-center">
                                                         <div className="flex items-center justify-center gap-3">

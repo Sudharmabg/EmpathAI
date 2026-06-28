@@ -10,6 +10,8 @@ import com.empathai.user.entity.Student;
 import com.empathai.user.exception.EmpathaiException;
 import com.empathai.user.repository.SchoolRepository;
 import com.empathai.user.repository.StudentRepository;
+import com.empathai.user.repository.UserRepository;
+import com.empathai.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,34 @@ public class SchoolService {
 
     private final SchoolRepository schoolRepository;
     private final StudentRepository studentRepository;
+    private final UserRepository userRepository;
+
+    private User getCurrentUser() {
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !auth.getName().equals("anonymousUser")) {
+            return userRepository.findByUsername(auth.getName())
+                    .or(() -> userRepository.findByEmail(auth.getName()))
+                    .orElse(null);
+        }
+        return null;
+    }
+
+    private void validateSchoolAccess(Long requestedSchoolId) {
+        User user = getCurrentUser();
+        if (user instanceof com.empathai.user.entity.SchoolAdmin sa) {
+            if (sa.getSchoolId() == null || !sa.getSchoolId().equals(requestedSchoolId)) {
+                throw new EmpathaiException("Access denied: You can only access data for your assigned school", "ACCESS_DENIED");
+            }
+        } else if (user instanceof com.empathai.user.entity.Teacher t) {
+            if (t.getSchoolId() == null || !t.getSchoolId().equals(requestedSchoolId)) {
+                throw new EmpathaiException("Access denied: You can only access data for your assigned school", "ACCESS_DENIED");
+            }
+        } else if (user instanceof com.empathai.user.entity.Student s) {
+            if (s.getSchoolId() == null || !s.getSchoolId().equals(requestedSchoolId)) {
+                throw new EmpathaiException("Access denied: You can only access data for your assigned school", "ACCESS_DENIED");
+            }
+        }
+    }
 
     @Transactional
     public SchoolResponse createSchool(SchoolRequest request) {
@@ -42,7 +72,14 @@ public class SchoolService {
     }
 
     public List<SchoolSummaryResponse> getAllSchoolSummaries() {
+        User user = getCurrentUser();
         return schoolRepository.findAll().stream()
+                .filter(school -> {
+                    if (user instanceof com.empathai.user.entity.SchoolAdmin sa) return school.getId().equals(sa.getSchoolId());
+                    if (user instanceof com.empathai.user.entity.Teacher t) return school.getId().equals(t.getSchoolId());
+                    if (user instanceof com.empathai.user.entity.Student s) return school.getId().equals(s.getSchoolId());
+                    return true;
+                })
                 .map(school -> SchoolSummaryResponse.builder()
                         .id(school.getId())
                         .name(school.getName())
@@ -52,6 +89,7 @@ public class SchoolService {
     }
 
     public List<ClassSummaryResponse> getClassesBySchool(Long schoolId) {
+        validateSchoolAccess(schoolId);
         schoolRepository.findById(schoolId)
                 .orElseThrow(() -> new EmpathaiException("School not found with id: " + schoolId));
 
@@ -71,6 +109,7 @@ public class SchoolService {
     }
 
     public List<StudentDetailResponse> getStudentsBySchoolAndClass(Long schoolId, String className) {
+        validateSchoolAccess(schoolId);
         String schoolName = schoolRepository.findById(schoolId)
                 .map(School::getName)
                 .orElseThrow(() -> new EmpathaiException("School not found with id: " + schoolId));
@@ -99,6 +138,7 @@ public class SchoolService {
                 .collect(Collectors.toList());
     }
     public SchoolResponse getSchoolById(Long id) {
+        validateSchoolAccess(id);
         School school = schoolRepository.findById(id)
                 .orElseThrow(() -> new EmpathaiException("School not found with id: " + id));
         return mapToFullResponse(school);
@@ -106,6 +146,7 @@ public class SchoolService {
 
     @Transactional
     public SchoolResponse updateSchool(Long id, SchoolRequest request) {
+        validateSchoolAccess(id);
         School school = schoolRepository.findById(id)
                 .orElseThrow(() -> new EmpathaiException("School not found with id: " + id));
 
@@ -128,6 +169,7 @@ public class SchoolService {
 
     @Transactional
     public void deleteSchool(Long id) {
+        validateSchoolAccess(id);
         if (!schoolRepository.existsById(id)) {
             throw new EmpathaiException("School not found");
         }

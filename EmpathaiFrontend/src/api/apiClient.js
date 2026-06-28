@@ -52,6 +52,26 @@ export async function apiRequest(path, options = {}) {
     );
   }
 
+  // ── CSRF Auto-Retry ──────────────────────────────────────────────────────────
+  // If a mutating request fails with 403, the backend likely rejected an old/missing CSRF token
+  // but it also attached a new XSRF-TOKEN cookie to the 403 response.
+  if (response.status === 403 && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const newCsrf = getCsrfToken();
+    if (newCsrf && newCsrf !== headers['X-XSRF-TOKEN']) {
+      // Retry exactly once with the new token
+      headers['X-XSRF-TOKEN'] = newCsrf;
+      try {
+        response = await fetch(`${BASE_URL}${path}`, {
+          ...options,
+          headers,
+          credentials: 'include',
+        });
+      } catch (networkErr) {
+        // Let it fall through
+      }
+    }
+  }
+
   // Vite proxy returns 503 when the backend is down
   if (response.status === 503) {
     throw new Error(

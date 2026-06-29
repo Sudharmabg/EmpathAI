@@ -40,7 +40,7 @@ export default function AssessmentManagement() {
 
     const [studentResponses, setStudentResponses] = useState([])
     const [selectedResponse, setSelectedResponse] = useState(null)
-    const [showResponseSheet, setShowResponseSheet] = useState(false)
+    const [activeSubTab, setActiveSubTab] = useState('questions') // 'questions' or 'responses'
     const [isResponseModalOpen, setIsResponseModalOpen] = useState(false)
     const [selectedGroup, setSelectedGroup] = useState(null)
     const [expandedQuestion, setExpandedQuestion] = useState(null)
@@ -90,8 +90,8 @@ const showToast = (type, message) => {
     const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false)
     const lastFetchedAtRef = useRef(0)
 
-    const showResponseSheetRef = useRef(showResponseSheet)
-    useEffect(() => { showResponseSheetRef.current = showResponseSheet }, [showResponseSheet])
+    const activeSubTabRef = useRef(activeSubTab)
+    useEffect(() => { activeSubTabRef.current = activeSubTab }, [activeSubTab])
 
     const selectedGroupRef = useRef(selectedGroup)
     useEffect(() => { selectedGroupRef.current = selectedGroup }, [selectedGroup])
@@ -161,8 +161,8 @@ const showToast = (type, message) => {
                 setIsQuestionModalOpen(false)
             } else if (isGroupModalOpen) {
                 setIsGroupModalOpen(false)
-            } else if (showResponseSheet) {
-                setShowResponseSheet(false)
+            } else if (activeSubTab === 'responses') {
+                setActiveSubTab('questions')
             } else if (insightModal.open) {
                 setInsightModal({ open: false, data: null, parsed: null, studentName: '' })
             } else if (toast) {
@@ -172,7 +172,7 @@ const showToast = (type, message) => {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-}, [isQuestionModalOpen, isGroupModalOpen, showResponseSheet, insightModal, toast])
+}, [isQuestionModalOpen, isGroupModalOpen, activeSubTab, insightModal, toast])
 
     const loadAnalytics = (filter, groupId) => {
         if (groupId) {
@@ -507,7 +507,7 @@ const handleSaveQuestion = () => {
                 const currentGroups = groupsRef.current
                 const currentGroupObj2 = currentGroups.find(g => g.id === selectedGroupRef.current)
                 const currentGroupName = currentGroupObj2?.className || currentGroupObj2?.name || ''
-                if (showResponseSheetRef.current && currentGroupName) {
+                if (activeSubTabRef.current === 'responses' && currentGroupName) {
                     fetchResponseSheet(currentGroupName)
                         .then(data => setResponseSheet(Array.isArray(data) ? data : data?.content || data || []))
                         .catch(err => console.error('Sheet refresh error:', err))
@@ -696,7 +696,7 @@ const parseBulletPoints = (raw) => {
                                 onClick={() => {
                                     setSelectedGroup(group.id)
                                     setExpandedQuestion(null)
-                                    setShowResponseSheet(false)
+                                    setActiveSubTab('questions')
                                     setResponseSheet([])
                                     setFilterGender('')
                                     setDateFilter('ALL')
@@ -731,16 +731,25 @@ const parseBulletPoints = (raw) => {
                 </div>
             </div>
 
-            {/* Questions Section */}
+            {/* Sub-tabs for the selected group */}
             {selectedGroup && !isStudentResponsesSelected && (
-                <div>
-                    <div className="flex items-center justify-between mb-6 pb-3 border-b border-gray-200">
-                        <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                            Questions in {groups.find(g => g.id === selectedGroup)?.name}
+                <div className="border-b border-gray-200 mb-6 mt-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-lg font-semibold text-gray-900">
+                            {groups.find(g => g.id === selectedGroup)?.name}
                         </h4>
+                    </div>
+                    <nav className="-mb-px flex space-x-8 overflow-x-auto">
+                        <button
+                            onClick={() => setActiveSubTab('questions')}
+                            className={'whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ' + (activeSubTab === 'questions' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300')}
+                        >
+                            Questions
+                        </button>
                         <button
                             onClick={async () => {
-                                setShowResponseSheet(true)
+                                if (activeSubTab === 'responses') return;
+                                setActiveSubTab('responses')
                                 setResponseSheet([])
                                 setLlmSummaries({})
                                 setFilterGender('')
@@ -816,12 +825,17 @@ const parseBulletPoints = (raw) => {
 
                                 loadAnalytics(selectedFilter, selectedGroup)
                             }}
-                            className="flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700"
+                            className={'whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm transition-colors ' + (activeSubTab === 'responses' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300')}
                         >
-                            View Responses
+                            Responses
                         </button>
-                    </div>
+                    </nav>
+                </div>
+            )}
 
+            {/* Questions Section */}
+            {selectedGroup && !isStudentResponsesSelected && activeSubTab === 'questions' && (
+                <div>
                     {/* Search Bar */}
                     <div className="mb-4">
                         <input
@@ -1091,18 +1105,12 @@ const parseBulletPoints = (raw) => {
             )}
 
             {/* ── Response Sheet ──────────────────────────────────────────────────────── */}
-            {showResponseSheet && (
+            {activeSubTab === 'responses' && selectedGroup && (
                 <div className="mt-8 bg-white border border-gray-200 rounded-lg shadow-sm p-4">
                     <div className="flex justify-between items-center mb-4">
                         <h4 className="text-sm font-semibold text-gray-700 uppercase">
                             Student Responses — {groups.find(g => g.id === selectedGroup)?.name || selectedGroup}
                         </h4>
-                        <button
-                            onClick={() => setShowResponseSheet(false)}
-                            className="flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700"
-                        >
-                            ✕ Close
-                        </button>
                     </div>
 
                     {/* Date filter */}
@@ -1143,102 +1151,97 @@ const parseBulletPoints = (raw) => {
                     ) : filteredSheet.length === 0 ? (
                         <p className="text-center text-gray-500 py-8">No {filterGender} students found.</p>
                     ) : (
-                        <div className="overflow-x-auto mt-4">
-                            <table className="min-w-full border border-gray-300 text-gray-800">
-                                <thead className="bg-gray-200 text-sm font-semibold">
-                                    <tr>
-                                        <th className="border px-4 py-2 text-left">Field</th>
-                                        {filteredSheet.map((student, index) => (
-                                            // FIX: show student name in header instead of generic "R1, R2..."
-                                            <th key={student.studentId || index} className="border px-4 py-2 text-center">
-                                                {student.studentName || `Student ${index + 1}`}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="text-sm">
-                                    <tr>
-                                        <td className="border px-4 py-2 font-medium">Class</td>
-                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2 text-center">{student.className || '-'}</td>)}
-                                    </tr>
-                                    <tr>
-                                        <td className="border px-4 py-2 font-medium">Gender</td>
-                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2 text-center">{student.gender || '-'}</td>)}
-                                    </tr>
-                                    <tr>
-                                        <td className="border px-4 py-2 font-medium">Age</td>
-                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2 text-center">{student.age || '-'}</td>)}
-                                    </tr>
-                                    <tr>
-                                        <td className="border px-4 py-2 font-medium">School</td>
-                                        {filteredSheet.map((student, i) => <td key={i} className="border px-4 py-2 text-center">{student.schoolName || '-'}</td>)}
-                                    </tr>
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mt-4">
+                            {filteredSheet.map((student, index) => {
+                                const data = llmSummaries[student.studentId]
+                                const parsed = parseBulletPoints(data?.bulletPoints)
+                                const hasContent = !!data?.bulletPoints
+                                
+                                const studentAnswers = questions
+                                    .filter(q => String(q.groupMapId) === String(selectedGroup))
+                                    .map((question, qIndex) => {
+                                        const questionText = question.questions || question.question || question.text || ''
+                                        const ans = responseSheet.find(
+                                            r => r.studentId === student.studentId &&
+                                                (r.questionId === question.id ||
+                                                    r.questionText?.toLowerCase().trim() === questionText.toLowerCase().trim())
+                                        )?.responseValue || '-'
+                                        return { qIndex, questionText, ans }
+                                    })
 
-                                    {/* Question rows */}
-                                    {questions
-                                        .filter(q => String(q.groupMapId) === String(selectedGroup))
-                                        .map((question, qIndex) => (
-                                            <tr key={question.id}>
-                                                <td className="border px-4 py-2 font-medium">
-                                                    Q{qIndex + 1}. {question.questions || question.question || question.text || ''}
-                                                </td>
-                                                {filteredSheet.map((student, i) => {
-                                                    const questionText = question.questions || question.question || question.text || ''
-                                                    const ans = responseSheet.find(
-                                                        r => r.studentId === student.studentId &&
-                                                            (r.questionId === question.id ||
-                                                                r.questionText?.toLowerCase().trim() === questionText.toLowerCase().trim())
-                                                    )?.responseValue || '-'
-                                                    return <td key={i} className="border px-4 py-2 text-center">{ans}</td>
-                                                })}
-                                            </tr>
-                                        ))}
-
-                                    {/* AI Insights */}
-                                    <tr className="bg-indigo-50">
-                                        <td className="border px-4 py-2 font-semibold text-indigo-800">AI Insights</td>
-                                        {filteredSheet.map((student, i) => {
-                                            const data = llmSummaries[student.studentId]
-                                            const parsed = parseBulletPoints(data?.bulletPoints)
-                                            const hasContent = data?.bulletPoints
-                                            return (
-                                                <td key={i} className="border px-4 py-3 text-xs align-top max-w-xs">
-                                                    {hasContent ? (
-                                                        <div>
-                                                            {data?.summaryText && (
-                                                                <p className="text-gray-600 text-xs italic mb-1 line-clamp-2">{data.summaryText}</p>
-                                                            )}
-                                                            <div className="space-y-1 mb-2">
-                                                               {parsed.strengths.length > 0 && (
-                                                                    <p className="text-green-700 text-xs">{stripEmoji(parsed.strengths[0])}</p>
-                                                                )}
-                                                                 {parsed.improvements.length > 0 && (
-                                                                    <p className="text-blue-700 text-xs">{stripEmoji(parsed.improvements[0])}</p>
-                                                                )}
-                                                                {parsed.tips.length > 0 && (
-                                                                    <p className="text-amber-700 text-xs">{stripEmoji(parsed.tips[0])}</p>
-                                                                )}
-
-                                                                {parsed.plain.length > 0 && parsed.strengths.length === 0 && parsed.improvements.length === 0 && (
-                                                                    <p className="text-purple-700 text-xs">{parsed.plain[0]}</p>
-                                                                )}
-                                                            </div>
-                                                            <button
-    onClick={() => setInsightModal({ open: true, data, parsed, studentName: student.studentName, studentId: student.studentId })}
-    className="text-xs px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full transition-all"
->
-                                                                View Full ✨
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-gray-400 italic">No insights yet</span>
+                                return (
+                                    <div key={student.studentId || index} className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 overflow-hidden flex flex-col">
+                                        <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex justify-between items-start">
+                                            <div>
+                                                <h3 className="font-bold text-gray-900 text-lg">
+                                                    {student.studentName || `Student ${index + 1}`}
+                                                </h3>
+                                                <div className="flex flex-wrap gap-2 mt-2">
+                                                    {student.className && <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 text-xs rounded-full font-medium">{student.className}</span>}
+                                                    {student.gender && <span className="px-2.5 py-0.5 bg-pink-50 text-pink-700 border border-pink-200 text-xs rounded-full font-medium">{student.gender}</span>}
+                                                    {student.age && <span className="px-2.5 py-0.5 bg-green-50 text-green-700 border border-green-200 text-xs rounded-full font-medium">{student.age} yrs</span>}
+                                                </div>
+                                            </div>
+                                            {hasContent && (
+                                                <button
+                                                    onClick={() => setInsightModal({ open: true, data, parsed, studentName: student.studentName, studentId: student.studentId })}
+                                                    className="shrink-0 flex items-center justify-center w-10 h-10 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-full transition-colors shadow-sm"
+                                                    title="View Full AI Insights"
+                                                >
+                                                    <span className="text-lg">✨</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                        
+                                        <div className="p-5 flex-1 bg-white">
+                                            {hasContent ? (
+                                                <div>
+                                                    <h4 className="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-3">AI Insights</h4>
+                                                    {data?.summaryText && (
+                                                        <p className="text-gray-600 text-sm italic mb-3 line-clamp-2 leading-relaxed">{data.summaryText}</p>
                                                     )}
-                                                </td>
-                                            )
-                                        })}
-                                    </tr>
-                                </tbody>
-                            </table>
+                                                    <div className="space-y-2">
+                                                        {parsed.strengths.length > 0 && (
+                                                            <div className="flex items-start gap-2">
+                                                                <span className="text-green-600 mt-0.5">✅</span>
+                                                                <p className="text-green-800 text-xs line-clamp-2 leading-tight">{stripEmoji(parsed.strengths[0])}</p>
+                                                            </div>
+                                                        )}
+                                                        {parsed.improvements.length > 0 && (
+                                                            <div className="flex items-start gap-2">
+                                                                <span className="text-blue-600 mt-0.5">🔹</span>
+                                                                <p className="text-blue-800 text-xs line-clamp-2 leading-tight">{stripEmoji(parsed.improvements[0])}</p>
+                                                            </div>
+                                                        )}
+                                                        {parsed.tips.length > 0 && parsed.strengths.length === 0 && parsed.improvements.length === 0 && (
+                                                            <div className="flex items-start gap-2">
+                                                                <span className="text-amber-600 mt-0.5">💡</span>
+                                                                <p className="text-amber-800 text-xs line-clamp-2 leading-tight">{stripEmoji(parsed.tips[0])}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="h-full flex items-center justify-center text-gray-400 text-sm italic py-4">
+                                                    No insights generated yet
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="border-t border-gray-100 bg-gray-50 p-5">
+                                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Survey Answers</h4>
+                                            <div className="space-y-3 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                                                {studentAnswers.map((item, idx) => (
+                                                    <div key={idx} className="flex flex-col bg-white p-2 rounded border border-gray-100">
+                                                        <span className="text-xs font-medium text-gray-600 mb-1">Q{item.qIndex + 1}. {item.questionText}</span>
+                                                        <span className="text-sm text-purple-700 font-semibold">{item.ans}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
                         </div>
                     )}
                 </div>

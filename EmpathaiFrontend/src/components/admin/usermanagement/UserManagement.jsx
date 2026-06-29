@@ -679,7 +679,7 @@ export default function UserManagement({ user }) {
                                                         <BuildingLibraryIcon className="w-6 h-6 text-purple-600" />
                                                     </div>
                                                     <div className="bg-purple-50 text-purple-700 text-xs font-bold px-3 py-1 rounded-full">
-                                                        {school.studentCount || 0} Students
+                                                        {school.studentCount || 0} {Number(school.studentCount || 0) === 1 ? 'Student' : 'Students'}
                                                     </div>
                                                 </div>
                                                 <h3 className="text-lg font-bold text-gray-900">{school.name}</h3>
@@ -702,7 +702,7 @@ export default function UserManagement({ user }) {
                                                 <AcademicCapIcon className="w-8 h-8 text-purple-600 mx-auto mb-2" />
                                                 <h3 className="text-xl font-bold">{formatClassName(cls.className)}</h3>
                                                 <div className="text-xs text-purple-800 bg-purple-100 px-2 py-1 rounded-full inline-block mt-1">
-                                                    {cls.studentCount} Students
+                                                    {cls.studentCount} {Number(cls.studentCount) === 1 ? 'Student' : 'Students'}
                                                 </div>
                                             </div>
                                         ))}

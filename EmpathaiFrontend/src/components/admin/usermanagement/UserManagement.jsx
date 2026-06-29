@@ -140,6 +140,7 @@ export default function UserManagement({ user }) {
     const [schoolsData, setSchoolsData] = useState([])
     const [classesData, setClassesData] = useState([])
     const [studentsData, setStudentsData] = useState([])
+    const [studentSearchResults, setStudentSearchResults] = useState(null)
     const [users, setUsers] = useState([])
     const [expandedRow, setExpandedRow] = useState(null)
     const [expandedUserData, setExpandedUserData] = useState({})
@@ -201,6 +202,29 @@ export default function UserManagement({ user }) {
         }
     }, [])
 
+    const loadStudentSearch = useCallback(async () => {
+        if (!searchTerm) {
+            setStudentSearchResults(null)
+            return
+        }
+        setLoading(true)
+        setApiError(null)
+        setExpandedRow(null)
+        setExpandedUserData({})
+        try {
+            let schoolParam = undefined
+            if (user?.role === 'SCHOOL_ADMIN') {
+                schoolParam = user?.school
+            }
+            const res = await getStudents({ search: searchTerm, school: schoolParam, size: 200 })
+            setStudentSearchResults(res?.content || res || [])
+        } catch (err) {
+            setApiError(err.message || 'Failed to search students')
+        } finally {
+            setLoading(false)
+        }
+    }, [searchTerm, user])
+
     const loadNonStudentTab = useCallback(async () => {
         if (activeTab === 'teacher' || activeTab === 'schools') return
         setLoading(true)
@@ -233,6 +257,7 @@ export default function UserManagement({ user }) {
         setUsers([])
         setClassesData([])
         setStudentsData([])
+        setStudentSearchResults(null)
 
         if (activeTab === 'student' || activeTab === 'schools' || activeTab === 'school_admin') {
             loadSchools()
@@ -244,8 +269,16 @@ export default function UserManagement({ user }) {
     }, [activeTab, loadSchools, loadNonStudentTab])
 
     useEffect(() => {
-        if (!['student', 'schools', 'teacher'].includes(activeTab)) loadNonStudentTab()
-    }, [searchTerm, activeTab, loadNonStudentTab])
+        if (!['student', 'schools', 'teacher'].includes(activeTab)) {
+            loadNonStudentTab()
+        } else if (activeTab === 'student') {
+            const timeoutId = setTimeout(() => {
+                if (searchTerm) loadStudentSearch()
+                else setStudentSearchResults(null)
+            }, 300)
+            return () => clearTimeout(timeoutId)
+        }
+    }, [searchTerm, activeTab, loadNonStudentTab, loadStudentSearch])
 
     useEffect(() => {
         if (selectedSchool && activeTab === 'student') {
@@ -440,7 +473,8 @@ export default function UserManagement({ user }) {
 
             if (activeTab === 'schools') await loadSchools()
             else if (activeTab === 'student') {
-                if (selectedClass && selectedSchool) await loadStudents(selectedSchool.id || selectedSchool, selectedClass)
+                if (searchTerm) await loadStudentSearch()
+                else if (selectedClass && selectedSchool) await loadStudents(selectedSchool.id || selectedSchool, selectedClass)
                 else if (selectedSchool) await loadClasses(selectedSchool.id || selectedSchool)
                 else await loadSchools()
             } else if (activeTab !== 'teacher') await loadNonStudentTab()
@@ -468,7 +502,8 @@ export default function UserManagement({ user }) {
             setUserToDelete(null)
             if (activeTab === 'schools') await loadSchools()
             else if (activeTab === 'student') {
-                if (selectedClass && selectedSchool) await loadStudents(selectedSchool.id || selectedSchool, selectedClass)
+                if (searchTerm) await loadStudentSearch()
+                else if (selectedClass && selectedSchool) await loadStudents(selectedSchool.id || selectedSchool, selectedClass)
                 else if (selectedSchool) await loadClasses(selectedSchool.id || selectedSchool)
                 else await loadSchools()
             } else if (activeTab !== 'teacher') await loadNonStudentTab()
@@ -583,17 +618,19 @@ export default function UserManagement({ user }) {
                 <>
                     <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div className="flex items-center gap-3">
-                            {(selectedSchool || selectedClass) && activeTab === 'student' && (user?.role !== 'SCHOOL_ADMIN' || selectedClass) && (
+                            {(selectedSchool || selectedClass) && activeTab === 'student' && (user?.role !== 'SCHOOL_ADMIN' || selectedClass) && !studentSearchResults && (
                                 <button onClick={handleBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                                     <ArrowLeftIcon className="w-5 h-5 text-gray-600" />
                                 </button>
                             )}
                             <h3 className="text-lg font-medium text-gray-900">
-                                {!selectedSchool
-                                    ? 'Manage ' + (roles.find(r => r.id === activeTab)?.label || '')
-                                    : !selectedClass
-                                        ? (selectedSchool.name || selectedSchool) + ' Classes'
-                                        : (selectedSchool.name || selectedSchool) + ' — ' + formatClassName(selectedClass)}
+                                {studentSearchResults 
+                                    ? 'Search Results' 
+                                    : !selectedSchool
+                                        ? 'Manage ' + (roles.find(r => r.id === activeTab)?.label || '')
+                                        : !selectedClass
+                                            ? (selectedSchool.name || selectedSchool) + ' Classes'
+                                            : (selectedSchool.name || selectedSchool) + ' — ' + formatClassName(selectedClass)}
                             </h3>
                         </div>
                         <button
@@ -627,7 +664,7 @@ export default function UserManagement({ user }) {
                     {!loading && (
                         <>
                             {/* School Cards */}
-                            {activeTab === 'student' && !selectedSchool && (
+                            {activeTab === 'student' && !selectedSchool && !studentSearchResults && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {schoolsData
                                         .filter(s => !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -652,7 +689,7 @@ export default function UserManagement({ user }) {
                             )}
 
                             {/* Class Cards */}
-                            {activeTab === 'student' && selectedSchool && !selectedClass && (
+                            {activeTab === 'student' && selectedSchool && !selectedClass && !studentSearchResults && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                                     {classesData
                                         .sort((a, b) => parseInt(a.className?.match(/\d+/)?.[0] || 0) - parseInt(b.className?.match(/\d+/)?.[0] || 0))
@@ -673,20 +710,26 @@ export default function UserManagement({ user }) {
                             )}
 
                             {/* Student Table */}
-                            {activeTab === 'student' && selectedSchool && selectedClass && (
+                            {activeTab === 'student' && (studentSearchResults || (selectedSchool && selectedClass)) && (
                                 <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
                                     <table className="min-w-full divide-y divide-gray-200">
                                         <thead className="bg-gray-50">
                                             <tr>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                                                {studentSearchResults && (
+                                                    <>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">School</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
+                                                    </>
+                                                )}
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Section</th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent Phone</th>
                                                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
-                                            {filteredStudents.map(u => {
+                                            {(studentSearchResults || filteredStudents).map(u => {
                                                 const full = expandedUserData[u.id] || u
                                                 return (
                                                     <React.Fragment key={u.id}>
@@ -700,6 +743,12 @@ export default function UserManagement({ user }) {
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-4 text-sm text-gray-500">{u.email}</td>
+                                                            {studentSearchResults && (
+                                                                <>
+                                                                    <td className="px-6 py-4 text-sm text-gray-500">{u.school || '—'}</td>
+                                                                    <td className="px-6 py-4 text-sm text-gray-500">{formatClassName(u.className || u.class) || '—'}</td>
+                                                                </>
+                                                            )}
                                                             <td className="px-6 py-4 text-sm text-gray-500">
                                                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                                                     {full.section ? 'Section ' + full.section : '—'}
@@ -726,7 +775,7 @@ export default function UserManagement({ user }) {
 
                                                         {expandedRow === u.id && (
                                                             <tr className="bg-gray-50">
-                                                                <td colSpan={5} className="px-8 py-4">
+                                                                <td colSpan={studentSearchResults ? 7 : 5} className="px-8 py-4">
                                                                     {expandedUserData[u.id] ? (
                                                                         <div className="grid grid-cols-4 gap-4">
                                                                             <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
@@ -757,9 +806,9 @@ export default function UserManagement({ user }) {
                                                     </React.Fragment>
                                                 )
                                             })}
-                                            {filteredStudents.length === 0 && (
+                                            {(studentSearchResults || filteredStudents).length === 0 && (
                                                 <tr>
-                                                    <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">No students found</td>
+                                                    <td colSpan={studentSearchResults ? 7 : 5} className="px-6 py-10 text-center text-sm text-gray-400">No students found</td>
                                                 </tr>
                                             )}
                                         </tbody>

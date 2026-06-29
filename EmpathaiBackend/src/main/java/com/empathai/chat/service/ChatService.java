@@ -14,9 +14,11 @@ import com.empathai.schedule.entity.ScheduleTask;
 import com.empathai.schedule.repository.ExamDateRepository;
 import com.empathai.schedule.repository.ScheduleTaskRepository;
 import com.empathai.schedule.repository.StudentSchedulePreferenceRepository;
+import com.empathai.user.entity.School;
 import com.empathai.user.entity.Student;
 import com.empathai.user.entity.User;
 import com.empathai.user.exception.EmpathaiException;
+import com.empathai.user.repository.SchoolRepository;
 import com.empathai.user.repository.UserRepository;
 import com.empathai.wellness.entity.MoodEntry;
 import com.empathai.wellness.entity.SleepEntry;
@@ -47,6 +49,7 @@ public class ChatService {
     private final ChatMessageRepository messageRepo;
     private final ChatUsageRepository usageRepo;
     private final UserRepository userRepository;
+    private final SchoolRepository schoolRepository;
     private final WebClient.Builder webClientBuilder;
     private final FlaggedChatService flaggedChatService;
 
@@ -372,6 +375,82 @@ public class ChatService {
                 .used(used)
                 .limit(dailyLimit)
                 .remaining(Math.max(0, dailyLimit - used))
+                .build();
+    }
+
+    public List<ChatSessionResponse> getAdminSessions() {
+        return sessionRepo.findAllByOrderByWeekStartDesc().stream()
+                .map(s -> {
+                    LocalDateTime lastMessageAt = messageRepo
+                            .findTopBySessionIdOrderByCreatedAtDesc(s.getId())
+                            .map(ChatMessage::getCreatedAt)
+                            .orElse(s.getCreatedAt());
+
+                    User user = userRepository.findById(s.getStudentId()).orElse(null);
+                    String studentName = user != null ? user.getName() : "Unknown Student";
+                    String className = null;
+                    String schoolName = null;
+                    
+                    if (user instanceof Student student) {
+                        className = student.getClassName();
+                        if (student.getSchoolId() != null) {
+                            School school = schoolRepository.findById(student.getSchoolId()).orElse(null);
+                            if (school != null) {
+                                schoolName = school.getName();
+                            }
+                        }
+                    }
+
+                    return ChatSessionResponse.builder()
+                            .id(s.getId())
+                            .weekStart(s.getWeekStart())
+                            .createdAt(lastMessageAt)
+                            .source(s.getSource())
+                            .studentId(s.getStudentId())
+                            .studentName(studentName)
+                            .className(className)
+                            .schoolName(schoolName)
+                            .build();
+                })
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .collect(Collectors.toList());
+    }
+
+    public ChatSessionResponse getAdminSessionMessages(Long sessionId) {
+        ChatSession session = sessionRepo.findById(sessionId)
+                .orElseThrow(() -> new EmpathaiException("Session not found"));
+
+        List<ChatMessageResponse> messages = messageRepo
+                .findBySessionIdOrderByCreatedAtAsc(sessionId)
+                .stream()
+                .map(this::toMessageResponse)
+                .collect(Collectors.toList());
+
+        User user = userRepository.findById(session.getStudentId()).orElse(null);
+        String studentName = user != null ? user.getName() : "Unknown Student";
+        String className = null;
+        String schoolName = null;
+        
+        if (user instanceof Student student) {
+            className = student.getClassName();
+            if (student.getSchoolId() != null) {
+                School school = schoolRepository.findById(student.getSchoolId()).orElse(null);
+                if (school != null) {
+                    schoolName = school.getName();
+                }
+            }
+        }
+
+        return ChatSessionResponse.builder()
+                .id(session.getId())
+                .weekStart(session.getWeekStart())
+                .createdAt(session.getCreatedAt())
+                .source(session.getSource())
+                .studentId(session.getStudentId())
+                .studentName(studentName)
+                .className(className)
+                .schoolName(schoolName)
+                .messages(messages)
                 .build();
     }
 

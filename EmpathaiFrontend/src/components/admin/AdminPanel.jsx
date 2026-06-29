@@ -11,6 +11,7 @@ import {
   FlagIcon,
   TrophyIcon,
   CalendarDaysIcon,
+  ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline'
 import UserManagement from './usermanagement/UserManagement'
 import AssessmentManagement from './feelingsexplorer/AssessmentManagement'
@@ -19,6 +20,7 @@ import FlaggedChats from './FlaggedChats'
 import AnalyticsDashboard from './AnalyticsDashboard'
 import Rewards from './Rewards'
 import SchedulePlanner from './SchedulePlanner'
+import AdminChats from './AdminChats'
 import NotFound from '../NotFound'
 
 export default function AdminPanel({ user, onLogout }) {
@@ -33,6 +35,7 @@ export default function AdminPanel({ user, onLogout }) {
     { id: 'schedule_planner', path: 'schedule-planner', label: 'Schedule Planner',  icon: CalendarDaysIcon },
     // { id: 'curriculum',       path: 'curriculum',       label: 'Curriculum',        icon: AcademicCapIcon },
     { id: 'flagged_chats',    path: 'flagged-chats',    label: 'Support Alerts',    icon: FlagIcon },
+    { id: 'chats',            path: 'chats',            label: 'ChatBuddy Logs',    icon: ChatBubbleLeftRightIcon },
     { id: 'analytics',        path: 'analytics',        label: 'Analytics',         icon: ChartBarIcon },
     { id: 'rewards',          path: 'rewards',          label: 'Rewards',           icon: TrophyIcon },
   ]
@@ -50,7 +53,7 @@ export default function AdminPanel({ user, onLogout }) {
     if (role === 'SUPER_ADMIN') return true
     if (role === 'SCHOOL_ADMIN') return ['users', 'schedule_planner'].includes(item.id)
     if (role === 'CONTENT_ADMIN') return ['curriculum'].includes(item.id)
-    if (role === 'PSYCHOLOGIST') return ['assessments', 'flagged_chats'].includes(item.id)
+    if (role === 'PSYCHOLOGIST') return ['assessments', 'flagged_chats', 'chats'].includes(item.id)
     if (role === 'TEACHER') return ['schedule_planner'].includes(item.id)
     return false
   })
@@ -87,6 +90,7 @@ export default function AdminPanel({ user, onLogout }) {
       case 'assessments':      return "Manage emotional check-ins and activities"
       case 'curriculum':       return "Manage syllabi and learning content"
       case 'flagged_chats':    return "Manage high-risk student interactions"
+      case 'chats':            return "View ChatBuddy logs and interactions"
       case 'analytics':        return "View data and insights"
       case 'rewards':          return "Create and manage student rewards and recognition"
       case 'schedule_planner': return "Manage school timings and exam dates for smart scheduling"
@@ -191,6 +195,7 @@ export default function AdminPanel({ user, onLogout }) {
               <Route path="schedule-planner/*" element={<SchedulePlanner user={user} />} />
               <Route path="curriculum/*"       element={<CurriculumManagement />} />
               <Route path="flagged-chats/*"    element={<FlaggedChats />} />
+              <Route path="chats/*"            element={<AdminChats />} />
               <Route path="analytics"          element={<AnalyticsDashboard />} />
               <Route path="rewards"            element={<Rewards />} />
 

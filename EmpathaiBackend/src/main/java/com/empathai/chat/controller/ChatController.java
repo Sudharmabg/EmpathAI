@@ -132,4 +132,36 @@ public class ChatController {
             throw e;
         }
     }
+
+    /**
+     * Get all sessions for Admin (SuperAdmin and Psychologist).
+     * GET /api/chat/admin/sessions
+     */
+    @GetMapping("/admin/sessions")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PSYCHOLOGIST')")
+    public ResponseEntity<List<ChatSessionResponse>> getAdminSessions() {
+        logger.info("getAdminSessions started");
+        try {
+            return ResponseEntity.ok(chatService.getAdminSessions());
+        } catch (Exception e) {
+            logger.error("getAdminSessions failed: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Get full message history for a specific session for Admin.
+     * GET /api/chat/admin/session/{id}
+     */
+    @GetMapping("/admin/session/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PSYCHOLOGIST')")
+    public ResponseEntity<ChatSessionResponse> getAdminSession(@PathVariable Long id) {
+        logger.info("getAdminSession started for sessionId={}", id);
+        try {
+            return ResponseEntity.ok(chatService.getAdminSessionMessages(id));
+        } catch (Exception e) {
+            logger.error("getAdminSession failed for sessionId={}: {}", id, e.getMessage(), e);
+            throw e;
+        }
+    }
 }

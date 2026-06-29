@@ -18,5 +18,12 @@ public class ChatSessionResponse {
     private LocalDate weekStart;
     private LocalDateTime createdAt;
     private String source;                      // ✅ NEW — "CHAT" or "SCHEDULE"
+    
+    // Additional fields for Admin View
+    private Long studentId;
+    private String studentName;
+    private String className;
+    private String schoolName;
+
     private List<ChatMessageResponse> messages; // populated on single session fetch
 }

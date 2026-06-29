@@ -19,4 +19,8 @@ public interface ChatSessionRepository extends JpaRepository<ChatSession, Long> 
     // ── NEW — used for CHAT and SCHEDULE sessions separately ─────────────────
     Optional<ChatSession> findByStudentIdAndWeekStartAndSource(
             Long studentId, LocalDate weekStart, String source);
+
+    List<ChatSession> findBySourceOrderByWeekStartDesc(String source);
+
+    List<ChatSession> findAllByOrderByWeekStartDesc();
 }

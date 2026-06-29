@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ChatBubbleLeftRightIcon, XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 
 export default function AdminChats() {
@@ -8,6 +8,7 @@ export default function AdminChats() {
     const [searchTerm, setSearchTerm] = useState('')
     const [selectedWeek, setSelectedWeek] = useState('')
     const [sourceFilter, setSourceFilter] = useState('CHAT') // 'CHAT' or 'SCHEDULE'
+    const isFirstLoad = useRef(true)
 
     // Modal state
     const [selectedSession, setSelectedSession] = useState(null)
@@ -64,12 +65,13 @@ export default function AdminChats() {
     // Set default week to the most recent one when sessions load
     useEffect(() => {
         if (uniqueWeeks.length > 0) {
-            // Check if selectedWeek is valid in the new source list, if not, select the first one
-            if (!uniqueWeeks.includes(selectedWeek)) {
+            if (isFirstLoad.current) {
+                setSelectedWeek(uniqueWeeks[0])
+                isFirstLoad.current = false
+            } else if (selectedWeek !== "" && !uniqueWeeks.includes(selectedWeek)) {
+                // If they switch source tabs and their previously selected week isn't there, default to latest
                 setSelectedWeek(uniqueWeeks[0])
             }
-        } else {
-            setSelectedWeek('')
         }
     }, [uniqueWeeks, selectedWeek, sourceFilter])
 

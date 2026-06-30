@@ -24,4 +24,7 @@ public interface ScheduleTaskRepository extends JpaRepository<ScheduleTask, Long
 
     // ── NEW: for weekly task count in ChatService ─────────────────────────────
     List<ScheduleTask> findByStudentIdAndDayOfWeekInAndWeekStartDate(Long studentId, List<String> daysOfWeek, java.time.LocalDate weekStartDate);
+
+    List<ScheduleTask> findByWeekStartDateGreaterThanEqual(java.time.LocalDate date);
+    List<ScheduleTask> findByStudentIdAndWeekStartDateGreaterThanEqual(Long studentId, java.time.LocalDate date);
 }

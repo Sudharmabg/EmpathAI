@@ -43,6 +43,9 @@ public interface AssessmentResponseRepository extends JpaRepository<AssessmentRe
     @Query("SELECT COUNT(DISTINCT CONCAT(CAST(a.studentId AS string), '-', CAST(CAST(a.submittedAt AS date) AS string))) FROM AssessmentResponse a")
     long countDistinctSubmissions();
 
+    @Query("SELECT COUNT(DISTINCT CONCAT(CAST(a.studentId AS string), '-', CAST(CAST(a.submittedAt AS date) AS string))) FROM AssessmentResponse a WHERE a.studentId = :studentId")
+    long countDistinctSubmissionsByStudentId(@Param("studentId") Long studentId);
+
     @Query("SELECT r FROM AssessmentResponse r LEFT JOIN FETCH r.student LEFT JOIN FETCH r.group LEFT JOIN FETCH r.question WHERE LOWER(r.group.name) = LOWER(:groupName)")
     List<AssessmentResponse> findByGroupNameIgnoreCase(@Param("groupName") String groupName);
 

@@ -11,4 +11,7 @@ import java.util.Optional;
 public interface SleepEntryRepository extends JpaRepository<SleepEntry, Long> {
     List<SleepEntry> findByStudentIdOrderByLoggedAtDesc(Long studentId);
     Optional<SleepEntry> findFirstByStudentIdOrderByLoggedAtDesc(Long studentId);
+
+    List<SleepEntry> findByStudentIdAndLoggedAtAfterOrderByLoggedAtDesc(Long studentId, java.time.LocalDateTime fromDate);
+    List<SleepEntry> findAllByLoggedAtAfterOrderByLoggedAtDesc(java.time.LocalDateTime fromDate);
 }

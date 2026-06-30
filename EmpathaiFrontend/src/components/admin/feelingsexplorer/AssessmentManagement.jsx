@@ -1174,7 +1174,7 @@ const parseBulletPoints = (raw) => {
                                         <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex justify-between items-start">
                                             <div>
                                                 <h3 className="font-bold text-gray-900 text-lg">
-                                                    {student.studentName || `Student ${index + 1}`}
+                                                    {`Student ${student.studentId || index + 1}`}
                                                 </h3>
                                                 <div className="flex flex-wrap gap-2 mt-2">
                                                     {student.className && <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 text-xs rounded-full font-medium">{student.className}</span>}
@@ -1184,7 +1184,7 @@ const parseBulletPoints = (raw) => {
                                             </div>
                                             {hasContent && (
                                                 <button
-                                                    onClick={() => setInsightModal({ open: true, data, parsed, studentName: student.studentName, studentId: student.studentId })}
+                                                    onClick={() => setInsightModal({ open: true, data, parsed, studentName: `Student ${student.studentId || index + 1}`, studentId: student.studentId })}
                                                     className="shrink-0 flex items-center justify-center w-10 h-10 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-full transition-colors shadow-sm"
                                                     title="View Full AI Insights"
                                                 >

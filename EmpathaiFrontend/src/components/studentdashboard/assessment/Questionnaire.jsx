@@ -236,6 +236,7 @@ export default function Questionnaire ({ user }) {
   
  
   const [showReport, setShowReport]             = useState(false)
+  const [showCelebration, setShowCelebration]   = useState(false)
   const [activeIntervention, setActiveIntervention] = useState(null)
   const [isTransitioning, setIsTransitioning]   = useState(false)
 
@@ -249,6 +250,7 @@ export default function Questionnaire ({ user }) {
   const isAnimatingRef    = useRef(false)
   const pendingTimersRef  = useRef([])
   const answersRef        = useRef({})
+  const hasHydratedRef    = useRef(false)
 
   const clearPendingTimers = () => {
     pendingTimersRef.current.forEach(clearTimeout)
@@ -299,11 +301,40 @@ fetchQuestionsByClass(className)
             }
           })
           setApiQuestions(mapped)
+          
+          // Hydrate progress once when questions are loaded
+          if (!hasHydratedRef.current) {
+            const storageKey = user ? `questionnaire_progress_${user.email || user.id}` : 'questionnaire_progress_guest'
+            const saved = localStorage.getItem(storageKey)
+            if (saved) {
+              try {
+                const parsed = JSON.parse(saved)
+                if (parsed.answers && parsed.currentQuestion !== undefined) {
+                  setAnswers(parsed.answers)
+                  answersRef.current = parsed.answers
+                  // Ensure currentQuestion doesn't exceed loaded questions
+                  const maxIndex = mapped.length - 1
+                  setCurrentQuestion(Math.min(parsed.currentQuestion, maxIndex))
+                }
+              } catch (e) {
+                console.error("Failed to parse saved questionnaire progress", e)
+              }
+            }
+            hasHydratedRef.current = true
+          }
         }
       })
       .catch(err => console.error('[Questionnaire] fetchQuestionsByClass error:', err))
       .finally(() => setLoading(false))
   }, [user])
+
+  // Persist progress when answers or currentQuestion changes
+  useEffect(() => {
+    if (apiQuestions.length > 0 && !showReport) {
+      const storageKey = user ? `questionnaire_progress_${user.email || user.id}` : 'questionnaire_progress_guest'
+      localStorage.setItem(storageKey, JSON.stringify({ answers, currentQuestion }))
+    }
+  }, [answers, currentQuestion, apiQuestions, showReport, user])
 
   // Fetch past student responses on load to prefill questions
   // Commented out to ensure feelings explorer starts as a fresh daily assessment instead of preselecting past options
@@ -496,7 +527,17 @@ fetchQuestionsByClass(className)
 
   const handleSubmit = async (finalAnswers) => {
     setAnalysisLoading(true)
-    setShowReport(true)
+    setShowCelebration(true)
+    
+    setTimeout(() => {
+      setShowCelebration(false)
+      setShowReport(true)
+    }, 2000)
+    
+    // Clear saved progress on submission
+    const storageKey = user ? `questionnaire_progress_${user.email || user.id}` : 'questionnaire_progress_guest'
+    localStorage.removeItem(storageKey)
+
     const resolvedAnswers = finalAnswers || answersRef.current || answers
 
     try {
@@ -598,12 +639,32 @@ fetchQuestionsByClass(className)
 
   if (activeQuestions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-64 gap-3 px-4">
+      <div className="flex flex-col items-center justify-center min-h-[80vh] gap-3 px-4">
         <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mb-2">
           <ClipboardDocumentListIcon className="w-8 h-8 text-purple-300" />
         </div>
         <p className="text-gray-600 font-semibold text-lg text-center">No questions available right now</p>
         <p className="text-gray-400 text-sm text-center">Your teacher hasn't added any questions for your class yet. Please check back later.</p>
+      </div>
+    )
+  }
+
+  if (showCelebration) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+        <style>{`
+          @keyframes pop-in {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+          }
+          .animate-pop-in { animation: pop-in 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        `}</style>
+        <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center animate-pop-in shadow-xl shadow-green-500/30 mb-6">
+          <CheckCircleIcon className="w-16 h-16 text-white" />
+        </div>
+        <h2 className="text-3xl font-bold text-gray-800 animate-pulse font-serif">Awesome job!</h2>
+        <p className="text-gray-500 mt-2 font-serif text-lg">Gathering your insights...</p>
       </div>
     )
   }
@@ -772,31 +833,27 @@ fetchQuestionsByClass(className)
           animation: emoji-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
         }
       `}</style>
-      <div className="fixed inset-0 -z-10 bg-white" />
+      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50" />
 
       <div className="mb-4 mt-4 pl-2">
         <h1 className="text-4xl sm:text-[2.5rem] font-bold font-serif text-[#0B1E36] tracking-tight mb-2">Feelings Explorer</h1>
         <p className="text-[1.1rem] sm:text-lg font-serif text-[#40607A]">Let's understand how you're feeling today</p>
       </div>
 
-      <div className="mb-3">
-        <p className="text-sm text-gray-500 mb-1">Question {currentQuestion + 1} of {activeQuestions.length}</p>
-        <div className="bg-gray-100 rounded-full h-2.5 overflow-hidden shadow-inner">
-          <div className="bg-green-500 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${progress}%` }} />
+      <div className="mb-6">
+        <div className="flex justify-between items-end mb-2">
+          <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Question {currentQuestion + 1} of {activeQuestions.length}</p>
+          <p className="text-sm font-bold text-indigo-500">
+            {currentQuestion === 0 ? "Let's go!" : currentQuestion === activeQuestions.length - 1 ? "Almost done!" : "Doing great!"}
+          </p>
         </div>
-        <div className="flex justify-center gap-1.5 mt-2">
-          {activeQuestions.map((q, index) => (
-            <button
-              key={index}
-              onClick={() => { if (answers[q.id] !== undefined || index <= currentQuestion) setCurrentQuestion(index) }}
-              className={`w-2 h-2 rounded-full transition-all duration-300 ${index === currentQuestion ? 'bg-green-500 scale-150 shadow-lg' : answers[q.id] !== undefined ? 'bg-green-300 hover:scale-125' : 'bg-gray-200 hover:bg-gray-300'}`}
-            />
-          ))}
+        <div className="bg-white/50 backdrop-blur-sm border border-white/60 rounded-full h-3 overflow-hidden shadow-inner p-0.5">
+          <div className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 h-full rounded-full transition-all duration-700 ease-out shadow-sm" style={{ width: `${progress}%` }} />
         </div>
       </div>
 
-      <div className={`flex-1 bg-white/80 backdrop-blur-xl border border-gray-100 rounded-2xl p-6 shadow-xl transition-all duration-500 flex flex-col ${isTransitioning ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'}`}>
-        <div className="mb-4">
+      <div className={`flex-1 bg-white/60 backdrop-blur-xl border border-white/80 rounded-3xl p-6 md:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-500 flex flex-col ${isTransitioning ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'}`}>
+        <div className="mb-6">
           <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white border-2 border-purple-500 text-black text-xs font-medium mb-3">
             <span>Question {currentQuestion + 1}</span>
           </div>
@@ -853,46 +910,41 @@ fetchQuestionsByClass(className)
             )}
           </div>
         ) : (
-          <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 content-center">
+          <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 content-center mt-2">
             {currentQ.options.map((option, index) => {
               const isSelected = selectedOption === index || (selectedOption === null && answers[currentQ.id] === option.value)
               const optionEmoji = emojiSequences[option.emotion]?.[0] || '😊'
               return (
                 <label
                   key={index}
-                  className={`relative overflow-visible flex items-center justify-between p-4 border-2 rounded-xl transition-all duration-300 group bg-white
+                  className={`relative overflow-visible flex flex-col items-center justify-center p-6 border-2 rounded-2xl transition-all duration-300 group bg-white/80 backdrop-blur-sm
                     ${isAnimatingRef.current ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}
                     ${isSelected
-                      ? 'border-green-500 shadow-lg shadow-green-500/20 scale-[1.02]'
-                      : 'border-gray-100 hover:border-green-200 hover:bg-green-50/30 hover:shadow-md'
+                      ? 'border-indigo-400 shadow-xl shadow-indigo-500/20 scale-[1.03] bg-indigo-50/50'
+                      : 'border-white hover:border-indigo-200 hover:bg-white hover:shadow-lg hover:-translate-y-1'
                     }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      name={`question-${currentQ.id}`}
-                      value={option.value}
-                      checked={false}
-                      onChange={() => handleAnswerSelect(currentQ.id, option, index)}
-                      className="sr-only"
-                      disabled={isAnimatingRef.current}
-                    />
-                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${isSelected ? 'border-green-500 bg-green-500' : 'border-gray-300 group-hover:border-green-400'}`}>
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                    </div>
-                    <span className="font-medium text-sm text-gray-700">{option.label}</span>
-                  </div>
-                  <div className="w-10 h-10 flex items-center justify-center relative select-none">
+                  <input
+                    type="radio"
+                    name={`question-${currentQ.id}`}
+                    value={option.value}
+                    checked={false}
+                    onChange={() => handleAnswerSelect(currentQ.id, option, index)}
+                    className="sr-only"
+                    disabled={isAnimatingRef.current}
+                  />
+                  <div className="w-16 h-16 flex items-center justify-center mb-3">
                     <span
-                      className={`text-2xl transition-all duration-300 transform origin-center
+                      className={`text-5xl transition-all duration-300 transform origin-center
                         ${isSelected
                           ? 'animate-emoji-pop opacity-100 scale-125'
-                          : 'opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100 group-hover:rotate-6 text-gray-400 group-hover:text-gray-700'
+                          : 'opacity-80 group-hover:opacity-100 group-hover:scale-110 group-hover:rotate-6'
                         }`}
                     >
                       {optionEmoji}
                     </span>
                   </div>
+                  <span className={`font-semibold text-base text-center transition-colors ${isSelected ? 'text-indigo-700' : 'text-gray-600 group-hover:text-gray-900'}`}>{option.label}</span>
                 </label>
               )
             })}

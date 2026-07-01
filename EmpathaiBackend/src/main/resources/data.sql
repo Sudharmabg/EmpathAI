@@ -40,3 +40,58 @@ INSERT INTO schedule_rules (rule_id, rule_name, priority, applies_to, block_type
 ('R08', 'Wellness Task Reminder', 11, 'STUDY', 'SOFT', true, '{}'),
 ('R12', '3 Consecutive Study Days Warning', 12, 'STUDY', 'SOFT', true, '{"consecutive_days":3}')
 ON CONFLICT (rule_id) DO NOTHING;
+
+-- Phase 1 & 2 DDL Commands for Curriculum Intelligence Platform
+CREATE TABLE IF NOT EXISTS chapters (
+    id                    BIGSERIAL PRIMARY KEY,
+    board                 VARCHAR(50)   NOT NULL DEFAULT 'CBSE',
+    grade                 VARCHAR(30)   NOT NULL,
+    subject               VARCHAR(100)  NOT NULL,
+    title                 VARCHAR(300)  NOT NULL,
+    raw_content           TEXT          NOT NULL,
+    processing_status     VARCHAR(50)   NOT NULL DEFAULT 'PENDING',
+    topics                JSONB,
+    subtopics             JSONB,
+    concepts              JSONB,
+    learning_objectives   JSONB,
+    blooms_levels         JSONB,
+    difficulty_level      VARCHAR(20),
+    keywords              JSONB,
+    definitions           JSONB,
+    formulae              JSONB,
+    common_misconceptions JSONB,
+    prerequisites         JSONB,
+    next_concepts         JSONB,
+    estimated_reading_time INTEGER,
+    created_by            VARCHAR(100),
+    published_by          VARCHAR(100),
+    published_at          TIMESTAMP,
+    created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS curriculum_chunks (
+    id           BIGSERIAL PRIMARY KEY,
+    chapter_id   BIGINT NOT NULL,
+    chunk_text   TEXT NOT NULL,
+    chunk_type   VARCHAR(50) NOT NULL,
+    topic        VARCHAR(300),
+    subtopic     VARCHAR(300),
+    metadata     JSONB,
+    pgvector_id  BIGINT,
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS ai_generated_content (
+    id            BIGSERIAL PRIMARY KEY,
+    chapter_id    BIGINT NOT NULL,
+    task_type     VARCHAR(50) NOT NULL,
+    topic         VARCHAR(300) DEFAULT NULL,
+    content       TEXT NOT NULL,
+    is_approved   BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE,
+    UNIQUE (task_type, chapter_id, topic)
+);

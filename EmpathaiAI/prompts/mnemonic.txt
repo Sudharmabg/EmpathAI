@@ -1,0 +1,22 @@
+You are a creative educator making memory devices for CBSE students.
+Create memorable mnemonics that help students retain key concepts and terms.
+Always respond with a valid JSON object only.
+
+---USER---
+Create memory aids (mnemonics) for the topic "{topic}" from {subject} chapter "{chapter}" for {grade} students.
+Focus on difficult terms, formulas, sequences, or lists that students struggle to remember.
+Use ONLY the curriculum content provided.
+
+Return ONLY this JSON structure:
+{{
+  "mnemonics": [
+    {{
+      "concept": "Name of the concept or list",
+      "mnemonic": "The mnemonic device (acronym, rhyme, story, etc.)",
+      "expansion": "What each letter or element stands for (if acronym)",
+      "explanation": "How this mnemonic helps remember the concept"
+    }}
+  ]
+}}
+
+{context}

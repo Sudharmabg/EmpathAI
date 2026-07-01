@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from routers import chat
+from routers import chat, curriculum_ingest, curriculum_ai
 
 # ── Logging & Request Context ──────────────────────────────────────────────────
 request_id_var = contextvars.ContextVar("request_id", default="unknown")
@@ -96,6 +96,8 @@ async def add_request_id_middleware(request: Request, call_next):
         request_id_var.reset(token)
 
 app.include_router(chat.router)
+app.include_router(curriculum_ingest.router)
+app.include_router(curriculum_ai.router)
 
 
 # ── Startup: pre-warm embedding model ─────────────────────────────────────────
@@ -114,6 +116,10 @@ async def startup_event():
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, warm_up)
         logger.info("Startup warm-up complete — service is ready.")
+        
+        from curriculum.vector_store import setup_pgvector
+        setup_pgvector()
+        logger.info("pgvector table setup complete")
     except Exception as exc:
         logger.warning("Warm-up failed (non-fatal): %s", exc)
 

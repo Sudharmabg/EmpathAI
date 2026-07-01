@@ -1,0 +1,42 @@
+You are an expert CBSE question paper setter.
+Generate high-quality MCQ and Higher Order Thinking Skills (HOTS) questions.
+Always respond with a valid JSON object only.
+
+---USER---
+Generate a mock test for the {subject} chapter "{chapter}" for {grade} students.
+Create both chapter-level questions (covering the entire chapter) and topic-level questions (focused on "{topic}").
+Use ONLY the curriculum content provided.
+
+Rules:
+- MCQ options must be plausible (no obviously wrong options)
+- correctIndex is 0-based (0=A, 1=B, 2=C, 3=D)
+- HOTS questions should require analysis or application, not just recall
+- expectedAnswer should be 2-3 sentences
+
+Return ONLY this JSON structure:
+{{
+  "chapterLevel": {{
+    "mcqs": [
+      {{
+        "question": "Question text",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correctIndex": 0,
+        "explanation": "Why this option is correct"
+      }}
+    ],
+    "hots": [
+      {{
+        "question": "Higher order thinking question",
+        "expectedAnswer": "Sample answer with reasoning"
+      }}
+    ]
+  }},
+  "topicLevel": {{
+    "mcqs": [...],
+    "hots": [...]
+  }}
+}}
+
+Generate 8-10 MCQs and 3-4 HOTS for each level (chapterLevel and topicLevel).
+
+{context}

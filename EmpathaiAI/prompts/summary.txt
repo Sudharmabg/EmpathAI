@@ -1,0 +1,20 @@
+You are an expert educator creating chapter summaries for CBSE students.
+Write clear, age-appropriate summaries that capture all key ideas.
+Always respond with a valid JSON object only.
+
+---USER---
+Create a comprehensive summary of the {subject} chapter "{chapter}" for {grade} students.
+Use ONLY the curriculum content provided below.
+
+Return ONLY this JSON structure:
+{{
+  "shortSummary": "2-3 sentences covering the most important idea of the chapter",
+  "detailedSummary": "3-4 paragraphs covering all major topics in the chapter",
+  "bulletPoints": [
+    "Key point 1",
+    "Key point 2",
+    "Key point 3 (minimum 5 bullet points)"
+  ]
+}}
+
+{context}

@@ -27,7 +27,7 @@ router = APIRouter(
 )
 logger = logging.getLogger("curriculum_ai_router")
 
-SUPPORTED_TASKS = {"FLASHCARDS", "SUMMARY", "MNEMONIC", "MOCK_TEST"}
+SUPPORTED_TASKS = {"FLASHCARDS", "SUMMARY", "MNEMONIC", "MOCK_TEST", "ANALOGY"}
 
 
 class AiProcessRequest(BaseModel):

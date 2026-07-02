@@ -120,6 +120,35 @@ class MockTestOutput(BaseModel):
     topicLevel: TestSection
 
 
+# ── Analogy Storyteller ────────────────────────────────────────────────────────
+
+class AnalogyDetails(BaseModel):
+    title: str
+    base: str
+    description: str
+    imageUrl: Optional[str] = None
+
+class StoryDetails(BaseModel):
+    title: str
+    narrative: str
+    moral: str
+
+class AnalogyStoryItem(BaseModel):
+    concept: str
+    analogy: AnalogyDetails
+    story: StoryDetails
+
+class AnalogyOutput(BaseModel):
+    stories: list[AnalogyStoryItem]
+
+    @field_validator("stories")
+    @classmethod
+    def must_not_be_empty(cls, v):
+        if not v:
+            raise ValueError("stories list must not be empty")
+        return v
+
+
 # ── Metadata ──────────────────────────────────────────────────────────────────
 
 TASK_VALIDATORS = {
@@ -127,6 +156,7 @@ TASK_VALIDATORS = {
     "SUMMARY":    SummaryOutput,
     "MNEMONIC":   MnemonicOutput,
     "MOCK_TEST":  MockTestOutput,
+    "ANALOGY":    AnalogyOutput,
 }
 
 

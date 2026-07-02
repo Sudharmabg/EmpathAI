@@ -33,6 +33,7 @@ TASK_MODELS = {
     "SUMMARY":    "gpt-4o-mini",
     "MNEMONIC":   "gpt-4o-mini",
     "MOCK_TEST":  "gpt-4o-mini",  # Adjusting for available models
+    "ANALOGY":    "gpt-4o-mini",
 }
 
 TASK_TEMPERATURES = {
@@ -40,6 +41,7 @@ TASK_TEMPERATURES = {
     "SUMMARY":    0.2,
     "MNEMONIC":   0.5,
     "MOCK_TEST":  0.3,
+    "ANALOGY":    0.5,
 }
 
 TASK_MAX_TOKENS = {
@@ -47,6 +49,7 @@ TASK_MAX_TOKENS = {
     "SUMMARY":    3500,   # Increased: formulas + definitions + key points need room
     "MNEMONIC":   2000,
     "MOCK_TEST":  4000,
+    "ANALOGY":    3000,
 }
 
 
@@ -141,6 +144,7 @@ def _build_query(task: str, topic: str, subject: str, grade: str, chapter: str =
         "SUMMARY":    f"All main ideas, formulas, equations, definitions, and learning objectives for the complete chapter '{chapter}' in {subject} {grade}",
         "MNEMONIC":   f"Important terms, formulas, and memory devices for {topic} in {subject} {grade}",
         "MOCK_TEST":  f"Questions, exercises, examples, and concepts for {topic} in {subject} {grade}",
+        "ANALOGY":    f"Core concepts, definitions, and explanations for {topic} in {subject} {grade}",
     }
     return query_map.get(task, f"{topic} {subject} {grade}")
 

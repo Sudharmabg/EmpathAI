@@ -20,6 +20,11 @@ ALTER TABLE ai_generated_content ADD COLUMN IF NOT EXISTS approved_by     VARCHA
 ALTER TABLE ai_generated_content ADD COLUMN IF NOT EXISTS approved_at     TIMESTAMP;
 ALTER TABLE ai_generated_content ADD COLUMN IF NOT EXISTS edited_by       VARCHAR(100);
 
+-- 4. Fix task_type check constraint to include ANALOGY
+ALTER TABLE ai_generated_content DROP CONSTRAINT IF EXISTS ai_generated_content_task_type_check;
+ALTER TABLE ai_generated_content ADD CONSTRAINT ai_generated_content_task_type_check
+  CHECK (task_type IN ('FLASHCARDS', 'SUMMARY', 'MNEMONIC', 'MOCK_TEST', 'ANALOGY'));
+
 -- Set default for any NULLs (safe no-op if already populated)
 ALTER TABLE ai_generated_content ALTER COLUMN approval_status SET DEFAULT 'PENDING';
 UPDATE ai_generated_content SET approval_status = 'PENDING' WHERE approval_status IS NULL;

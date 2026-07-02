@@ -13,6 +13,7 @@ const AI_TASKS = [
   { key: 'FLASHCARDS', label: 'Flashcards',      icon: '🃏', desc: 'Concept flashcard deck' },
   { key: 'MNEMONIC',   label: 'Mnemonic',        icon: '🧠', desc: 'Memory aid techniques' },
   { key: 'MOCK_TEST',  label: 'Mock Test',        icon: '📝', desc: 'MCQ + HOTS assessment' },
+  { key: 'ANALOGY',    label: 'Analogy Storyteller', icon: '📖', desc: 'Creative analogies & stories' },
 ]
 
 const STATUS_STYLE = {
@@ -75,6 +76,66 @@ function InlineImageUploader({ imageUrl, onUpload }) {
   )
 }
 
+// ── Analogy Preview ────────────────────────────────────────────────────────────
+function AnalogyPreview({ stories }) {
+  const [selectedTabs, setSelectedTabs] = useState({})
+
+  if (!stories || stories.length === 0) {
+    return (
+      <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center text-gray-400">
+        No analogies generated for this topic yet.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      {stories.map((item, idx) => {
+        const activeTab = selectedTabs[idx] || 'analogy'
+        const setTab = (tab) => setSelectedTabs(prev => ({ ...prev, [idx]: tab }))
+
+        return (
+          <div key={idx} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+              <span className="text-xs font-black text-purple-600 uppercase tracking-widest">{item.concept}</span>
+              <div className="flex bg-gray-200/60 p-0.5 rounded-lg text-[10px] font-bold">
+                <button type="button" onClick={() => setTab('analogy')} className={`px-2.5 py-1 rounded-md transition-all ${activeTab === 'analogy' ? 'bg-white text-black shadow-sm' : 'text-gray-500'}`}>💡 Analogy</button>
+                <button type="button" onClick={() => setTab('story')} className={`px-2.5 py-1 rounded-md transition-all ${activeTab === 'story' ? 'bg-white text-black shadow-sm' : 'text-gray-500'}`}>📖 Story</button>
+              </div>
+            </div>
+
+            <div className="p-5">
+              {activeTab === 'analogy' ? (
+                <div className="space-y-3">
+                  <div className="space-y-0.5">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Analogy Comparison</p>
+                    <h4 className="text-sm font-black text-gray-800">{item.analogy?.title} ({item.analogy?.base})</h4>
+                  </div>
+                  <p className="text-xs text-gray-600 font-medium leading-relaxed bg-purple-50/30 border border-purple-100/30 rounded-xl p-3.5">{item.analogy?.description}</p>
+                  {item.analogy?.imageUrl && (
+                    <div className="flex justify-center mt-2">
+                      <img src={item.analogy.imageUrl} alt="Analogy illustration" className="max-h-40 object-contain rounded border border-gray-200" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-black text-gray-800">{item.story?.title}</h4>
+                  <p className="text-xs text-gray-600 font-medium leading-relaxed italic border-l-4 border-purple-300 pl-3 py-1 bg-gray-50/50 rounded-r-lg pr-2">{item.story?.narrative}</p>
+                  <div className="bg-yellow-50/50 border border-yellow-100 rounded-xl p-3 text-[11px] font-medium text-gray-700">
+                    <span className="font-bold text-yellow-800 block uppercase tracking-wider text-[9px] mb-0.5">Moral of the Story:</span>
+                    {item.story?.moral}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Student Preview Drawer ─────────────────────────────────────────────────────
 function PreviewDrawer({ item, onClose }) {
   let parsed = {}
@@ -101,6 +162,7 @@ function PreviewDrawer({ item, onClose }) {
           {task === 'FLASHCARDS' && <Flashcards flashcards={parsed.flashcards || []} />}
           {task === 'MNEMONIC'   && <Mnemonic   mnemonics={parsed.mnemonics || []} />}
           {task === 'MOCK_TEST'  && <MockTest   chapterLevel={parsed.chapterLevel} topicLevel={parsed.topicLevel} />}
+          {task === 'ANALOGY'    && <AnalogyPreview stories={parsed.stories || []} />}
         </div>
       </div>
     </div>
@@ -309,6 +371,93 @@ function MockTestEditor({ parsed, onChange }) {
   )
 }
 
+function AnalogyEditor({ parsed, onChange }) {
+  const stories = parsed.stories || []
+
+  const updateItem = (i, field, value) => {
+    const arr = [...stories]
+    arr[i] = { ...arr[i], [field]: value }
+    onChange({ ...parsed, stories: arr })
+  }
+
+  const updateNested = (i, section, field, value) => {
+    const arr = [...stories]
+    arr[i] = {
+      ...arr[i],
+      [section]: {
+        ...(arr[i][section] || {}),
+        [field]: value
+      }
+    }
+    onChange({ ...parsed, stories: arr })
+  }
+
+  return (
+    <div className="space-y-4">
+      {stories.map((item, i) => (
+        <div key={i} className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-200">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-xs font-black text-[#9333EA] uppercase tracking-wider">Concept {i+1}</span>
+            <button type="button" onClick={() => onChange({ ...parsed, stories: stories.filter((_,j)=>j!==i) })}
+              className="text-red-400 hover:text-red-600 text-xs font-bold">Remove</button>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-0.5 font-bold">Concept Name</label>
+            <input type="text" value={item.concept || ''} onChange={e => updateItem(i, 'concept', e.target.value)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-[#9333EA] outline-none bg-white" />
+          </div>
+
+          {/* Analogy Details */}
+          <div className="border-t border-gray-200 pt-2 space-y-2">
+            <span className="text-xs font-bold text-gray-700 block">💡 Analogy Details</span>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[10px] text-gray-400 font-semibold mb-0.5">Analogy Title</label>
+                <input type="text" value={item.analogy?.title || ''} onChange={e => updateNested(i, 'analogy', 'title', e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-2 py-1 text-xs focus:border-[#9333EA] outline-none bg-white" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-400 font-semibold mb-0.5">Base Comparison</label>
+                <input type="text" value={item.analogy?.base || ''} onChange={e => updateNested(i, 'analogy', 'base', e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-2 py-1 text-xs focus:border-[#9333EA] outline-none bg-white" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-400 font-semibold mb-0.5">Description Mapping</label>
+              <textarea rows={2} value={item.analogy?.description || ''} onChange={e => updateNested(i, 'analogy', 'description', e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-1 text-xs focus:border-[#9333EA] outline-none bg-white" />
+            </div>
+            <InlineImageUploader imageUrl={item.analogy?.imageUrl} onUpload={url => updateNested(i, 'analogy', 'imageUrl', url)} />
+          </div>
+
+          {/* Story Details */}
+          <div className="border-t border-gray-200 pt-2 space-y-2">
+            <span className="text-xs font-bold text-gray-700 block">📖 Narrative Fable</span>
+            <div>
+              <label className="block text-[10px] text-gray-400 font-semibold mb-0.5">Story Title</label>
+              <input type="text" value={item.story?.title || ''} onChange={e => updateNested(i, 'story', 'title', e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-2 py-1 text-xs focus:border-[#9333EA] outline-none bg-white" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-400 font-semibold mb-0.5">Narrative Storybook Text</label>
+              <textarea rows={3} value={item.story?.narrative || ''} onChange={e => updateNested(i, 'story', 'narrative', e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-1 text-xs focus:border-[#9333EA] outline-none bg-white" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-400 font-semibold mb-0.5">Academic Takeaway (Moral)</label>
+              <input type="text" value={item.story?.moral || ''} onChange={e => updateNested(i, 'story', 'moral', e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:border-[#9333EA] outline-none bg-white" />
+            </div>
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={() => onChange({ ...parsed, stories: [...stories, { concept:'', analogy:{title:'',base:'',description:'',imageUrl:null}, story:{title:'',narrative:'',moral:''} }] })}
+        className="text-sm text-[#9333EA] font-bold mt-2">+ Add Analogy Set</button>
+    </div>
+  )
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function ToolContentManager({ chapter }) {
   const [content, setContent] = useState([])
@@ -411,6 +560,7 @@ export default function ToolContentManager({ chapter }) {
           {editingItem.taskType === 'FLASHCARDS' && <FlashcardsEditor parsed={editParsed} onChange={setEditParsed} />}
           {editingItem.taskType === 'MNEMONIC'   && <MnemonicEditor   parsed={editParsed} onChange={setEditParsed} />}
           {editingItem.taskType === 'MOCK_TEST'  && <MockTestEditor   parsed={editParsed} onChange={setEditParsed} />}
+          {editingItem.taskType === 'ANALOGY'    && <AnalogyEditor    parsed={editParsed} onChange={setEditParsed} />}
         </div>
         <button onClick={handleSaveEdit} className="w-full py-3 bg-[#9333EA] hover:bg-[#7e22ce] text-white font-black rounded-xl">
           Save Changes (Resets to Pending)
@@ -438,8 +588,8 @@ export default function ToolContentManager({ chapter }) {
       }
     });
     const expectedTools = topicName === null 
-      ? ['SUMMARY', 'FLASHCARDS', 'MNEMONIC', 'MOCK_TEST']
-      : ['FLASHCARDS', 'MNEMONIC', 'MOCK_TEST'];
+      ? ['SUMMARY', 'FLASHCARDS', 'MNEMONIC', 'MOCK_TEST', 'ANALOGY']
+      : ['FLASHCARDS', 'MNEMONIC', 'MOCK_TEST', 'ANALOGY'];
     const approvedCount = items.filter(item => 
       expectedTools.includes(item.taskType) && item.approvalStatus === 'APPROVED'
     ).length;

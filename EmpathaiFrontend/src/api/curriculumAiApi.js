@@ -10,6 +10,14 @@ export async function uploadChapter(data) {
   return apiPost('/api/curriculum/chapter/upload', data)
 }
 
+export async function uploadChapterImage(conceptName, file) {
+  const formData = new FormData()
+  formData.append('conceptName', conceptName)
+  formData.append('file', file)
+  // apiClient handles FormData automatically without setting Content-Type
+  return apiPost('/api/curriculum/chapter/image', formData)
+}
+
 export async function getChapterStatus(chapterId) {
   return apiGet(`/api/curriculum/chapter/${chapterId}/status`)
 }

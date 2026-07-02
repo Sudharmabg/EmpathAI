@@ -155,6 +155,13 @@ def _format_chunks(results: list[dict]) -> str:
         chunk_type = r.get("chunk_type", "")
         topic = r.get("topic") or ""
         text = r.get("chunk_text", "")
+        metadata = r.get("metadata", {})
+        
         lines.append(f"\n[{i}] {chunk_type} — {topic}")
         lines.append(text[:1000])  # limit each chunk to ~250 words
+        
+        # If it's an image, provide the URL so the AI can use it
+        if chunk_type == "IMAGE" and "image_url" in metadata:
+            lines.append(f"Image URL: {metadata['image_url']}")
+            
     return "\n".join(lines)

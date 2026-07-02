@@ -14,6 +14,10 @@ public interface ChapterIngestService {
     List<ChapterResponse> listPublishedChapters(String grade, String subject);
     ChapterResponse getChapter(Long chapterId);
     
+    // Image Bank
+    java.util.Map<String, String> uploadChapterImage(Long chapterId, String conceptName, org.springframework.web.multipart.MultipartFile file);
+    com.empathai.curriculum.entity.ChapterImage getChapterImage(Long imageId);
+    
     // Archive
     ChapterResponse archiveChapter(Long chapterId, String archivedBy);
     ChapterResponse restoreChapter(Long chapterId);

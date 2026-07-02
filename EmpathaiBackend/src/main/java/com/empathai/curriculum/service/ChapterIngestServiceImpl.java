@@ -36,6 +36,7 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
 
     private final ChapterRepository chapterRepository;
     private final ChapterTopicRepository chapterTopicRepository;
+    private final com.empathai.curriculum.repository.ChapterImageRepository chapterImageRepository;
     private final WebClient.Builder webClientBuilder;
     private final ObjectMapper objectMapper;
 
@@ -73,7 +74,7 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
 
         // 2. Call Python /api/curriculum/ingest asynchronously
         final Long chapterId = chapter.getId();
-        triggerPythonPipeline(chapter);
+        triggerPythonPipeline(chapter, request);
 
         return ChapterStatusResponse.builder()
             .chapterId(chapterId)
@@ -82,7 +83,7 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
             .build();
     }
 
-    private void triggerPythonPipeline(Chapter chapter) {
+    private void triggerPythonPipeline(Chapter chapter, ChapterUploadRequest request) {
         // Update local status to PROCESSING
         chapter.setProcessingStatus(ProcessingStatus.PROCESSING);
         chapterRepository.save(chapter);
@@ -99,6 +100,18 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
         }
         if (chapter.getSubtopics() != null) {
             payload.put("subtopics", chapter.getSubtopics()); // JSON string
+        }
+        // Pass image bank as JSON array: [{conceptName, imageUrl}]
+        if (request.getImageBank() != null && !request.getImageBank().isEmpty()) {
+            try {
+                String imageBankJson = objectMapper.writeValueAsString(request.getImageBank());
+                payload.put("image_bank", imageBankJson);
+                // Also persist to chapter entity
+                chapter.setImageBank(imageBankJson);
+                chapterRepository.save(chapter);
+            } catch (JsonProcessingException e) {
+                log.warn("Failed to serialize imageBank: {}", e.getMessage());
+            }
         }
 
         webClientBuilder.build()
@@ -390,5 +403,45 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
             .createdAt(t.getCreatedAt())
             .updatedAt(t.getUpdatedAt())
             .build();
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // IMAGE BANK
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Override
+    @Transactional
+    public Map<String, String> uploadChapterImage(Long chapterId, String conceptName, org.springframework.web.multipart.MultipartFile file) {
+        try {
+            com.empathai.curriculum.entity.ChapterImage image = com.empathai.curriculum.entity.ChapterImage.builder()
+                .chapterId(chapterId)
+                .conceptName(conceptName)
+                .imageData(file.getBytes())
+                .contentType(file.getContentType())
+                .originalFilename(file.getOriginalFilename())
+                .build();
+            
+            image = chapterImageRepository.save(image);
+            
+            // Build absolute URL for the image
+            // Note: In production this would be an S3 URL or domain URL.
+            String imageUrl = "/api/curriculum/chapter/image/" + image.getId();
+            
+            Map<String, String> response = new java.util.HashMap<>();
+            response.put("imageId", image.getId().toString());
+            response.put("imageUrl", imageUrl);
+            response.put("conceptName", conceptName);
+            
+            log.info("Uploaded chapter image id={} for chapter={}", image.getId(), chapterId);
+            return response;
+        } catch (java.io.IOException ex) {
+            throw new EmpathaiException("Failed to read image file", HttpStatus.UNPROCESSABLE_ENTITY, ex);
+        }
+    }
+
+    @Override
+    public com.empathai.curriculum.entity.ChapterImage getChapterImage(Long imageId) {
+        return chapterImageRepository.findById(imageId)
+            .orElseThrow(() -> new EmpathaiException("Image not found", HttpStatus.NOT_FOUND));
     }
 }

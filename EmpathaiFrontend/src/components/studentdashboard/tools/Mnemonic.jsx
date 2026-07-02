@@ -41,6 +41,11 @@ export default function Mnemonic({ mnemonics }) {
             </div>
           )}
 
+          {/* Image */}
+          {item.imageUrl && (
+            <img src={item.imageUrl} alt={item.concept} className="max-h-36 object-contain rounded border border-gray-100 mx-auto" />
+          )}
+
           {/* Explanation */}
           <div className="pt-2 border-t border-gray-100 text-xs font-medium text-gray-500 leading-relaxed">
             {item.explanation}

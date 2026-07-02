@@ -148,7 +148,12 @@ export default function MockTest({ chapterLevel, topicLevel }) {
                         <span className={ans.isCorrect ? 'text-green-500' : 'text-red-500'}>
                           {ans.isCorrect ? '✓' : '✗'}
                         </span>
-                        <p className="font-bold text-gray-800">{ans.question}</p>
+                        <div className="space-y-2 flex-1">
+                          <p className="font-bold text-gray-800">{ans.question}</p>
+                          {mcqs[idx]?.imageUrl && (
+                            <img src={mcqs[idx].imageUrl} alt="Question visual" className="max-h-24 object-contain rounded-lg border border-gray-100" />
+                          )}
+                        </div>
                       </div>
                       <div className="pl-6 space-y-1 text-xs text-gray-500 font-semibold">
                         <p>Your choice: <span className={ans.isCorrect ? 'text-green-600' : 'text-red-600'}>{mcqs[idx].options[ans.selectedOption]}</span></p>
@@ -175,9 +180,14 @@ export default function MockTest({ chapterLevel, topicLevel }) {
                   <span className="text-primary font-bold">XP Earned: {score * 10}</span>
                 </div>
 
-                <h3 className="text-base font-bold text-gray-800 leading-relaxed">
-                  {mcqs[currentQ]?.question}
-                </h3>
+                <div className="space-y-3">
+                  <h3 className="text-base font-bold text-gray-800 leading-relaxed">
+                    {mcqs[currentQ]?.question}
+                  </h3>
+                  {mcqs[currentQ]?.imageUrl && (
+                    <img src={mcqs[currentQ].imageUrl} alt="Question visual" className="max-h-48 object-contain rounded-lg border border-gray-200" />
+                  )}
+                </div>
 
                 <div className="space-y-3">
                   {mcqs[currentQ]?.options.map((option, idx) => {
@@ -249,9 +259,14 @@ export default function MockTest({ chapterLevel, topicLevel }) {
                     const isRevealed = !!revealedHots[index]
                     return (
                       <div key={index} className="border border-purple-50 rounded-xl p-5 bg-purple-50/10 space-y-4">
-                        <div className="flex items-start gap-2.5">
-                          <span className="text-primary font-bold text-xs select-none">Q{index + 1}.</span>
-                          <p className="text-sm font-bold text-gray-800 leading-relaxed">{item.question}</p>
+                        <div className="flex flex-col gap-2.5">
+                          <div className="flex items-start gap-2.5">
+                            <span className="text-primary font-bold text-xs select-none">Q{index + 1}.</span>
+                            <p className="text-sm font-bold text-gray-800 leading-relaxed">{item.question}</p>
+                          </div>
+                          {item.imageUrl && (
+                            <img src={item.imageUrl} alt="HOTS question visual" className="ml-6 max-h-48 object-contain rounded-lg border border-gray-200" />
+                          )}
                         </div>
 
                         {isRevealed && (

@@ -46,6 +46,7 @@ class IngestRequest(BaseModel):
     chapter_number: Optional[int] = None
     subtopics: Optional[str] = None # JSON string if provided
     raw_content: str = Field(..., min_length=100)
+    image_bank: Optional[str] = None  # JSON string: [{conceptName, imageUrl}]
 
 
 class IngestResponse(BaseModel):
@@ -94,6 +95,7 @@ async def ingest_chapter(request: IngestRequest):
             request.board,
             request.chapter_number,
             request.subtopics,
+            request.image_bank,
         ),
         daemon=True
     )
@@ -106,7 +108,7 @@ async def ingest_chapter(request: IngestRequest):
     )
 
 
-def _run_pipeline_thread(chapter_id, raw_content, grade, subject, chapter_title, board, chapter_number, subtopics):
+def _run_pipeline_thread(chapter_id, raw_content, grade, subject, chapter_title, board, chapter_number, subtopics, image_bank=None):
     """Wrapper to run pipeline.run_pipeline in a thread."""
     try:
         from curriculum.pipeline import run_pipeline
@@ -120,6 +122,15 @@ def _run_pipeline_thread(chapter_id, raw_content, grade, subject, chapter_title,
             except Exception as e:
                 logger.warning(f"Failed to parse manual subtopics JSON: {e}")
 
+        # Parse image bank if provided
+        parsed_image_bank = None
+        if image_bank:
+            import json
+            try:
+                parsed_image_bank = json.loads(image_bank)
+            except Exception as e:
+                logger.warning(f"Failed to parse image_bank JSON: {e}")
+
         run_pipeline(
             chapter_id=chapter_id,
             raw_text=raw_content,
@@ -129,6 +140,7 @@ def _run_pipeline_thread(chapter_id, raw_content, grade, subject, chapter_title,
             board=board,
             chapter_number=chapter_number,
             manual_subtopics=manual_subtopics,
+            image_bank=parsed_image_bank,
             on_status_update=_on_status_update,
         )
     except Exception as e:

@@ -60,6 +60,10 @@ public class Chapter {
     private String learningObjectives;
 
     @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "image_bank", columnDefinition = "JSONB")
+    private String imageBank;
+
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "blooms_levels", columnDefinition = "JSONB")
     private String bloomsLevels;
 

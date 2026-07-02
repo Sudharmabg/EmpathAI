@@ -43,15 +43,24 @@ export default function Summary({ shortSummary, keyPoints, formulas, definitions
       {points.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Key Points for Revision</h3>
-          <ol className="space-y-2.5">
-            {points.map((point, i) => (
-              <li key={i} className="flex items-start gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#9333EA]/10 text-[#9333EA] text-[10px] font-black flex items-center justify-center mt-0.5">
-                  {i + 1}
-                </span>
-                <span className="text-sm text-gray-700 font-medium leading-relaxed">{point}</span>
-              </li>
-            ))}
+          <ol className="space-y-4">
+            {points.map((point, i) => {
+              const text = typeof point === 'object' ? point.point : point;
+              const imgUrl = typeof point === 'object' ? point.imageUrl : null;
+              return (
+                <li key={i} className="flex flex-col gap-1.5">
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#9333EA]/10 text-[#9333EA] text-[10px] font-black flex items-center justify-center mt-0.5">
+                      {i + 1}
+                    </span>
+                    <span className="text-sm text-gray-700 font-medium leading-relaxed">{text}</span>
+                  </div>
+                  {imgUrl && (
+                    <img src={imgUrl} alt={text} className="ml-9 max-h-48 object-contain rounded-lg border border-gray-200 shadow-sm" />
+                  )}
+                </li>
+              );
+            })}
           </ol>
         </div>
       )}
@@ -64,10 +73,17 @@ export default function Summary({ shortSummary, keyPoints, formulas, definitions
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {fmls.map((f, i) => (
-              <div key={i} className="bg-gradient-to-b from-purple-50 to-white border border-purple-100 rounded-xl p-4 space-y-2">
-                <p className="text-xs font-black text-[#9333EA] uppercase tracking-wide">{f.name}</p>
-                <div className="py-2 min-h-[3rem] flex items-center justify-center overflow-x-auto">
-                  <LaTeXFormula formula={f.formula} displayMode={true} />
+              <div key={i} className="bg-gradient-to-b from-purple-50 to-white border border-purple-100 rounded-xl p-4 space-y-2 flex flex-col justify-between">
+                <div>
+                  <p className="text-xs font-black text-[#9333EA] uppercase tracking-wide">{f.name}</p>
+                  <div className="py-2 min-h-[3rem] flex items-center justify-center overflow-x-auto">
+                    <LaTeXFormula formula={f.formula} displayMode={true} />
+                  </div>
+                  {f.imageUrl && (
+                    <div className="flex justify-center my-2">
+                      <img src={f.imageUrl} alt={f.name} className="max-h-36 object-contain rounded border border-gray-200" />
+                    </div>
+                  )}
                 </div>
                 {f.where && (
                   <p className="text-[11px] text-gray-500 font-medium border-t border-purple-100 pt-2">
@@ -88,9 +104,14 @@ export default function Summary({ shortSummary, keyPoints, formulas, definitions
           </h3>
           <dl className="space-y-0 divide-y divide-gray-50">
             {defs.map((d, i) => (
-              <div key={i} className={`py-3 grid grid-cols-5 gap-4 items-start -mx-6 px-6 ${i % 2 === 0 ? '' : 'bg-gray-50/60'}`}>
+              <div key={i} className={`py-4 grid grid-cols-5 gap-4 items-start -mx-6 px-6 ${i % 2 === 0 ? '' : 'bg-gray-50/60'}`}>
                 <dt className="col-span-2 text-sm font-black text-[#9333EA]">{d.term}</dt>
-                <dd className="col-span-3 text-sm text-gray-600 font-medium leading-relaxed">{d.meaning}</dd>
+                <dd className="col-span-3 space-y-2">
+                  <p className="text-sm text-gray-600 font-medium leading-relaxed">{d.meaning}</p>
+                  {d.imageUrl && (
+                    <img src={d.imageUrl} alt={d.term} className="max-h-36 object-contain rounded border border-gray-200" />
+                  )}
+                </dd>
               </div>
             ))}
           </dl>

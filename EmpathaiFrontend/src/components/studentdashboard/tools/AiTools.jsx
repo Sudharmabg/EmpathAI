@@ -106,8 +106,8 @@ export default function AiTools({ user }) {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-400 tracking-wider mb-2 text-gray-400 uppercase">
-              Topic {activeToolTab === 'SUMMARY' ? '(Optional)' : '(Required)'}
+            <label className="block text-xs font-bold text-gray-400 tracking-wider mb-2 uppercase">
+              Topic (Optional)
             </label>
             <select
               value={selectedTopic}
@@ -115,7 +115,7 @@ export default function AiTools({ user }) {
               disabled={!selectedChapter}
               className="w-full rounded-xl border-gray-200 text-sm font-semibold focus:border-primary focus:ring-primary focus:ring-4 focus:ring-purple-100 transition-all disabled:opacity-50"
             >
-              <option value="">{activeToolTab === 'SUMMARY' ? 'Whole Chapter' : 'Select Topic'}</option>
+              <option value="">Whole Chapter</option>
               {selectedChapter?.topics?.map(topic => (
                 <option key={topic} value={topic}>{topic}</option>
               ))}
@@ -128,17 +128,13 @@ export default function AiTools({ user }) {
       {selectedChapter && (
         <div className="flex border-b border-gray-200 bg-white px-4 rounded-xl border-2 border-purple-50/50 shadow-sm overflow-x-auto">
           {TOOL_TABS.map(tab => {
-            const isDisabled = tab.id !== 'SUMMARY' && !selectedTopic
             return (
               <button
                 key={tab.id}
-                onClick={() => !isDisabled && setActiveToolTab(tab.id)}
-                disabled={isDisabled}
+                onClick={() => setActiveToolTab(tab.id)}
                 className={`flex items-center space-x-2 py-4 px-6 border-b-2 font-black text-sm transition-all whitespace-nowrap ${activeToolTab === tab.id
                   ? 'border-primary text-primary'
-                  : isDisabled
-                    ? 'border-transparent text-gray-300 cursor-not-allowed'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
               >
                 <span>{tab.icon}</span>
@@ -154,10 +150,6 @@ export default function AiTools({ user }) {
         {!selectedChapter ? (
           <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center text-gray-400">
             Select a subject and chapter to load learning aids.
-          </div>
-        ) : (activeToolTab !== 'SUMMARY' && !selectedTopic) ? (
-          <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center text-gray-400">
-            Please select a specific topic to enable {TOOL_TABS.find(t => t.id === activeToolTab)?.label.toLowerCase()}.
           </div>
         ) : (
           <ToolWrapper

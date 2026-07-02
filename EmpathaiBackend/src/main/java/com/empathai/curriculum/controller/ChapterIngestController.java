@@ -131,4 +131,25 @@ public class ChapterIngestController {
     public ResponseEntity<List<ChapterTopicResponse>> getTopicTree(@PathVariable Long id) {
         return ResponseEntity.ok(chapterIngestService.getTopicTree(id));
     }
+
+    // ── Image Bank ──────────────────────────────────────────────────────────
+
+    @PostMapping(value = "/image", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','CONTENT_ADMIN')")
+    public ResponseEntity<java.util.Map<String, String>> uploadImage(
+        @RequestParam("conceptName") String conceptName,
+        @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        return ResponseEntity.ok(chapterIngestService.uploadChapterImage(null, conceptName, file));
+    }
+
+    @GetMapping("/image/{imageId}")
+    public ResponseEntity<byte[]> getImage(@PathVariable Long imageId) {
+        com.empathai.curriculum.entity.ChapterImage image = chapterIngestService.getChapterImage(imageId);
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        if (image.getContentType() != null) {
+            headers.setContentType(org.springframework.http.MediaType.parseMediaType(image.getContentType()));
+        }
+        return new ResponseEntity<>(image.getImageData(), headers, org.springframework.http.HttpStatus.OK);
+    }
 }

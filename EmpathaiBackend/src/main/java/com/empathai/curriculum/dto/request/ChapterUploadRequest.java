@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class ChapterUploadRequest {
@@ -27,5 +28,8 @@ public class ChapterUploadRequest {
     private Integer chapterNumber;
 
     private List<String> subtopics; // Array of subtopic names from chip UI
+
+    /** Optional image bank: [{conceptName, imageUrl}] from the upload form */
+    private List<Map<String, String>> imageBank;
 }
 

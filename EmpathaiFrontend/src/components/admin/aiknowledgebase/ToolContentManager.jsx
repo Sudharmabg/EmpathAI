@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
   getChapterAiContent, generateToolContent, deleteAiContent,
-  approveAiContent, regenerateContent, editAiContent, getChapterTopics
+  approveAiContent, regenerateContent, editAiContent, getChapterTopics, uploadChapterImage
 } from '../../../api/curriculumAiApi'
 import Summary from '../../studentdashboard/tools/Summary'
 import Flashcards from '../../studentdashboard/tools/Flashcards'
@@ -29,6 +29,48 @@ function Toast({ message, type, onClose }) {
       type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
     }`}>
       {type === 'success' ? '✓' : '✗'} {message}
+    </div>
+  )
+}
+
+// ── Inline Image Uploader ──────────────────────────────────────────────────────
+function InlineImageUploader({ imageUrl, onUpload }) {
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef(null)
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      setUploading(true)
+      const res = await uploadChapterImage("Manual Inline Upload", file)
+      onUpload(res.imageUrl)
+    } catch (err) {
+      alert("Failed to upload image: " + err.message)
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-2">
+      {imageUrl && (
+        <div className="relative group">
+          <img src={imageUrl} alt="Attached" className="h-10 w-10 object-cover rounded border border-gray-200" />
+          <button onClick={() => onUpload(null)} title="Remove Image"
+            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">
+            ×
+          </button>
+        </div>
+      )}
+      <div>
+        <input type="file" accept="image/*" ref={fileRef} onChange={handleFileChange} className="hidden" />
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+          className="text-[10px] font-bold px-3 py-1 bg-[#9333EA] hover:bg-[#7e22ce] text-white rounded transition-colors disabled:opacity-50">
+          {uploading ? 'Uploading...' : (imageUrl ? 'Change Image' : '+ Add Image')}
+        </button>
+      </div>
     </div>
   )
 }
@@ -77,31 +119,75 @@ function SummaryEditor({ parsed, onChange }) {
       </div>
       <div>
         <label className="block text-xs font-bold text-gray-600 mb-1">Key Points</label>
-        {(d.keyPoints || []).map((pt, i) => (
-          <div key={i} className="flex gap-2 mb-1.5">
-            <span className="text-purple-400 mt-2 text-xs font-bold">{i+1}.</span>
-            <input type="text" value={pt} onChange={e => { const arr=[...d.keyPoints]; arr[i]=e.target.value; onChange({...d, keyPoints: arr}) }}
-              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#9333EA] outline-none" />
-            <button onClick={() => onChange({...d, keyPoints: d.keyPoints.filter((_,j)=>j!==i)})} className="text-red-400 hover:text-red-600 text-sm">×</button>
-          </div>
-        ))}
-        <button onClick={() => onChange({...d, keyPoints: [...(d.keyPoints||[]), '']})}
+        {(d.keyPoints || []).map((pt, i) => {
+          const text = typeof pt === 'object' ? pt.point : pt;
+          const imgUrl = typeof pt === 'object' ? pt.imageUrl : null;
+          return (
+            <div key={i} className="mb-3 p-3 bg-purple-50/20 border border-purple-100/50 rounded-xl space-y-2">
+              <div className="flex gap-2">
+                <span className="text-purple-400 mt-2 text-xs font-bold">{i+1}.</span>
+                <input type="text" value={text || ''} 
+                  onChange={e => {
+                    const arr = [...d.keyPoints]
+                    arr[i] = typeof pt === 'object' ? { ...pt, point: e.target.value } : { point: e.target.value, imageUrl: null }
+                    onChange({ ...d, keyPoints: arr })
+                  }}
+                  className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#9333EA] outline-none bg-white" />
+                <button onClick={() => onChange({...d, keyPoints: d.keyPoints.filter((_,j)=>j!==i)})} className="text-red-400 hover:text-red-600 text-sm">×</button>
+              </div>
+              <div className="pl-6">
+                <InlineImageUploader imageUrl={imgUrl} onUpload={url => {
+                  const arr = [...d.keyPoints]
+                  arr[i] = typeof pt === 'object' ? { ...pt, imageUrl: url } : { point: pt, imageUrl: url }
+                  onChange({ ...d, keyPoints: arr })
+                }} />
+              </div>
+            </div>
+          )
+        })}
+        <button onClick={() => onChange({...d, keyPoints: [...(d.keyPoints||[]), { point: '', imageUrl: null }]})}
           className="text-xs text-purple-600 font-bold mt-1">+ Add Point</button>
       </div>
       <div>
         <label className="block text-xs font-bold text-gray-600 mb-1">Formulas</label>
         {(d.formulas || []).map((f, i) => (
-          <div key={i} className="grid grid-cols-3 gap-2 mb-2 items-center">
-            <input placeholder="Name" value={f.name||''} onChange={e => { const arr=[...d.formulas]; arr[i]={...arr[i],name:e.target.value}; onChange({...d,formulas:arr}) }} className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:border-[#9333EA] outline-none" />
-            <input placeholder="LaTeX" value={f.formula||''} onChange={e => { const arr=[...d.formulas]; arr[i]={...arr[i],formula:e.target.value}; onChange({...d,formulas:arr}) }} className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-mono focus:border-[#9333EA] outline-none" />
-            <div className="flex gap-1">
-              <input placeholder="Where..." value={f.where||''} onChange={e => { const arr=[...d.formulas]; arr[i]={...arr[i],where:e.target.value}; onChange({...d,formulas:arr}) }} className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:border-[#9333EA] outline-none" />
-              <button onClick={() => onChange({...d,formulas:d.formulas.filter((_,j)=>j!==i)})} className="text-red-400 hover:text-red-600 text-xs">×</button>
+          <div key={i} className="p-3 bg-purple-50/20 border border-purple-100/50 rounded-xl space-y-2 mb-3">
+            <div className="grid grid-cols-3 gap-2 items-center">
+              <input placeholder="Name" value={f.name||''} onChange={e => { const arr=[...d.formulas]; arr[i]={...arr[i],name:e.target.value}; onChange({...d,formulas:arr}) }} className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:border-[#9333EA] outline-none bg-white" />
+              <input placeholder="LaTeX" value={f.formula||''} onChange={e => { const arr=[...d.formulas]; arr[i]={...arr[i],formula:e.target.value}; onChange({...d,formulas:arr}) }} className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-mono focus:border-[#9333EA] outline-none bg-white" />
+              <div className="flex gap-1">
+                <input placeholder="Where..." value={f.where||''} onChange={e => { const arr=[...d.formulas]; arr[i]={...arr[i],where:e.target.value}; onChange({...d,formulas:arr}) }} className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:border-[#9333EA] outline-none bg-white" />
+                <button onClick={() => onChange({...d,formulas:d.formulas.filter((_,j)=>j!==i)})} className="text-red-400 hover:text-red-600 text-xs">×</button>
+              </div>
             </div>
+            <InlineImageUploader imageUrl={f.imageUrl} onUpload={url => {
+              const arr = [...d.formulas]
+              arr[i] = { ...f, imageUrl: url }
+              onChange({ ...d, formulas: arr })
+            }} />
           </div>
         ))}
-        <button onClick={() => onChange({...d, formulas: [...(d.formulas||[]), {name:'',formula:'',where:''}]})}
+        <button onClick={() => onChange({...d, formulas: [...(d.formulas||[]), {name:'',formula:'',where:'',imageUrl:null}]})}
           className="text-xs text-purple-600 font-bold mt-1">+ Add Formula</button>
+      </div>
+      <div>
+        <label className="block text-xs font-bold text-gray-600 mb-1">Definitions</label>
+        {(d.definitions || []).map((df, i) => (
+          <div key={i} className="p-3 bg-purple-50/20 border border-purple-100/50 rounded-xl space-y-2 mb-3">
+            <div className="flex gap-2">
+              <input placeholder="Term" value={df.term||''} onChange={e => { const arr=[...d.definitions]; arr[i]={...arr[i],term:e.target.value}; onChange({...d,definitions:arr}) }} className="w-1/3 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-[#9333EA] outline-none bg-white" />
+              <input placeholder="Meaning" value={df.meaning||''} onChange={e => { const arr=[...d.definitions]; arr[i]={...arr[i],meaning:e.target.value}; onChange({...d,definitions:arr}) }} className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-[#9333EA] outline-none bg-white" />
+              <button onClick={() => onChange({...d,definitions:d.definitions.filter((_,j)=>j!==i)})} className="text-red-400 hover:text-red-600 text-xs">×</button>
+            </div>
+            <InlineImageUploader imageUrl={df.imageUrl} onUpload={url => {
+              const arr = [...d.definitions]
+              arr[i] = { ...df, imageUrl: url }
+              onChange({ ...d, definitions: arr })
+            }} />
+          </div>
+        ))}
+        <button onClick={() => onChange({...d, definitions: [...(d.definitions||[]), {term:'',meaning:'',imageUrl:null}]})}
+          className="text-xs text-purple-600 font-bold mt-1">+ Add Definition</button>
       </div>
     </div>
   )
@@ -124,6 +210,11 @@ function FlashcardsEditor({ parsed, onChange }) {
                 className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-[#9333EA] outline-none" />
             </div>
           ))}
+          <InlineImageUploader imageUrl={card.imageUrl} onUpload={url => {
+            const arr = [...cards]
+            arr[i] = { ...card, imageUrl: url }
+            onChange({ ...parsed, flashcards: arr })
+          }} />
         </div>
       ))}
       <button onClick={() => onChange({...parsed, flashcards: [...cards, {front:'',back:'',hint:'',example:'',memoryTip:''}]})}
@@ -149,6 +240,11 @@ function MnemonicEditor({ parsed, onChange }) {
                 className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-[#9333EA] outline-none" />
             </div>
           ))}
+          <InlineImageUploader imageUrl={item.imageUrl} onUpload={url => {
+            const arr = [...items]
+            arr[i] = { ...item, imageUrl: url }
+            onChange({ ...parsed, mnemonics: arr })
+          }} />
         </div>
       ))}
       <button onClick={() => onChange({...parsed, mnemonics: [...items, {concept:'',mnemonic:'',expansion:'',explanation:''}]})}
@@ -193,6 +289,7 @@ function MockTestEditor({ parsed, onChange }) {
                 ))}
                 <input type="text" placeholder="Explanation" value={q.explanation||''} onChange={e => updateMCQ(level, i, 'explanation', e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-[#9333EA] outline-none" />
+                <InlineImageUploader imageUrl={q.imageUrl} onUpload={url => updateMCQ(level, i, 'imageUrl', url)} />
               </div>
             ))}
             {(parsed[level]?.hots||[]).map((q, i) => (
@@ -202,6 +299,7 @@ function MockTestEditor({ parsed, onChange }) {
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-[#9333EA] outline-none" />
                 <textarea rows={2} placeholder="Expected Answer" value={q.expectedAnswer||''} onChange={e => updateHOTS(level, i, 'expectedAnswer', e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-[#9333EA] outline-none" />
+                <InlineImageUploader imageUrl={q.imageUrl} onUpload={url => updateHOTS(level, i, 'imageUrl', url)} />
               </div>
             ))}
           </div>
@@ -238,10 +336,12 @@ export default function ToolContentManager({ chapter }) {
   }
 
   const loadTopics = async () => {
-    try {
-      const data = await getChapterTopics(chapter.id)
-      setTopics(data)
-    } catch (e) { /* topics optional */ }
+    // Merge AI-generated topics and manual subtopics from the chapter object
+    const rawTopics = Array.from(new Set([
+      ...(chapter.topics || []),
+      ...(chapter.subtopics || [])
+    ]))
+    setTopics(rawTopics)
   }
 
   const showToast = (message, type = 'success') => setToast({ message, type })
@@ -249,7 +349,7 @@ export default function ToolContentManager({ chapter }) {
   const handleGenerate = async (taskType) => {
     setGenerating(taskType)
     try {
-      const selectedTopic = topicMode === 'chapter' ? null : topics.find(t => t.id.toString() === topicMode)?.topicName || null
+      const selectedTopic = topicMode === 'chapter' ? null : topicMode
       await generateToolContent({ chapterId: chapter.id, taskType, topic: selectedTopic })
       await loadContent()
       showToast(`${AI_TASKS.find(t=>t.key===taskType)?.label} generated! Pending approval.`)
@@ -319,6 +419,38 @@ export default function ToolContentManager({ chapter }) {
     )
   }
 
+  const selectedTopicName = topicMode === 'chapter' ? null : topicMode
+  const filteredContent = content.filter(item => {
+    if (topicMode === 'chapter') {
+      return !item.topic;
+    } else {
+      return item.topic === topicMode;
+    }
+  })
+  const activeScopeName = topicMode === 'chapter' ? 'Chapter Level' : `Topic: ${topicMode}`
+
+  const getScopeStatus = (topicName) => {
+    const items = content.filter(item => {
+      if (topicName === null) {
+        return !item.topic;
+      } else {
+        return item.topic === topicName;
+      }
+    });
+    const expectedTools = topicName === null 
+      ? ['SUMMARY', 'FLASHCARDS', 'MNEMONIC', 'MOCK_TEST']
+      : ['FLASHCARDS', 'MNEMONIC', 'MOCK_TEST'];
+    const approvedCount = items.filter(item => 
+      expectedTools.includes(item.taskType) && item.approvalStatus === 'APPROVED'
+    ).length;
+    return { isAllApproved: approvedCount === expectedTools.length };
+  }
+
+  const chapterStatus = getScopeStatus(null);
+  const chapterBtnClass = chapterStatus.isAllApproved
+    ? (topicMode === 'chapter' ? 'bg-green-600 border-green-600 text-white' : 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100')
+    : (topicMode === 'chapter' ? 'bg-[#9333EA] text-white border-[#9333EA]' : 'border-gray-300 text-gray-600 hover:border-purple-400');
+
   return (
     <div className="space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -326,54 +458,68 @@ export default function ToolContentManager({ chapter }) {
 
       {/* Topic Selector */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">Generate content for:</p>
+        <p className="text-xs font-black text-gray-500 uppercase tracking-wide mb-3">Select Active Scope:</p>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setTopicMode('chapter')}
-            className={`px-4 py-2 rounded-full text-sm font-bold border transition-colors ${topicMode === 'chapter' ? 'bg-[#9333EA] text-white border-[#9333EA]' : 'border-gray-300 text-gray-600 hover:border-purple-400'}`}>
-            📖 Chapter Level
+            className={`px-4 py-2 rounded-full text-sm font-bold border transition-colors ${chapterBtnClass}`}>
+            📖 Chapter Level {!chapterStatus.isAllApproved && '⏳'}
           </button>
-          {topics.map(t => (
-            <button key={t.id}
-              onClick={() => setTopicMode(t.id.toString())}
-              className={`px-4 py-2 rounded-full text-sm font-bold border transition-colors ${topicMode === t.id.toString() ? 'bg-[#9333EA] text-white border-[#9333EA]' : 'border-gray-300 text-gray-600 hover:border-purple-400'}`}>
-              {t.topicName}
+          {topics.map(t => {
+            const tStatus = getScopeStatus(t);
+            const btnClass = tStatus.isAllApproved
+              ? (topicMode === t ? 'bg-green-600 border-green-600 text-white' : 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100')
+              : (topicMode === t ? 'bg-[#9333EA] text-white border-[#9333EA]' : 'border-gray-300 text-gray-600 hover:border-purple-400');
+            return (
+              <button key={t}
+                onClick={() => setTopicMode(t)}
+                className={`px-4 py-2 rounded-full text-sm font-bold border transition-colors ${btnClass}`}>
+                {t} {!tStatus.isAllApproved && '⏳'}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Generate Buttons Grid */}
+      <div>
+        <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">Generate AI Tools ({activeScopeName})</h4>
+        <div className="grid grid-cols-2 gap-4">
+          {AI_TASKS.filter(task => {
+            if (task.key === 'SUMMARY') {
+              return topicMode === 'chapter';
+            }
+            return true;
+          }).map(task => (
+            <button
+              key={task.key}
+              disabled={generating !== null}
+              onClick={() => handleGenerate(task.key)}
+              className={`p-5 rounded-xl border-2 font-bold transition-all text-left ${
+                generating === task.key
+                  ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-wait'
+                  : 'border-[#9333EA]/20 bg-[#9333EA]/5 text-[#9333EA] hover:bg-[#9333EA]/10 hover:border-[#9333EA]'
+              }`}
+            >
+              <div className="text-2xl mb-2">{task.icon}</div>
+              <div className="font-black text-sm">{generating === task.key ? 'Generating...' : `Generate ${task.label}`}</div>
+              <div className="text-xs opacity-60 font-medium mt-0.5">{task.desc}</div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Generate Buttons Grid */}
-      <div className="grid grid-cols-2 gap-4">
-        {AI_TASKS.map(task => (
-          <button
-            key={task.key}
-            disabled={generating !== null}
-            onClick={() => handleGenerate(task.key)}
-            className={`p-5 rounded-xl border-2 font-bold transition-all text-left ${
-              generating === task.key
-                ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-wait'
-                : 'border-[#9333EA]/20 bg-[#9333EA]/5 text-[#9333EA] hover:bg-[#9333EA]/10 hover:border-[#9333EA]'
-            }`}
-          >
-            <div className="text-2xl mb-2">{task.icon}</div>
-            <div className="font-black text-sm">{generating === task.key ? 'Generating...' : `Generate ${task.label}`}</div>
-            <div className="text-xs opacity-60 font-medium mt-0.5">{task.desc}</div>
-          </button>
-        ))}
-      </div>
-
       {/* Existing Content */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-          <h3 className="font-black text-gray-900">Existing AI Content</h3>
-          <span className="text-xs text-gray-400 font-semibold">{content.length} item{content.length !== 1 ? 's' : ''}</span>
+          <h3 className="font-black text-gray-900 text-sm">Existing AI Content ({activeScopeName})</h3>
+          <span className="text-xs text-gray-400 font-semibold">{filteredContent.length} item{filteredContent.length !== 1 ? 's' : ''}</span>
         </div>
-        {content.length === 0 ? (
-          <div className="p-10 text-center text-gray-400">No content generated yet. Use the buttons above.</div>
+        {filteredContent.length === 0 ? (
+          <div className="p-10 text-center text-gray-400 text-sm">No content generated for this scope yet. Use the buttons above.</div>
         ) : (
           <ul className="divide-y divide-gray-50">
-            {content.map(item => (
+            {filteredContent.map(item => (
               <li key={item.id} className="p-5">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2.5">

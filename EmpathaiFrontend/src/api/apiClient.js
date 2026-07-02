@@ -97,13 +97,15 @@ export async function apiGet(path) {
 }
 
 export async function apiPost(path, body) {
-  const res = await apiRequest(path, { method: 'POST', body: JSON.stringify(body) });
+  const isFormData = body instanceof FormData;
+  const res = await apiRequest(path, { method: 'POST', body: isFormData ? body : JSON.stringify(body) });
   if (!res.ok) await throwApiError(res);
   return res.json();
 }
 
 export async function apiPut(path, body) {
-  const res = await apiRequest(path, { method: 'PUT', body: JSON.stringify(body) });
+  const isFormData = body instanceof FormData;
+  const res = await apiRequest(path, { method: 'PUT', body: isFormData ? body : JSON.stringify(body) });
   if (!res.ok) await throwApiError(res);
   return res.json();
 }

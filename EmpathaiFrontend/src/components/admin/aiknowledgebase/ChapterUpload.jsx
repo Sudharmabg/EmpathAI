@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { uploadChapter, getChapterStatus, updateChapterMetadata, publishChapter } from '../../../api/curriculumAiApi'
+import { uploadChapter, getChapterStatus, updateChapterMetadata, publishChapter, uploadChapterImage } from '../../../api/curriculumAiApi'
 
 const CLASSES = [
   'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6',
@@ -17,6 +17,9 @@ export default function ChapterUpload() {
   const [subtopicInput, setSubtopicInput] = useState('')
   const [subtopics, setSubtopics] = useState([])
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [imageBank, setImageBank] = useState([]) // [{conceptName, imageUrl}]
+  const [imgInput, setImgInput] = useState({ conceptName: '', file: null })
+  const [uploadingImg, setUploadingImg] = useState(false)
 
   // Polling logic
   useEffect(() => {
@@ -62,7 +65,9 @@ export default function ChapterUpload() {
       const payload = { ...formData }
       if (!payload.chapterNumber) payload.chapterNumber = null
       else payload.chapterNumber = parseInt(payload.chapterNumber)
-      payload.subtopics = subtopics // array, not string
+      payload.subtopics = subtopics
+      // imageBank: [{conceptName, imageUrl}] — only include entries that have both fields
+      payload.imageBank = imageBank.filter(img => img.conceptName.trim() && img.imageUrl.trim())
       const res = await uploadChapter(payload)
       setChapterId(res.chapterId)
       setStage('PROCESSING')
@@ -188,6 +193,73 @@ export default function ChapterUpload() {
             onChange={e => setFormData({...formData, rawContent: e.target.value})}
             className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold focus:border-[#9333EA] focus:ring-4 focus:ring-purple-100 outline-none shadow-sm"
             required />
+        </div>
+
+        {/* Image Bank */}
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-black text-gray-800">🖼️ Chapter Image Bank <span className="text-gray-400 font-normal text-xs">(Optional)</span></h4>
+              <p className="text-xs text-gray-500 mt-0.5">Tag images by concept name — they will be embedded into the vector DB so AI tools can reference them.</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Concept name (e.g. Mitochondria)"
+              value={imgInput.conceptName}
+              onChange={e => setImgInput({...imgInput, conceptName: e.target.value})}
+              className="flex-1 rounded-lg border border-purple-200 px-3 py-2 text-sm focus:border-[#9333EA] outline-none bg-white"
+            />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={e => setImgInput({...imgInput, file: e.target.files[0]})}
+              className="flex-1 text-sm text-gray-500 file:mr-4 file:py-1.5 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-bold file:bg-[#9333EA] file:text-white hover:file:bg-[#7e22ce] file:cursor-pointer file:transition-colors bg-white rounded-lg border border-purple-200 outline-none focus:border-[#9333EA] py-1 pl-1"
+            />
+            <button
+              type="button"
+              disabled={uploadingImg || !imgInput.conceptName.trim() || !imgInput.file}
+              onClick={async () => {
+                if (!imgInput.conceptName.trim() || !imgInput.file) return
+                try {
+                  setUploadingImg(true)
+                  const res = await uploadChapterImage(imgInput.conceptName.trim(), imgInput.file)
+                  setImageBank([...imageBank, { conceptName: res.conceptName, imageUrl: res.imageUrl }])
+                  setImgInput({ conceptName: '', file: null })
+                  // Reset the file input element manually
+                  const fileInput = document.querySelector('input[type="file"]')
+                  if (fileInput) fileInput.value = ''
+                } catch (e) {
+                  alert('Image upload failed: ' + e.message)
+                } finally {
+                  setUploadingImg(false)
+                }
+              }}
+              className="px-4 py-2 bg-[#9333EA] text-white font-bold rounded-lg hover:bg-[#7e22ce] transition-colors text-sm flex-shrink-0 disabled:opacity-50"
+            >
+              {uploadingImg ? 'Uploading...' : '+ Add'}
+            </button>
+          </div>
+          {imageBank.length > 0 && (
+            <div className="space-y-2">
+              {imageBank.map((img, i) => (
+                <div key={i} className="flex items-center gap-3 bg-white border border-purple-100 rounded-lg px-3 py-2">
+                  <img src={img.imageUrl} alt={img.conceptName} onError={e => { e.target.style.display='none' }}
+                    className="w-10 h-10 object-cover rounded-md flex-shrink-0 border border-gray-200" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-gray-800 truncate">{img.conceptName}</p>
+                    <p className="text-xs text-gray-400 truncate">{img.imageUrl}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setImageBank(imageBank.filter((_, j) => j !== i))}
+                    className="text-red-400 hover:text-red-600 text-sm font-bold flex-shrink-0 ml-1"
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <button type="submit" className="w-full py-3 bg-[#9333EA] hover:bg-[#7e22ce] text-white font-black rounded-xl transition-colors shadow-md shadow-purple-200">
@@ -364,7 +436,7 @@ export default function ChapterUpload() {
         <h3 className="text-xl font-black text-gray-900">Chapter Published!</h3>
         <p className="mt-2 text-sm text-gray-500">The chapter and its AI tools are now available to students.</p>
         <button
-          onClick={() => { setStage('FORM'); setFormData({board:'CBSE',grade:'',subject:'',title:'',chapterNumber:'',rawContent:''}); setSubtopics([]) }}
+          onClick={() => { setStage('FORM'); setFormData({board:'CBSE',grade:'',subject:'',title:'',chapterNumber:'',rawContent:''}); setSubtopics([]); setImageBank([]); setImgInput({conceptName:'',file:null}) }}
           className="mt-6 px-6 py-2.5 bg-purple-50 text-[#9333EA] font-bold rounded-xl hover:bg-purple-100 transition-colors">
           Upload Another Chapter
         </button>

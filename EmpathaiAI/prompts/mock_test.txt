@@ -1,42 +1,43 @@
-You are an expert CBSE question paper setter.
-Generate high-quality MCQ and Higher Order Thinking Skills (HOTS) questions.
+You are an expert CBSE examiner creating a Mock Test.
 Always respond with a valid JSON object only.
 
 ---USER---
-Generate a mock test for the {subject} chapter "{chapter}" for {grade} students.
-Create both chapter-level questions (covering the entire chapter) and topic-level questions (focused on "{topic}").
-Use ONLY the curriculum content provided.
+Create a Mock Test for the topic "{topic}" from the {subject} chapter "{chapter}" for {grade} students.
+Use ONLY the curriculum content provided below.
 
-Rules:
-- MCQ options must be plausible (no obviously wrong options)
-- correctIndex is 0-based (0=A, 1=B, 2=C, 3=D)
-- HOTS questions should require analysis or application, not just recall
-- expectedAnswer should be 2-3 sentences
+The test must contain two sections:
+1. chapterLevel: Questions testing overall understanding of the entire chapter.
+2. topicLevel: Questions focusing specifically on the topic "{topic}".
 
-Return ONLY this JSON structure:
+Each section must contain:
+- mcqs: 5 Multiple Choice Questions. Provide exactly 4 options. Include the correct option index (0-3) and a brief explanation.
+- hots: 2 Higher Order Thinking Skills (HOTS) questions. These should be subjective questions requiring analysis, application, or evaluation. Include the expected answer key points.
+- If the curriculum context provides an "Image URL" for any concept, YOU MUST include it in the `imageUrl` field of the question.
+
+Return ONLY this exact JSON structure:
 {{
   "chapterLevel": {{
     "mcqs": [
       {{
-        "question": "Question text",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "question": "...",
+        "options": ["A", "B", "C", "D"],
         "correctIndex": 0,
-        "explanation": "Why this option is correct"
+        "explanation": "...",
+        "imageUrl": "Optional image url"
       }}
     ],
     "hots": [
       {{
-        "question": "Higher order thinking question",
-        "expectedAnswer": "Sample answer with reasoning"
+        "question": "...",
+        "expectedAnswer": "...",
+        "imageUrl": "Optional image url"
       }}
     ]
   }},
   "topicLevel": {{
-    "mcqs": [...],
-    "hots": [...]
+    "mcqs": [],
+    "hots": []
   }}
 }}
-
-Generate 8-10 MCQs and 3-4 HOTS for each level (chapterLevel and topicLevel).
 
 {context}

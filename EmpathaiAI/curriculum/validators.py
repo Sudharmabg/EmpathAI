@@ -17,6 +17,7 @@ class Flashcard(BaseModel):
     hint: Optional[str] = None
     example: Optional[str] = None
     memoryTip: Optional[str] = None
+    imageUrl: Optional[str] = None
 
 class FlashcardsOutput(BaseModel):
     flashcards: list[Flashcard]
@@ -35,14 +36,20 @@ class FormulaItem(BaseModel):
     name: str
     formula: str                  # LaTeX string e.g. "\\pi r^2"
     where: Optional[str] = None   # variable explanations
+    imageUrl: Optional[str] = None
 
 class DefinitionItem(BaseModel):
     term: str
     meaning: str
+    imageUrl: Optional[str] = None
+
+class KeyPointItem(BaseModel):
+    point: str
+    imageUrl: Optional[str] = None
 
 class SummaryOutput(BaseModel):
     shortSummary: str
-    keyPoints: list[str]                        # renamed from bulletPoints; max 20
+    keyPoints: list[KeyPointItem]               # max 20
     formulas: list[FormulaItem] = []            # optional; empty for non-STEM subjects
     definitions: list[DefinitionItem] = []      # optional; empty if no key terms
 
@@ -63,6 +70,7 @@ class MnemonicItem(BaseModel):
     mnemonic: str
     expansion: Optional[str] = None
     explanation: str
+    imageUrl: Optional[str] = None
 
 class MnemonicOutput(BaseModel):
     mnemonics: list[MnemonicItem]
@@ -82,6 +90,7 @@ class MCQQuestion(BaseModel):
     options: list[str]
     correctIndex: int
     explanation: str
+    imageUrl: Optional[str] = None
 
     @field_validator("options")
     @classmethod
@@ -100,6 +109,7 @@ class MCQQuestion(BaseModel):
 class HOTSQuestion(BaseModel):
     question: str
     expectedAnswer: str
+    imageUrl: Optional[str] = None
 
 class TestSection(BaseModel):
     mcqs: list[MCQQuestion]

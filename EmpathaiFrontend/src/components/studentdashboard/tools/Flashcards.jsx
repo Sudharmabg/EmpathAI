@@ -58,10 +58,13 @@ export default function Flashcards({ flashcards }) {
               <span className="text-primary font-bold">Front</span>
             </div>
             
-            <div className="text-center my-auto">
+            <div className="text-center my-auto flex flex-col items-center gap-3">
               <h3 className="text-xl font-bold text-gray-800 leading-relaxed">
                 {card.front}
               </h3>
+              {card.imageUrl && (
+                <img src={card.imageUrl} alt="Flashcard illustration" className="max-h-32 object-contain rounded-lg border border-gray-200" />
+              )}
             </div>
 
             <div className="text-center text-xs text-gray-400 font-semibold italic">

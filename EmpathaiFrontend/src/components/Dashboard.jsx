@@ -15,11 +15,12 @@ import OverviewPanel from './dashboard/OverviewPanel'
 import RightSidebarPanel from './dashboard/RightSidebarPanel'
 import BadgesModal from './dashboard/BadgesModal'
 import NotificationsModal from './dashboard/NotificationsModal'
+import AiTools from './studentdashboard/tools/AiTools'
 
 import { getWeekTasks, toggleTaskComplete as apiToggleTaskComplete } from '../api/scheduleApi.js'
 
 // ─── Valid tab IDs ─────────────────────────────────────────────────────────────
-const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities']
+const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities', 'tools']
 
 // ─── Subject extraction helper ────────────────────────────────────────────────
 const SUBJECT_KEYWORD_MAP = [
@@ -125,7 +126,7 @@ export default function Dashboard({ user, onLogout }) {
     message: '',
     confirmText: '',
     confirmBg: '',
-    onConfirm: () => {}
+    onConfirm: () => { }
   })
   const [showWarningModal, setShowWarningModal] = useState(false)
   const [warningModalMessage, setWarningModalMessage] = useState('')
@@ -150,17 +151,17 @@ export default function Dashboard({ user, onLogout }) {
     const task = tasks[day]?.find(t => String(t.id) === String(taskId))
     if (!task) return
 
-    const toMins = (t) => { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+m }
+    const toMins = (t) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m }
 
     const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     const todayName = (() => {
       const DAYS_JS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
       return DAYS_JS[new Date().getDay()]
     })()
-    
+
     const taskDayIdx = DAYS_ORDER.indexOf(day)
     const todayIdx = DAYS_ORDER.indexOf(todayName)
-    
+
     const isFutureDay = taskDayIdx > todayIdx
     const isToday = taskDayIdx === todayIdx
     const now = new Date()
@@ -176,8 +177,8 @@ export default function Dashboard({ user, onLogout }) {
     const willComplete = !task.completed
     setConfirmModalConfig({
       title: willComplete ? 'Complete Task?' : 'Mark Incomplete?',
-      message: willComplete 
-        ? `Are you sure you want to mark "${task.title}" as completed?` 
+      message: willComplete
+        ? `Are you sure you want to mark "${task.title}" as completed?`
         : `Are you sure you want to mark "${task.title}" as incomplete?`,
       confirmText: willComplete ? 'Yes, Complete' : 'Yes, Incomplete',
       confirmBg: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
@@ -207,6 +208,7 @@ export default function Dashboard({ user, onLogout }) {
     { id: 'questionnaire', name: 'Feelings Explorer', icon: ClipboardDocumentListIcon },
     // { id: 'curriculum', name: 'Curriculum', icon: BookOpenIcon },
     { id: 'activities', name: 'Activities', icon: PuzzlePieceIcon },
+    { id: 'tools', name: 'Tools', icon: BoltIcon },
   ]
 
   const performSearch = () => {
@@ -363,6 +365,7 @@ export default function Dashboard({ user, onLogout }) {
         <main className="flex-1 p-6">
           {activeTab === 'overview' && <OverviewPanel user={user} setActiveTab={setActiveTab} />}
           {activeTab === 'chatbuddy' && <ChatBuddy user={user} initialMessage={chatMessage} setChatMessage={setChatMessage} />}
+          {activeTab === 'tools' && <AiTools user={user} />}
           {activeTab === 'schedule' && (
             tasksLoading ? (
               <div className="flex flex-col items-center justify-center h-64 gap-3">
@@ -430,11 +433,11 @@ export default function Dashboard({ user, onLogout }) {
 
       {/* ── Confirmation Modal ── */}
       {showConfirmModal && (
-        <div 
+        <div
           onClick={() => setShowConfirmModal(false)}
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         >
-          <div 
+          <div
             onClick={e => e.stopPropagation()}
             className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-100 shadow-2xl flex flex-col items-center text-center"
           >
@@ -444,14 +447,14 @@ export default function Dashboard({ user, onLogout }) {
               {confirmModalConfig.message}
             </p>
             <div className="flex gap-3 w-full">
-              <button 
-                onClick={() => setShowConfirmModal(false)} 
+              <button
+                onClick={() => setShowConfirmModal(false)}
                 className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 border border-gray-200 transition-colors"
               >
                 Cancel
               </button>
-              <button 
-                onClick={confirmModalConfig.onConfirm} 
+              <button
+                onClick={confirmModalConfig.onConfirm}
                 className={`flex-1 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md ${confirmModalConfig.confirmBg}`}
               >
                 {confirmModalConfig.confirmText}
@@ -463,11 +466,11 @@ export default function Dashboard({ user, onLogout }) {
 
       {/* ── Warning Modal ── */}
       {showWarningModal && (
-        <div 
+        <div
           onClick={() => setShowWarningModal(false)}
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
         >
-          <div 
+          <div
             onClick={e => e.stopPropagation()}
             className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-red-100 shadow-2xl flex flex-col items-center text-center animate-scale-up"
           >
@@ -476,8 +479,8 @@ export default function Dashboard({ user, onLogout }) {
             <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">
               {warningModalMessage}
             </p>
-            <button 
-              onClick={() => setShowWarningModal(false)} 
+            <button
+              onClick={() => setShowWarningModal(false)}
               className="w-full bg-black text-white px-4 py-2.5 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-md"
             >
               Okay

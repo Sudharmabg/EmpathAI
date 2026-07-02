@@ -61,7 +61,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         // ── 3. If still no token, skip to the next filter ───────────────────────────
-        if (jwt == null) {
+        if (jwt == null || "null".equals(jwt) || "undefined".equals(jwt) || jwt.trim().isEmpty()) {
             filterChain.doFilter(request, response);
             return;
         }

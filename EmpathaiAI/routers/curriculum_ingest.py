@@ -43,6 +43,8 @@ class IngestRequest(BaseModel):
     grade: str
     subject: str
     chapter_title: str
+    chapter_number: Optional[int] = None
+    subtopics: Optional[str] = None # JSON string if provided
     raw_content: str = Field(..., min_length=100)
 
 
@@ -90,6 +92,8 @@ async def ingest_chapter(request: IngestRequest):
             request.subject,
             request.chapter_title,
             request.board,
+            request.chapter_number,
+            request.subtopics,
         ),
         daemon=True
     )
@@ -102,10 +106,20 @@ async def ingest_chapter(request: IngestRequest):
     )
 
 
-def _run_pipeline_thread(chapter_id, raw_content, grade, subject, chapter_title, board):
+def _run_pipeline_thread(chapter_id, raw_content, grade, subject, chapter_title, board, chapter_number, subtopics):
     """Wrapper to run pipeline.run_pipeline in a thread."""
     try:
         from curriculum.pipeline import run_pipeline
+        
+        # Parse manual subtopics if provided
+        manual_subtopics = None
+        if subtopics:
+            import json
+            try:
+                manual_subtopics = json.loads(subtopics)
+            except Exception as e:
+                logger.warning(f"Failed to parse manual subtopics JSON: {e}")
+
         run_pipeline(
             chapter_id=chapter_id,
             raw_text=raw_content,
@@ -113,6 +127,8 @@ def _run_pipeline_thread(chapter_id, raw_content, grade, subject, chapter_title,
             subject=subject,
             chapter_title=chapter_title,
             board=board,
+            chapter_number=chapter_number,
+            manual_subtopics=manual_subtopics,
             on_status_update=_on_status_update,
         )
     except Exception as e:
@@ -134,3 +150,14 @@ async def get_status(chapter_id: int):
         status=entry["status"],
         metadata=entry.get("metadata")
     )
+
+@router.delete("/embeddings/{chapter_id}")
+async def delete_embeddings(chapter_id: int):
+    """Delete all embeddings for a chapter."""
+    try:
+        from curriculum.chroma_store import delete_by_chapter
+        delete_by_chapter(chapter_id)
+        return {"status": "success", "message": f"Deleted embeddings for chapter {chapter_id}"}
+    except Exception as e:
+        logger.error("Error deleting embeddings for chapter_id=%d: %s", chapter_id, e)
+        raise HTTPException(status_code=500, detail="Failed to delete embeddings")

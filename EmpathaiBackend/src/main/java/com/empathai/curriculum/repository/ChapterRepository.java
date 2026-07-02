@@ -12,6 +12,8 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
 
     List<Chapter> findByProcessingStatusOrderByCreatedAtDesc(ProcessingStatus status);
 
+    List<Chapter> findByProcessingStatusOrderByArchivedAtDesc(ProcessingStatus status);
+
     List<Chapter> findByGradeAndSubjectAndProcessingStatusOrderByTitleAsc(
         String grade, String subject, ProcessingStatus status
     );

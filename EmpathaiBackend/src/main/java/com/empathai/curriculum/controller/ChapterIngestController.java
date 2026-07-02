@@ -2,8 +2,10 @@ package com.empathai.curriculum.controller;
 
 import com.empathai.curriculum.dto.request.ChapterMetadataUpdateRequest;
 import com.empathai.curriculum.dto.request.ChapterUploadRequest;
+import com.empathai.curriculum.dto.request.ChapterTopicRequest;
 import com.empathai.curriculum.dto.response.ChapterResponse;
 import com.empathai.curriculum.dto.response.ChapterStatusResponse;
+import com.empathai.curriculum.dto.response.ChapterTopicResponse;
 import com.empathai.curriculum.service.ChapterIngestService;
 import com.empathai.user.entity.User;
 import jakarta.validation.Valid;
@@ -71,5 +73,62 @@ public class ChapterIngestController {
     @GetMapping("/{id}")
     public ResponseEntity<ChapterResponse> getChapter(@PathVariable Long id) {
         return ResponseEntity.ok(chapterIngestService.getChapter(id));
+    }
+
+    // ── Archive ─────────────────────────────────────────────────────────────
+
+    @PostMapping("/{id}/archive")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','CONTENT_ADMIN')")
+    public ResponseEntity<ChapterResponse> archiveChapter(
+        @PathVariable Long id,
+        @AuthenticationPrincipal User currentUser
+    ) {
+        return ResponseEntity.ok(chapterIngestService.archiveChapter(id, currentUser.getName()));
+    }
+
+    @PostMapping("/{id}/restore")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','CONTENT_ADMIN')")
+    public ResponseEntity<ChapterResponse> restoreChapter(@PathVariable Long id) {
+        return ResponseEntity.ok(chapterIngestService.restoreChapter(id));
+    }
+
+    @GetMapping("/archived")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','CONTENT_ADMIN')")
+    public ResponseEntity<List<ChapterResponse>> listArchivedChapters() {
+        return ResponseEntity.ok(chapterIngestService.listArchivedChapters());
+    }
+
+    // ── Topics ──────────────────────────────────────────────────────────────
+
+    @PostMapping("/{id}/topics")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','CONTENT_ADMIN')")
+    public ResponseEntity<ChapterTopicResponse> addTopic(
+        @PathVariable Long id,
+        @Valid @RequestBody ChapterTopicRequest request,
+        @AuthenticationPrincipal User currentUser
+    ) {
+        return ResponseEntity.ok(chapterIngestService.addTopic(id, request, currentUser.getName()));
+    }
+
+    @PutMapping("/topics/{topicId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','CONTENT_ADMIN')")
+    public ResponseEntity<ChapterTopicResponse> updateTopic(
+        @PathVariable Long topicId,
+        @Valid @RequestBody ChapterTopicRequest request
+    ) {
+        return ResponseEntity.ok(chapterIngestService.updateTopic(topicId, request));
+    }
+
+    @DeleteMapping("/topics/{topicId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','CONTENT_ADMIN')")
+    public ResponseEntity<Void> deleteTopic(@PathVariable Long topicId) {
+        chapterIngestService.deleteTopic(topicId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/topics")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','CONTENT_ADMIN')")
+    public ResponseEntity<List<ChapterTopicResponse>> getTopicTree(@PathVariable Long id) {
+        return ResponseEntity.ok(chapterIngestService.getTopicTree(id));
     }
 }

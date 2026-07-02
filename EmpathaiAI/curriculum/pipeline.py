@@ -25,6 +25,8 @@ def run_pipeline(
     subject: str,
     chapter_title: str,
     board: str,
+    chapter_number: Optional[int],
+    manual_subtopics: Optional[list],
     on_status_update: Callable[[int, str, Optional[dict]], None]
 ):
     """
@@ -51,6 +53,9 @@ def run_pipeline(
         # ── Step 1: Generate metadata ─────────────────────────────────────────
         on_status_update(chapter_id, "PROCESSING", None)
         metadata = generate_metadata(raw_text, grade, subject, chapter_title, board)
+        if manual_subtopics:
+            metadata["subtopics"] = manual_subtopics
+            
         topics = metadata.get("topics", [])
         logger.info("Metadata generated: %d topics", len(topics))
 

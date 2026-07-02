@@ -35,9 +35,19 @@ public class AiGeneratedContent {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;    // Validated JSON string
 
-    @Column(name = "is_approved", nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", nullable = false)
     @Builder.Default
-    private Boolean isApproved = true;
+    private ApprovalStatus approvalStatus = ApprovalStatus.PENDING;
+
+    @Column(name = "approved_by", length = 100)
+    private String approvedBy;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
+    @Column(name = "edited_by", length = 100)
+    private String editedBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

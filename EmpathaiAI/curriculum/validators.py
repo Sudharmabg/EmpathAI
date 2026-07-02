@@ -29,18 +29,30 @@ class FlashcardsOutput(BaseModel):
         return v
 
 
-# ── Summary ───────────────────────────────────────────────────────────────────
+# ── Summary (Ready Reckoner) ──────────────────────────────────────────────────
+
+class FormulaItem(BaseModel):
+    name: str
+    formula: str                  # LaTeX string e.g. "\\pi r^2"
+    where: Optional[str] = None   # variable explanations
+
+class DefinitionItem(BaseModel):
+    term: str
+    meaning: str
 
 class SummaryOutput(BaseModel):
     shortSummary: str
-    detailedSummary: str
-    bulletPoints: list[str]
+    keyPoints: list[str]                        # renamed from bulletPoints; max 20
+    formulas: list[FormulaItem] = []            # optional; empty for non-STEM subjects
+    definitions: list[DefinitionItem] = []      # optional; empty if no key terms
 
-    @field_validator("bulletPoints")
+    @field_validator("keyPoints")
     @classmethod
-    def must_have_bullets(cls, v):
+    def must_have_key_points(cls, v):
         if not v:
-            raise ValueError("bulletPoints must not be empty")
+            raise ValueError("keyPoints must not be empty")
+        if len(v) > 20:
+            raise ValueError("keyPoints must not exceed 20 items")
         return v
 
 

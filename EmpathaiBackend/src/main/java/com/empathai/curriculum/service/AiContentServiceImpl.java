@@ -1,9 +1,10 @@
 package com.empathai.curriculum.service;
 
-import com.empathai.curriculum.dto.request.AiProcessRequest;
-import com.empathai.curriculum.dto.response.AiProcessResponse;
+import com.empathai.curriculum.dto.request.*;
+import com.empathai.curriculum.dto.response.*;
 import com.empathai.curriculum.entity.AiGeneratedContent;
 import com.empathai.curriculum.entity.AiTaskType;
+import com.empathai.curriculum.entity.ApprovalStatus;
 import com.empathai.curriculum.repository.AiGeneratedContentRepository;
 import com.empathai.curriculum.repository.ChapterRepository;
 import com.empathai.curriculum.exception.EmpathaiException;
@@ -18,9 +19,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -48,13 +52,15 @@ public class AiContentServiceImpl implements AiContentService {
             .findByTaskTypeAndChapterIdAndTopic(taskType, request.getChapterId(), request.getTopic());
 
         if (cached.isPresent()) {
+            AiGeneratedContent entity = cached.get();
             log.info("Cache HIT: task={} chapterId={} topic={}", taskType, request.getChapterId(), request.getTopic());
             return AiProcessResponse.builder()
                 .taskType(taskType.name())
                 .chapterId(request.getChapterId())
                 .topic(request.getTopic())
-                .content(cached.get().getContent())
+                .content(entity.getContent())
                 .cached(true)
+                .pendingApproval(entity.getApprovalStatus() == ApprovalStatus.PENDING)
                 .build();
         }
 
@@ -105,7 +111,7 @@ public class AiContentServiceImpl implements AiContentService {
             .taskType(taskType)
             .topic(request.getTopic())
             .content(contentJson)
-            .isApproved(true)
+            .approvalStatus(ApprovalStatus.PENDING)
             .build();
         contentRepository.save(entity);
 
@@ -115,6 +121,7 @@ public class AiContentServiceImpl implements AiContentService {
             .topic(request.getTopic())
             .content(contentJson)
             .cached(false)
+            .pendingApproval(true)
             .build();
     }
 
@@ -122,7 +129,7 @@ public class AiContentServiceImpl implements AiContentService {
     public AiProcessResponse getCached(String taskTypeStr, Long chapterId, String topic) {
         AiTaskType taskType = AiTaskType.valueOf(taskTypeStr.toUpperCase());
         Optional<AiGeneratedContent> cached = contentRepository
-            .findByTaskTypeAndChapterIdAndTopic(taskType, chapterId, topic);
+            .findByTaskTypeAndChapterIdAndTopicAndApprovalStatus(taskType, chapterId, topic, ApprovalStatus.APPROVED);
             
         if (cached.isPresent()) {
             return AiProcessResponse.builder()
@@ -131,9 +138,176 @@ public class AiContentServiceImpl implements AiContentService {
                 .topic(topic)
                 .content(cached.get().getContent())
                 .cached(true)
+                .pendingApproval(false)
                 .build();
         }
         
-        throw new EmpathaiException("Cached content not found", HttpStatus.NOT_FOUND);
+        throw new EmpathaiException("Cached content not found or not approved", HttpStatus.NOT_FOUND);
+    }
+
+    // ── Admin Tools ───────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public AiProcessResponse generateToolContent(AiGenerateRequest request, String createdBy) {
+        // Reuse the process method by wrapping request. 
+        // We fetch chapter details to properly call Python RAG.
+        com.empathai.curriculum.entity.Chapter chapter = chapterRepository.findById(request.getChapterId())
+            .orElseThrow(() -> new EmpathaiException("Chapter not found", HttpStatus.NOT_FOUND));
+
+        AiProcessRequest processRequest = new AiProcessRequest();
+        processRequest.setTask(request.getTaskType().name());
+        processRequest.setChapterId(chapter.getId());
+        processRequest.setTopic(request.getTopic());
+        processRequest.setGrade(chapter.getGrade());
+        processRequest.setSubject(chapter.getSubject());
+        processRequest.setChapter(chapter.getTitle());
+
+        return process(processRequest);
+    }
+
+    @Override
+    @Transactional
+    public AiProcessResponse regenerateToolContent(Long id, String regeneratedBy) {
+        AiGeneratedContent existing = contentRepository.findById(id)
+            .orElseThrow(() -> new EmpathaiException("Content not found", HttpStatus.NOT_FOUND));
+
+        com.empathai.curriculum.entity.Chapter chapter = chapterRepository.findById(existing.getChapterId())
+            .orElseThrow(() -> new EmpathaiException("Chapter not found", HttpStatus.NOT_FOUND));
+
+        // Build process request with original parameters
+        AiProcessRequest processRequest = new AiProcessRequest();
+        processRequest.setTask(existing.getTaskType().name());
+        processRequest.setChapterId(chapter.getId());
+        processRequest.setTopic(existing.getTopic());
+        processRequest.setGrade(chapter.getGrade());
+        processRequest.setSubject(chapter.getSubject());
+        processRequest.setChapter(chapter.getTitle());
+
+        // Call Python RAG
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("task",       processRequest.getTask());
+        payload.put("chapter_id", processRequest.getChapterId());
+        payload.put("topic",      processRequest.getTopic());
+        payload.put("grade",      processRequest.getGrade());
+        payload.put("subject",    processRequest.getSubject());
+        payload.put("chapter",    processRequest.getChapter());
+
+        Map<String, Object> pythonResponse;
+        try {
+            pythonResponse = webClientBuilder.build()
+                .post()
+                .uri(aiServiceUrl + "/api/ai/process")
+                .header("X-Internal-Token", internalApiKey)
+                .bodyValue(payload)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .timeout(Duration.ofSeconds(120))
+                .block();
+        } catch (Exception e) {
+            log.error("Python regenerate call failed: {}", e.getMessage());
+            throw new EmpathaiException("AI generation temporarily unavailable.", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+
+        Object contentObj = pythonResponse.get("content");
+        String contentJson;
+        try {
+            contentJson = objectMapper.writeValueAsString(contentObj);
+        } catch (Exception e) {
+            throw new EmpathaiException("Failed to serialize AI response", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        // Update existing record in place (reset to PENDING)
+        existing.setContent(contentJson);
+        existing.setApprovalStatus(ApprovalStatus.PENDING);
+        existing.setApprovedBy(null);
+        existing.setApprovedAt(null);
+        existing.setEditedBy(regeneratedBy);
+        contentRepository.save(existing);
+
+        return AiProcessResponse.builder()
+            .taskType(existing.getTaskType().name())
+            .chapterId(existing.getChapterId())
+            .topic(existing.getTopic())
+            .content(contentJson)
+            .cached(false)
+            .pendingApproval(true)
+            .build();
+    }
+
+    @Override
+    public List<AiContentAdminResponse> listContentForChapter(Long chapterId) {
+        return contentRepository.findByChapterIdOrderByTaskTypeAscTopicAsc(chapterId)
+            .stream().map(this::toAdminResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AiContentAdminResponse> listPendingContent() {
+        return contentRepository.findByApprovalStatusOrderByCreatedAtDesc(ApprovalStatus.PENDING)
+            .stream().map(this::toAdminResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public AiContentAdminResponse approveOrReject(Long id, AiContentApprovalRequest request, String adminBy) {
+        AiGeneratedContent content = contentRepository.findById(id)
+            .orElseThrow(() -> new EmpathaiException("Content not found", HttpStatus.NOT_FOUND));
+        
+        ApprovalStatus newStatus = ApprovalStatus.valueOf(request.getApprovalStatus().toUpperCase());
+        content.setApprovalStatus(newStatus);
+        content.setApprovedBy(adminBy);
+        content.setApprovedAt(LocalDateTime.now());
+        
+        return toAdminResponse(contentRepository.save(content));
+    }
+
+    @Override
+    @Transactional
+    public AiContentAdminResponse editContent(Long id, AiContentEditRequest request, String editedBy) {
+        AiGeneratedContent content = contentRepository.findById(id)
+            .orElseThrow(() -> new EmpathaiException("Content not found", HttpStatus.NOT_FOUND));
+        
+        content.setContent(request.getContent());
+        // Edit resets to PENDING
+        content.setApprovalStatus(ApprovalStatus.PENDING);
+        content.setEditedBy(editedBy);
+        
+        return toAdminResponse(contentRepository.save(content));
+    }
+
+    @Override
+    @Transactional
+    public void deleteContent(Long id) {
+        contentRepository.deleteById(id);
+    }
+
+    @Override
+    @Transactional
+    public AiContentAdminResponse createContent(AiContentCreateRequest request, String createdBy) {
+        AiGeneratedContent entity = AiGeneratedContent.builder()
+            .chapterId(request.getChapterId())
+            .taskType(request.getTaskType())
+            .topic(request.getTopic())
+            .content(request.getContent())
+            .approvalStatus(ApprovalStatus.PENDING)
+            .build();
+            
+        return toAdminResponse(contentRepository.save(entity));
+    }
+
+    private AiContentAdminResponse toAdminResponse(AiGeneratedContent content) {
+        return AiContentAdminResponse.builder()
+            .id(content.getId())
+            .chapterId(content.getChapterId())
+            .taskType(content.getTaskType())
+            .topic(content.getTopic())
+            .content(content.getContent())
+            .approvalStatus(content.getApprovalStatus())
+            .approvedBy(content.getApprovedBy())
+            .approvedAt(content.getApprovedAt())
+            .editedBy(content.getEditedBy())
+            .createdAt(content.getCreatedAt())
+            .updatedAt(content.getUpdatedAt())
+            .build();
     }
 }

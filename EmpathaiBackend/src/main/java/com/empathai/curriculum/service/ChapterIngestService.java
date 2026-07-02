@@ -13,4 +13,15 @@ public interface ChapterIngestService {
     ChapterResponse publishChapter(Long chapterId, String publishedBy);
     List<ChapterResponse> listPublishedChapters(String grade, String subject);
     ChapterResponse getChapter(Long chapterId);
+    
+    // Archive
+    ChapterResponse archiveChapter(Long chapterId, String archivedBy);
+    ChapterResponse restoreChapter(Long chapterId);
+    List<ChapterResponse> listArchivedChapters();
+    
+    // Topics
+    com.empathai.curriculum.dto.response.ChapterTopicResponse addTopic(Long chapterId, com.empathai.curriculum.dto.request.ChapterTopicRequest request, String createdBy);
+    com.empathai.curriculum.dto.response.ChapterTopicResponse updateTopic(Long topicId, com.empathai.curriculum.dto.request.ChapterTopicRequest request);
+    void deleteTopic(Long topicId);
+    List<com.empathai.curriculum.dto.response.ChapterTopicResponse> getTopicTree(Long chapterId);
 }

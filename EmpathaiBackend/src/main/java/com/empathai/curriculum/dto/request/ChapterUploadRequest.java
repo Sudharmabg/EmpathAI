@@ -3,6 +3,7 @@ package com.empathai.curriculum.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import java.util.List;
 
 @Data
 public class ChapterUploadRequest {
@@ -22,4 +23,9 @@ public class ChapterUploadRequest {
     @NotBlank(message = "Raw content must not be blank")
     @Size(min = 200, message = "Raw content must be at least 200 characters")
     private String rawContent;
+
+    private Integer chapterNumber;
+
+    private List<String> subtopics; // Array of subtopic names from chip UI
 }
+

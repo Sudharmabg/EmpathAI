@@ -2,6 +2,8 @@ package com.empathai.curriculum.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 @Entity
@@ -29,6 +31,9 @@ public class Chapter {
     @Column(nullable = false, length = 300)
     private String title;
 
+    @Column(name = "chapter_number")
+    private Integer chapterNumber;
+
     @Column(name = "raw_content", columnDefinition = "TEXT", nullable = false)
     private String rawContent;
 
@@ -38,39 +43,50 @@ public class Chapter {
     private ProcessingStatus processingStatus = ProcessingStatus.PENDING;
 
     // AI-generated metadata stored as JSON strings
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "JSONB")
     private String topics;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "JSONB")
     private String subtopics;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "JSONB")
     private String concepts;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "learning_objectives", columnDefinition = "JSONB")
     private String learningObjectives;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "blooms_levels", columnDefinition = "JSONB")
     private String bloomsLevels;
 
     @Column(name = "difficulty_level", length = 20)
     private String difficultyLevel;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "JSONB")
     private String keywords;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "JSONB")
     private String definitions;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "JSONB")
     private String formulae;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "common_misconceptions", columnDefinition = "JSONB")
     private String commonMisconceptions;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "JSONB")
     private String prerequisites;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "next_concepts", columnDefinition = "JSONB")
     private String nextConcepts;
 
@@ -91,6 +107,12 @@ public class Chapter {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "archived_by", length = 100)
+    private String archivedBy;
+
+    @Column(name = "archived_at")
+    private LocalDateTime archivedAt;
 
     @PrePersist
     protected void onCreate() {

@@ -128,7 +128,6 @@ def similarity_search(
             params.append(grade)
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        params.append(top_k)
 
         with conn.cursor() as cur:
             cur.execute(f"""

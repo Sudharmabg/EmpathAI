@@ -23,7 +23,7 @@ import ReactGA from 'react-ga4'
 const ADMIN_ROLES = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PSYCHOLOGIST', 'CONTENT_ADMIN', 'TEACHER']
 
 // ── All valid student tabs ─────────────────────────────────────────────────────
-const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities']
+const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities', 'tools']
 
 function isAdmin(user) {
   if (!user) return false

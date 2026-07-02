@@ -6,7 +6,11 @@ import com.empathai.curriculum.dto.response.ChapterResponse;
 import com.empathai.curriculum.dto.response.ChapterStatusResponse;
 import com.empathai.curriculum.entity.Chapter;
 import com.empathai.curriculum.entity.ProcessingStatus;
+import com.empathai.curriculum.entity.ChapterTopic;
 import com.empathai.curriculum.repository.ChapterRepository;
+import com.empathai.curriculum.repository.ChapterTopicRepository;
+import com.empathai.curriculum.dto.request.ChapterTopicRequest;
+import com.empathai.curriculum.dto.response.ChapterTopicResponse;
 import com.empathai.curriculum.exception.EmpathaiException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,6 +35,7 @@ import java.util.stream.Collectors;
 public class ChapterIngestServiceImpl implements ChapterIngestService {
 
     private final ChapterRepository chapterRepository;
+    private final ChapterTopicRepository chapterTopicRepository;
     private final WebClient.Builder webClientBuilder;
     private final ObjectMapper objectMapper;
 
@@ -43,14 +48,25 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
     @Override
     @Transactional
     public ChapterStatusResponse uploadChapter(ChapterUploadRequest request, String createdBy) {
-        // 1. Save chapter to MySQL with PENDING status
+        // Parse manual subtopics if provided (now a List<String>, not comma-separated)
+        String subtopicsJson = null;
+        if (request.getSubtopics() != null && !request.getSubtopics().isEmpty()) {
+            try {
+                subtopicsJson = objectMapper.writeValueAsString(request.getSubtopics());
+            } catch (JsonProcessingException e) {
+                log.warn("Failed to serialize manual subtopics: {}", e.getMessage());
+            }
+        }
+
         Chapter chapter = Chapter.builder()
             .board(request.getBoard())
             .grade(request.getGrade())
             .subject(request.getSubject())
             .title(request.getTitle())
+            .chapterNumber(request.getChapterNumber())
             .rawContent(request.getRawContent())
             .processingStatus(ProcessingStatus.PENDING)
+            .subtopics(subtopicsJson)
             .createdBy(createdBy)
             .build();
         chapter = chapterRepository.save(chapter);
@@ -71,14 +87,19 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
         chapter.setProcessingStatus(ProcessingStatus.PROCESSING);
         chapterRepository.save(chapter);
 
-        Map<String, Object> payload = Map.of(
-            "chapter_id",    chapter.getId(),
-            "board",         chapter.getBoard(),
-            "grade",         chapter.getGrade(),
-            "subject",       chapter.getSubject(),
-            "chapter_title", chapter.getTitle(),
-            "raw_content",   chapter.getRawContent()
-        );
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("chapter_id", chapter.getId());
+        payload.put("board", chapter.getBoard());
+        payload.put("grade", chapter.getGrade());
+        payload.put("subject", chapter.getSubject());
+        payload.put("chapter_title", chapter.getTitle());
+        payload.put("raw_content", chapter.getRawContent());
+        if (chapter.getChapterNumber() != null) {
+            payload.put("chapter_number", chapter.getChapterNumber());
+        }
+        if (chapter.getSubtopics() != null) {
+            payload.put("subtopics", chapter.getSubtopics()); // JSON string
+        }
 
         webClientBuilder.build()
             .post()
@@ -250,11 +271,16 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
             .grade(chapter.getGrade())
             .subject(chapter.getSubject())
             .title(chapter.getTitle())
+            .chapterNumber(chapter.getChapterNumber())
             .processingStatus(chapter.getProcessingStatus())
             .topics(deserializeList(chapter.getTopics()))
+            .subtopics(deserializeList(chapter.getSubtopics()))
+            .concepts(deserializeList(chapter.getConcepts()))
             .learningObjectives(deserializeList(chapter.getLearningObjectives()))
             .bloomsLevels(deserializeList(chapter.getBloomsLevels()))
             .keywords(deserializeList(chapter.getKeywords()))
+            .definitions(deserializeList(chapter.getDefinitions()))
+            .formulae(deserializeList(chapter.getFormulae()))
             .commonMisconceptions(deserializeList(chapter.getCommonMisconceptions()))
             .prerequisites(deserializeList(chapter.getPrerequisites()))
             .difficultyLevel(chapter.getDifficultyLevel())
@@ -263,6 +289,8 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
             .createdAt(chapter.getCreatedAt())
             .publishedBy(chapter.getPublishedBy())
             .publishedAt(chapter.getPublishedAt())
+            .archivedBy(chapter.getArchivedBy())
+            .archivedAt(chapter.getArchivedAt())
             .build();
     }
     
@@ -273,5 +301,94 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
         } catch (JsonProcessingException e) {
             return null;
         }
+    }
+
+    @Override
+    @Transactional
+    public ChapterResponse archiveChapter(Long chapterId, String archivedBy) {
+        Chapter chapter = getChapterEntity(chapterId);
+        chapter.setProcessingStatus(ProcessingStatus.ARCHIVED);
+        chapter.setArchivedBy(archivedBy);
+        chapter.setArchivedAt(LocalDateTime.now());
+        return toChapterResponse(chapterRepository.save(chapter));
+    }
+
+    @Override
+    @Transactional
+    public ChapterResponse restoreChapter(Long chapterId) {
+        Chapter chapter = getChapterEntity(chapterId);
+        if (chapter.getProcessingStatus() != ProcessingStatus.ARCHIVED) {
+            throw new EmpathaiException("Chapter is not archived", HttpStatus.BAD_REQUEST);
+        }
+        chapter.setProcessingStatus(ProcessingStatus.PUBLISHED); // Restore to published
+        return toChapterResponse(chapterRepository.save(chapter));
+    }
+
+    @Override
+    public List<ChapterResponse> listArchivedChapters() {
+        return chapterRepository.findByProcessingStatusOrderByArchivedAtDesc(ProcessingStatus.ARCHIVED)
+            .stream().map(this::toChapterResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public ChapterTopicResponse addTopic(Long chapterId, ChapterTopicRequest request, String createdBy) {
+        getChapterEntity(chapterId); // validate chapter exists
+        
+        ChapterTopic topic = ChapterTopic.builder()
+            .chapterId(chapterId)
+            .topicName(request.getTopicName())
+            .parentId(request.getParentId())
+            .rawContent(request.getRawContent())
+            .createdBy(createdBy)
+            .build();
+            
+        return toTopicResponse(chapterTopicRepository.save(topic));
+    }
+
+    @Override
+    @Transactional
+    public ChapterTopicResponse updateTopic(Long topicId, ChapterTopicRequest request) {
+        ChapterTopic topic = chapterTopicRepository.findById(topicId)
+            .orElseThrow(() -> new EmpathaiException("Topic not found", HttpStatus.NOT_FOUND));
+            
+        topic.setTopicName(request.getTopicName());
+        if (request.getRawContent() != null) {
+            topic.setRawContent(request.getRawContent());
+        }
+        
+        return toTopicResponse(chapterTopicRepository.save(topic));
+    }
+
+    @Override
+    @Transactional
+    public void deleteTopic(Long topicId) {
+        chapterTopicRepository.deleteById(topicId);
+    }
+
+    @Override
+    public List<ChapterTopicResponse> getTopicTree(Long chapterId) {
+        List<ChapterTopic> rootTopics = chapterTopicRepository.findByChapterIdAndParentIdIsNullOrderBySortOrder(chapterId);
+        return rootTopics.stream().map(t -> {
+            ChapterTopicResponse resp = toTopicResponse(t);
+            List<ChapterTopic> sub = chapterTopicRepository.findByParentIdOrderBySortOrder(t.getId());
+            resp.setSubtopics(sub.stream().map(this::toTopicResponse).collect(Collectors.toList()));
+            return resp;
+        }).collect(Collectors.toList());
+    }
+
+    private ChapterTopicResponse toTopicResponse(ChapterTopic t) {
+        return ChapterTopicResponse.builder()
+            .id(t.getId())
+            .chapterId(t.getChapterId())
+            .topicName(t.getTopicName())
+            .parentId(t.getParentId())
+            .sortOrder(t.getSortOrder())
+            .rawContent(t.getRawContent())
+            .hasContent(t.getRawContent() != null && !t.getRawContent().trim().isEmpty())
+            .createdBy(t.getCreatedBy())
+            .createdAt(t.getCreatedAt())
+            .updatedAt(t.getUpdatedAt())
+            .build();
     }
 }

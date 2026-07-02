@@ -44,7 +44,7 @@ TASK_TEMPERATURES = {
 
 TASK_MAX_TOKENS = {
     "FLASHCARDS": 3000,
-    "SUMMARY":    2000,
+    "SUMMARY":    3500,   # Increased: formulas + definitions + key points need room
     "MNEMONIC":   2000,
     "MOCK_TEST":  4000,
 }
@@ -72,8 +72,12 @@ def process(
     Returns:
         Validated dict matching the task's JSON schema.
     """
+    # ── 0. Force chapter-level for SUMMARY (Ready Reckoner) ──────────────────
+    if task == "SUMMARY":
+        topic = None  # Always chapter-wide, never topic-scoped
+
     # ── 1. Build query string ─────────────────────────────────────────────────
-    query = _build_query(task, topic or chapter, subject, grade)
+    query = _build_query(task, topic or chapter, subject, grade, chapter)
 
     # ── 2. Embed query ────────────────────────────────────────────────────────
     logger.info("Embedding query for task=%s chapter_id=%d", task, chapter_id)
@@ -130,11 +134,11 @@ def process(
     return {}
 
 
-def _build_query(task: str, topic: str, subject: str, grade: str) -> str:
+def _build_query(task: str, topic: str, subject: str, grade: str, chapter: str = "") -> str:
     """Build a descriptive retrieval query for embedding."""
     query_map = {
         "FLASHCARDS": f"Key concepts and definitions for {topic} in {subject} {grade}",
-        "SUMMARY":    f"Main ideas, explanations, and learning objectives for {topic} in {subject} {grade}",
+        "SUMMARY":    f"All main ideas, formulas, equations, definitions, and learning objectives for the complete chapter '{chapter}' in {subject} {grade}",
         "MNEMONIC":   f"Important terms, formulas, and memory devices for {topic} in {subject} {grade}",
         "MOCK_TEST":  f"Questions, exercises, examples, and concepts for {topic} in {subject} {grade}",
     }

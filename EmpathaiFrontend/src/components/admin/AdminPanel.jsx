@@ -12,10 +12,12 @@ import {
   TrophyIcon,
   CalendarDaysIcon,
   ChatBubbleLeftRightIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline'
 import UserManagement from './usermanagement/UserManagement'
 import AssessmentManagement from './feelingsexplorer/AssessmentManagement'
 import CurriculumManagement from './curriculummanagement/CurriculumManagement'
+import AiKnowledgeBase from './aiknowledgebase/AiKnowledgeBase'
 import FlaggedChats from './FlaggedChats'
 import AnalyticsDashboard from './AnalyticsDashboard'
 import Rewards from './Rewards'
@@ -33,7 +35,7 @@ export default function AdminPanel({ user, onLogout }) {
     { id: 'users',            path: 'users',            label: 'Users',             icon: UsersIcon },
     { id: 'assessments',      path: 'assessments',      label: 'Feelings Explorer', icon: ClipboardDocumentCheckIcon },
     { id: 'schedule_planner', path: 'schedule-planner', label: 'Schedule Planner',  icon: CalendarDaysIcon },
-    // { id: 'curriculum',       path: 'curriculum',       label: 'Curriculum',        icon: AcademicCapIcon },
+    { id: 'ai_knowledge_base', path: 'ai-knowledge-base', label: 'AI Knowledge Base', icon: SparklesIcon },
     { id: 'flagged_chats',    path: 'flagged-chats',    label: 'Support Alerts',    icon: FlagIcon },
     { id: 'chats',            path: 'chats',            label: 'ChatBuddy Logs',    icon: ChatBubbleLeftRightIcon },
     { id: 'analytics',        path: 'analytics',        label: 'Analytics',         icon: ChartBarIcon },
@@ -52,7 +54,7 @@ export default function AdminPanel({ user, onLogout }) {
     }
     if (role === 'SUPER_ADMIN') return true
     if (role === 'SCHOOL_ADMIN') return ['users', 'schedule_planner'].includes(item.id)
-    if (role === 'CONTENT_ADMIN') return ['curriculum'].includes(item.id)
+    if (role === 'CONTENT_ADMIN') return ['ai_knowledge_base'].includes(item.id)
     if (role === 'PSYCHOLOGIST') return ['assessments', 'flagged_chats', 'chats'].includes(item.id)
     if (role === 'TEACHER') return ['schedule_planner'].includes(item.id)
     return false
@@ -88,7 +90,7 @@ export default function AdminPanel({ user, onLogout }) {
     switch (activeItem.id) {
       case 'users':            return "Manage your organization's users and roles"
       case 'assessments':      return "Manage emotional check-ins and activities"
-      case 'curriculum':       return "Manage syllabi and learning content"
+      case 'ai_knowledge_base': return "Upload and manage curriculum for AI tools"
       case 'flagged_chats':    return "Manage high-risk student interactions"
       case 'chats':            return "View ChatBuddy logs and interactions"
       case 'analytics':        return "View data and insights"
@@ -193,7 +195,7 @@ export default function AdminPanel({ user, onLogout }) {
               <Route path="users/*"            element={<UserManagement user={user} />} />
               <Route path="assessments/*"      element={<AssessmentManagement />} />
               <Route path="schedule-planner/*" element={<SchedulePlanner user={user} />} />
-              <Route path="curriculum/*"       element={<CurriculumManagement />} />
+              <Route path="ai-knowledge-base/*" element={<AiKnowledgeBase />} />
               <Route path="flagged-chats/*"    element={<FlaggedChats />} />
               <Route path="chats/*"            element={<AdminChats />} />
               <Route path="analytics"          element={<AnalyticsDashboard />} />

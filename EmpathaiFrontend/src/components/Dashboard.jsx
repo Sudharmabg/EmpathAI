@@ -15,38 +15,19 @@ import OverviewPanel from './dashboard/OverviewPanel'
 import RightSidebarPanel from './dashboard/RightSidebarPanel'
 import BadgesModal from './dashboard/BadgesModal'
 import NotificationsModal from './dashboard/NotificationsModal'
+import AiTools from './studentdashboard/tools/AiTools'
 
 import { getWeekTasks, toggleTaskComplete as apiToggleTaskComplete } from '../api/scheduleApi.js'
 
-// ─── Valid tab IDs ─────────────────────────────────────────────────────────────
-const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities']
+const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities', 'tools']
 
-// ─── Subject extraction helper ────────────────────────────────────────────────
 const SUBJECT_KEYWORD_MAP = [
-  {
-    keywords: ['math', 'maths', 'mathematics', 'algebra', 'geometry', 'arithmetic', 'trigonometry', 'calculus'],
-    subject: 'Mathematics'
-  },
-  {
-    keywords: ['science', 'sci', 'physics', 'phy', 'chemistry', 'chem', 'biology', 'bio'],
-    subject: 'Science'
-  },
-  {
-    keywords: ['english', 'eng', 'grammar', 'literature', 'reading', 'writing', 'comprehension'],
-    subject: 'English'
-  },
-  {
-    keywords: ['hindi', 'हिंदी'],
-    subject: 'Hindi'
-  },
-  {
-    keywords: ['sst', 'social', 'social studies', 'history', 'geography', 'geo', 'hist', 'civics', 'economics', 'political science'],
-    subject: 'Social Studies'
-  },
-  {
-    keywords: ['art', 'craft', 'art & craft', 'drawing', 'painting'],
-    subject: 'Art & Craft'
-  },
+  { keywords: ['math', 'maths', 'mathematics', 'algebra', 'geometry', 'arithmetic', 'trigonometry', 'calculus'], subject: 'Mathematics' },
+  { keywords: ['science', 'sci', 'physics', 'phy', 'chemistry', 'chem', 'biology', 'bio'], subject: 'Science' },
+  { keywords: ['english', 'eng', 'grammar', 'literature', 'reading', 'writing', 'comprehension'], subject: 'English' },
+  { keywords: ['hindi', 'हिंदी'], subject: 'Hindi' },
+  { keywords: ['sst', 'social', 'social studies', 'history', 'geography', 'geo', 'hist', 'civics', 'economics', 'political science'], subject: 'Social Studies' },
+  { keywords: ['art', 'craft', 'art & craft', 'drawing', 'painting'], subject: 'Art & Craft' },
 ]
 
 function getScheduledSubjectsForDay(tasks, day) {
@@ -121,7 +102,6 @@ export default function Dashboard({ user, onLogout }) {
       .finally(() => setTasksLoading(false))
   }, [user?.id])
 
-  // ✅ Fixed toggleTaskComplete — validation + XP update
   const toggleTaskComplete = async (day, taskId) => {
     const task = tasks[day]?.find(t => String(t.id) === String(taskId))
     if (!task) return
@@ -142,7 +122,7 @@ export default function Dashboard({ user, onLogout }) {
     const currentMins = now.getHours() * 60 + now.getMinutes()
     const taskStartMins = toMins(task.startTime)
 
-    if (isFutureDay || (isToday && currentMins < taskStartMins)) {
+    if (!task.completed && (isFutureDay || (isToday && currentMins < taskStartMins))) {
       setWarningModalMessage("You cannot mark a task as completed before its scheduled start time.")
       setShowWarningModal(true)
       return
@@ -186,6 +166,7 @@ export default function Dashboard({ user, onLogout }) {
     { id: 'schedule', name: 'My Schedule', icon: CalendarIcon },
     { id: 'questionnaire', name: 'Feelings Explorer', icon: ClipboardDocumentListIcon },
     { id: 'activities', name: 'Activities', icon: PuzzlePieceIcon },
+    { id: 'tools', name: 'Tools', icon: BoltIcon },
   ]
 
   const performSearch = () => {
@@ -340,6 +321,7 @@ export default function Dashboard({ user, onLogout }) {
         <main className="flex-1 p-6">
           {activeTab === 'overview' && <OverviewPanel user={user} setActiveTab={setActiveTab} />}
           {activeTab === 'chatbuddy' && <ChatBuddy user={user} initialMessage={chatMessage} setChatMessage={setChatMessage} />}
+          {activeTab === 'tools' && <AiTools user={user} />}
           {activeTab === 'schedule' && (
             tasksLoading ? (
               <div className="flex flex-col items-center justify-center h-64 gap-3">

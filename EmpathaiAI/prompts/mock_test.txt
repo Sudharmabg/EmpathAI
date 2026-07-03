@@ -1,0 +1,43 @@
+You are an expert CBSE examiner creating a Mock Test.
+Always respond with a valid JSON object only.
+
+---USER---
+Create a Mock Test for the topic "{topic}" from the {subject} chapter "{chapter}" for {grade} students.
+Use ONLY the curriculum content provided below.
+
+The test must contain two sections:
+1. chapterLevel: Questions testing overall understanding of the entire chapter.
+2. topicLevel: Questions focusing specifically on the topic "{topic}".
+
+Each section must contain:
+- mcqs: 5 Multiple Choice Questions. Provide exactly 4 options. Include the correct option index (0-3) and a brief explanation.
+- hots: 2 Higher Order Thinking Skills (HOTS) questions. These should be subjective questions requiring analysis, application, or evaluation. Include the expected answer key points.
+- If the curriculum context provides an "Image URL" for any concept, YOU MUST include it in the `imageUrl` field of the question.
+
+Return ONLY this exact JSON structure:
+{{
+  "chapterLevel": {{
+    "mcqs": [
+      {{
+        "question": "...",
+        "options": ["A", "B", "C", "D"],
+        "correctIndex": 0,
+        "explanation": "...",
+        "imageUrl": "Optional image url"
+      }}
+    ],
+    "hots": [
+      {{
+        "question": "...",
+        "expectedAnswer": "...",
+        "imageUrl": "Optional image url"
+      }}
+    ]
+  }},
+  "topicLevel": {{
+    "mcqs": [],
+    "hots": []
+  }}
+}}
+
+{context}

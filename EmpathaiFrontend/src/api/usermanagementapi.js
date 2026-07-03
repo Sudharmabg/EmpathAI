@@ -63,16 +63,29 @@ export function getSchools() {
     return apiGet('/api/schools');
 }
 
+export function getSchoolById(id) {
+    return apiGet('/api/schools/' + id);
+}
+
 export function createSchool(data) {
     return apiPost('/api/schools', data);
+}
+
+export function updateSchool(id, data) {
+    return apiPut('/api/schools/' + id, data);
 }
 
 export function deleteSchool(id) {
     return apiDelete('/api/schools/' + id);
 }
 
-export function getAnalyticsDashboard() {
-    return apiGet('/api/analytics/dashboard');
+export function getAnalyticsDashboard(studentId, weekStart) {
+    const params = new URLSearchParams();
+    if (studentId) params.append('studentId', studentId);
+    if (weekStart) params.append('weekStart', weekStart);
+    
+    const url = `/api/analytics/dashboard${params.toString() ? '?' + params.toString() : ''}`;
+    return apiGet(url);
 }
 
 export function getQuestions() {

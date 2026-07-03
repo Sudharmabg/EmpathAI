@@ -20,6 +20,7 @@ public class InterventionController {
 
     private final StudentRepository studentRepository;
     private final RewardsService    rewardsService;
+    private final com.empathai.intervention.service.InterventionService interventionService;
 
     /**
      * POST /api/interventions/students/{studentId}/complete
@@ -91,5 +92,31 @@ public class InterventionController {
             log.error("getInterventionCount failed for studentId={}: {}", studentId, e.getMessage(), e);
             throw e;
         }
+    }
+
+    @PostMapping
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PSYCHOLOGIST', 'SCHOOL_ADMIN')")
+    public ResponseEntity<com.empathai.intervention.dto.InterventionResponse> createIntervention(
+            @RequestBody com.empathai.intervention.dto.InterventionRequest request) {
+        // Automatically increment count for badges when creating a specific intervention record
+        if (request.getStudentId() != null) {
+            try {
+                studentRepository.incrementInterventionSessionCount(request.getStudentId());
+                Student refreshed = studentRepository.findById(request.getStudentId()).orElse(null);
+                if (refreshed != null) {
+                    rewardsService.checkAndAwardInterventionBadges(request.getStudentId(), refreshed.getInterventionSessionCount());
+                }
+            } catch (Exception e) {
+                log.error("Failed to process rewards during intervention creation", e);
+            }
+        }
+        return ResponseEntity.ok(interventionService.createIntervention(request));
+    }
+
+    @GetMapping("/student/{studentId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PSYCHOLOGIST', 'SCHOOL_ADMIN')")
+    public ResponseEntity<java.util.List<com.empathai.intervention.dto.InterventionResponse>> getInterventionsByStudentId(
+            @PathVariable Long studentId) {
+        return ResponseEntity.ok(interventionService.getInterventionsByStudentId(studentId));
     }
 }

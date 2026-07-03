@@ -22,4 +22,5 @@ public class SchoolAdminResponse {
     private boolean active;
     private Long schoolId;
     private String school;   // school name
+    private String phoneNumber;
 }

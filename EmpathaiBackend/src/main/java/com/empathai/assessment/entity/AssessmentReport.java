@@ -58,8 +58,8 @@ public class AssessmentReport {
     private String editedBy;
 
     @Builder.Default
-    @Column(name = "confirmed", length = 1)
-    private String confirmed = "N";
+    @Column(name = "confirmed")
+    private boolean confirmed = false;
 
     @Builder.Default
     @Column(name = "chroma_synced")

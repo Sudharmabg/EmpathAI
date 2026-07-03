@@ -1,14 +1,14 @@
 package com.empathai.user.entity;
 
 import com.empathai.user.entity.enums.UserRole;
+import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "super_admins")
+@DiscriminatorValue("SUPER_ADMIN")
 @Getter
 @Setter
 @NoArgsConstructor

@@ -15,12 +15,14 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class AssessmentServiceImpl implements IAssessmentService {
 
     private final AssessmentGroupRepository groupRepo;
     private final AssessmentQuestionRepository questionRepo;
     private final AssessmentResponseRepository responseRepo;
     private final com.empathai.assessment.service.AnswerOptionService answerOptionService;
+    private final com.empathai.user.repository.SchoolRepository schoolRepo;
 
     // ── Groups ────────────────────────────────────────────────────────────────
 
@@ -178,39 +180,24 @@ public class AssessmentServiceImpl implements IAssessmentService {
         // STEP 5 FIX: Normalize class name before saving
         String normalizedClass = normalizeClassName(request.getClassName());
 
-        // Check if response already exists for this student+question
-        AssessmentResponse existing = responseRepo
-                .findByStudentIdAndQuestionId(request.getStudentId(), request.getQuestionId())
+        AssessmentResponse existing = responseRepo.findByStudentIdAndQuestionId(
+                request.getStudentId(), request.getQuestionId())
                 .orElse(null);
 
         if (existing != null) {
             // Update existing response
             existing.setResponseValue(value);
             existing.setEmotion(request.getEmotion());
-            existing.setGroupName(request.getGroupName());
-            existing.setClassName(normalizedClass);
-            existing.setSchoolName(request.getSchoolName());
-            if (request.getStudentName() != null && !request.getStudentName().isBlank())
-                existing.setStudentName(request.getStudentName());
-            if (request.getGender() != null) existing.setGender(request.getGender());
-            if (request.getAge()    != null) existing.setAge(request.getAge());
             return toResponseDto(responseRepo.save(existing));
         }
 
         // Create new response
         AssessmentResponse r = AssessmentResponse.builder()
                 .studentId(request.getStudentId())
-                .studentName(request.getStudentName())
                 .questionId(request.getQuestionId())
-                .questionText(request.getQuestionText())
                 .responseValue(value)
                 .emotion(request.getEmotion())
                 .groupId(request.getGroupId())
-                .groupName(request.getGroupName())
-                .className(normalizedClass)           // STEP 5 FIX
-                .gender(request.getGender())
-                .age(request.getAge())
-                .schoolName(request.getSchoolName())
                 .build();
 
         return toResponseDto(responseRepo.save(r));
@@ -333,21 +320,49 @@ public class AssessmentServiceImpl implements IAssessmentService {
     }
 
     private ResponseDto toResponseDto(AssessmentResponse r) {
+        String studentName = "";
+        String className = "";
+        String gender = "";
+        Integer age = null;
+        String schoolName = "";
+
+        if (r.getStudent() != null) {
+            studentName = r.getStudent().getName();
+            className = r.getStudent().getClassName();
+            gender = r.getStudent().getGender();
+            if (r.getStudent().getDateOfBirth() != null) {
+                try {
+                    java.time.LocalDate dob = java.time.LocalDate.parse(r.getStudent().getDateOfBirth());
+                    age = java.time.Period.between(dob, java.time.LocalDate.now()).getYears();
+                } catch (Exception e) {
+                    // ignore
+                }
+            }
+            if (r.getStudent().getSchoolId() != null) {
+                schoolName = schoolRepo.findById(r.getStudent().getSchoolId())
+                        .map(com.empathai.user.entity.School::getName)
+                        .orElse("");
+            }
+        }
+
+        String groupName = r.getGroup() != null ? r.getGroup().getName() : "";
+        String questionText = r.getQuestion() != null ? r.getQuestion().getQuestionText() : "";
+
         return ResponseDto.builder()
                 .id(r.getId())
                 .studentId(r.getStudentId())
-                .studentName(r.getStudentName())
+                .studentName(studentName)
                 .questionId(r.getQuestionId())
-                .questionText(r.getQuestionText())
+                .questionText(questionText)
                 .responseValue(r.getResponseValue())
                 .answer(r.getResponseValue())
                 .emotion(r.getEmotion())
-                .className(r.getClassName())
+                .className(className)
                 .groupId(r.getGroupId())
-                .groupName(r.getGroupName())
-                .gender(r.getGender())
-                .age(r.getAge())
-                .schoolName(r.getSchoolName())
+                .groupName(groupName)
+                .gender(gender)
+                .age(age)
+                .schoolName(schoolName)
                 .submittedAt(r.getSubmittedAt())
                 .build();
     }

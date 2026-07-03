@@ -24,7 +24,7 @@ public class AIAnalysisService {
 
     private final ChromaDBService chromaDBService;
     private final AssessmentResponseRepository assessmentResponseRepository;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AnalysisResult analyzeStudentAnswers(AnalysisRequest request) {
@@ -44,7 +44,8 @@ public class AIAnalysisService {
         // Step 2 — Build combined answers text for ChromaDB search
         StringBuilder answersText = new StringBuilder();
         for (AssessmentResponse r : responses) {
-            answersText.append("Question: ").append(r.getQuestionText())
+            String qText = r.getQuestion() != null ? r.getQuestion().getQuestionText() : "";
+            answersText.append("Question: ").append(qText)
                     .append(" | Student answered: ").append(r.getResponseValue())
                     .append("\n");
         }

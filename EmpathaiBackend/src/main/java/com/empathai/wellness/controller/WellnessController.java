@@ -98,14 +98,14 @@ public class WellnessController {
     @PostMapping("/sleep")
     public ResponseEntity<SleepEntry> saveSleep(@RequestBody Map<String, Object> body) {
         Long studentId = Long.valueOf(body.get("studentId").toString());
-        String bedtime = (String) body.get("bedtime");
-        String wakeTime = (String) body.get("wakeTime");
+        String bedtimeStr = (String) body.get("bedtime");
+        String wakeTimeStr = (String) body.get("wakeTime");
         String quality = (String) body.get("quality");
 
         SleepEntry entry = SleepEntry.builder()
                 .studentId(studentId)
-                .bedtime(bedtime)
-                .wakeTime(wakeTime)
+                .bedtime(bedtimeStr != null ? java.time.LocalTime.parse(bedtimeStr) : null)
+                .wakeTime(wakeTimeStr != null ? java.time.LocalTime.parse(wakeTimeStr) : null)
                 .quality(quality)
                 .loggedAt(LocalDateTime.now())
                 .build();

@@ -499,6 +499,11 @@ public class ScheduleRuleEngine {
         return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
     }
 
+    public int toMins(java.time.LocalTime time) {
+        if (time == null) return 0;
+        return time.getHour() * 60 + time.getMinute();
+    }
+
     /**
      * Checks if the given day is Saturday or Sunday.
      */

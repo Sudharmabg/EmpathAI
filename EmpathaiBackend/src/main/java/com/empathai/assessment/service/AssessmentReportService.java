@@ -33,7 +33,7 @@ public class AssessmentReportService {
     private final AnswerOptionService answerOptionService;
     private final ChromaDBService chromaDBService;
     private final AssessmentReportHistoryRepository reportHistoryRepo;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${openai.api.key:}")
@@ -51,7 +51,6 @@ public class AssessmentReportService {
                 .collect(Collectors.joining("\n"));
     }
 
-    @Transactional
     public AssessmentReportResponse generateReport(AssessmentReportRequest request) {
         LocalDate today = LocalDate.now();
 
@@ -122,9 +121,7 @@ public class AssessmentReportService {
     }
 
     public Optional<AssessmentReportResponse> getReport(String studentId, Long groupId) {
-        return reportRepo
-                .findByStudentIdAndGroupIdAndSessionDate(studentId, groupId, LocalDate.now())
-                .map(this::toResponse);
+        return getLatestReport(studentId, groupId);
     }
 
     public List<AssessmentReportResponse> getReportsByClass(String className) {
@@ -180,7 +177,11 @@ public class AssessmentReportService {
 
         Map<String, String> fallback = new LinkedHashMap<>();
         fallback.put("summary", "Assessment completed. Please speak with your teacher or counsellor for detailed feedback.");
-        fallback.put("bullets", "");
+        fallback.put("bullets", 
+                "✅ Great effort on completing all sections of the assessment.\n" +
+                "✅ Helpful responses provided for understanding your current feelings.\n" +
+                "🔹 Keep practicing your daily check-ins to track your mood changes.\n" +
+                "💡 Box Breathing exercises can help calm your mind when feeling overwhelmed.");
 
         if (openaiApiKey == null || openaiApiKey.isBlank()) {
             log.warn("OPENAI_API_KEY not set — returning fallback report");
@@ -426,7 +427,7 @@ public class AssessmentReportService {
                 .bulletPoints(r.getBulletPoints())
                 .editedSummaryText(r.getEditedSummaryText())
                 .editedBy(r.getEditedBy())
-                .confirmed(r.getConfirmed() != null ? r.getConfirmed() : "N")
+                .confirmed(r.isConfirmed() ? "Y" : "N")
                 .chromaSynced(r.getChromaSynced())
                 .createdAt(r.getCreatedAt())
                 .build();
@@ -453,7 +454,7 @@ public class AssessmentReportService {
         }
 
         String changeTypeSnapshot;
-        if ("Y".equalsIgnoreCase(report.getConfirmed())) {
+        if (report.isConfirmed()) {
             changeTypeSnapshot = "CONFIRMED";
         } else if (report.getEditedSummaryText() != null) {
             changeTypeSnapshot = "HUMAN_EDITED";
@@ -490,7 +491,7 @@ public class AssessmentReportService {
         AssessmentReport report = reportRepo.findById(reportId)
                 .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("AssessmentReport not found: " + reportId));
         saveHistorySnapshot(report);
-        report.setConfirmed("Y");
+        report.setConfirmed(true);
         report.setEditedBy(confirmedBy);
         log.info("Insight confirmed for reportId={} by {}", reportId, confirmedBy);
         return toResponse(reportRepo.save(report));

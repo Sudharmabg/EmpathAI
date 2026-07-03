@@ -73,7 +73,25 @@ public class EmailService {
         }
     }
 
+    private String escapeHtml(String input) {
+        if (input == null) return "";
+        StringBuilder builder = new StringBuilder();
+        for (char c : input.toCharArray()) {
+            switch (c) {
+                case '<': builder.append("&lt;"); break;
+                case '>': builder.append("&gt;"); break;
+                case '&': builder.append("&amp;"); break;
+                case '"': builder.append("&quot;"); break;
+                case '\'': builder.append("&#x27;"); break;
+                case '/': builder.append("&#x2F;"); break;
+                default: builder.append(c);
+            }
+        }
+        return builder.toString();
+    }
+
     private String buildEmailHtml(String name, String setupLink) {
+        String escapedName = escapeHtml(name);
         return """
             <!DOCTYPE html>
             <html>
@@ -101,6 +119,6 @@ public class EmailService {
               </div>
             </body>
             </html>
-            """.formatted(name, setupLink);
+            """.formatted(escapedName, setupLink);
     }
 }

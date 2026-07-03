@@ -17,10 +17,8 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 // Spring sets a readable cookie called XSRF-TOKEN.
 // We must echo its value in the X-XSRF-TOKEN header on every non-GET request.
 function getCsrfToken() {
-  const match = document.cookie
-    .split('; ')
-    .find(row => row.startsWith('XSRF-TOKEN='));
-  return match ? decodeURIComponent(match.split('=')[1]) : null;
+  const match = document.cookie.match(/(^|;)\s*XSRF-TOKEN\s*=\s*([^;]+)/);
+  return match ? decodeURIComponent(match[2].trim()) : null;
 }
 
 // ── Core fetch wrapper ────────────────────────────────────────────────────────
@@ -54,6 +52,26 @@ export async function apiRequest(path, options = {}) {
     );
   }
 
+  // ── CSRF Auto-Retry ──────────────────────────────────────────────────────────
+  // If a mutating request fails with 403, the backend likely rejected an old/missing CSRF token
+  // but it also attached a new XSRF-TOKEN cookie to the 403 response.
+  if (response.status === 403 && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+    const newCsrf = getCsrfToken();
+    if (newCsrf && newCsrf !== headers['X-XSRF-TOKEN']) {
+      // Retry exactly once with the new token
+      headers['X-XSRF-TOKEN'] = newCsrf;
+      try {
+        response = await fetch(`${BASE_URL}${path}`, {
+          ...options,
+          headers,
+          credentials: 'include',
+        });
+      } catch (networkErr) {
+        // Let it fall through
+      }
+    }
+  }
+
   // Vite proxy returns 503 when the backend is down
   if (response.status === 503) {
     throw new Error(
@@ -79,13 +97,15 @@ export async function apiGet(path) {
 }
 
 export async function apiPost(path, body) {
-  const res = await apiRequest(path, { method: 'POST', body: JSON.stringify(body) });
+  const isFormData = body instanceof FormData;
+  const res = await apiRequest(path, { method: 'POST', body: isFormData ? body : JSON.stringify(body) });
   if (!res.ok) await throwApiError(res);
   return res.json();
 }
 
 export async function apiPut(path, body) {
-  const res = await apiRequest(path, { method: 'PUT', body: JSON.stringify(body) });
+  const isFormData = body instanceof FormData;
+  const res = await apiRequest(path, { method: 'PUT', body: isFormData ? body : JSON.stringify(body) });
   if (!res.ok) await throwApiError(res);
   return res.json();
 }

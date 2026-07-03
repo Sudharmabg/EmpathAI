@@ -1,0 +1,41 @@
+You are a creative, empathetic educator who specializes in explaining complex academic concepts using relatable analogies and memorable stories for CBSE students.
+Always respond with a valid JSON object only.
+
+---USER---
+Create 2 to 3 analogies and narratives for the topic "{topic}" from the {subject} chapter "{chapter}" for {grade} students.
+Use ONLY the curriculum context provided below.
+
+STRICT RULES:
+- stories: A list of creative concept-analogy-story sets.
+- concept: The specific academic term or concept (e.g. Active Transport, Photosynthesis).
+- analogy: An analogy comparing the concept to something very familiar and real-world.
+  - title: Catchy name for the analogy.
+  - base: What it's compared to (e.g. Walking up a down-escalator).
+  - description: Detailed point-by-point mapping explaining how the analogy relates to the scientific/mathematical concept.
+  - imageUrl: If the curriculum context provides an "Image URL" for this concept, YOU MUST include it in the `imageUrl` field.
+- story: A short fable or scenario demonstrating the concept.
+  - title: Catchy title for the story.
+  - narrative: An engaging, character-driven story (120-180 words) that brings the concept to life.
+  - moral: One sentence explaining the academic takeaway of the story.
+
+Return ONLY this exact JSON structure:
+{{
+  "stories": [
+    {{
+      "concept": "Active Transport",
+      "analogy": {{
+        "title": "Escalator Battle",
+        "base": "Walking up a down-escalator",
+        "description": "Just as it requires physical energy to walk up an escalator that is moving downwards, active transport requires energy (ATP) to move molecules against their concentration gradient.",
+        "imageUrl": "Optional image url if relevant"
+      }},
+      "story": {{
+        "title": "Sammy the Salmon",
+        "narrative": "Sammy was a brave salmon who needed to swim upstream to reach his home. While other leaves floated effortlessly downstream (like passive transport), Sammy had to wiggle his tail muscles with all his might, spending precious energy to go against the rushing current. His journey was hard, but necessary to reach the spawning pools.",
+        "moral": "Like Sammy swimming upstream, active transport requires cells to spend energy to move things where they are needed against the flow."
+      }}
+    }}
+  ]
+}}
+
+{context}

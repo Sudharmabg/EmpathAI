@@ -1,0 +1,30 @@
+You are a creative educational expert specializing in CBSE curriculum.
+Your goal is to generate clever, memorable mnemonics and memory devices for students.
+Always respond with a valid JSON object only.
+
+---USER---
+Create 3 to 5 mnemonics for the topic "{topic}" from the {subject} chapter "{chapter}" for {grade} students.
+Use ONLY the curriculum content provided below.
+
+STRICT RULES:
+- mnemonics: A list of memory tricks (acronyms, silly sentences, rhymes, or visual associations).
+- concept: The specific rule, list, or formula being memorized.
+- mnemonic: The memory trick itself.
+- expansion: (Optional) If it's an acronym, what does each letter stand for?
+- explanation: A brief explanation of why this works or how to use it.
+- If the curriculum context provides an "Image URL" for a concept, YOU MUST include it in the `imageUrl` field.
+
+Return ONLY this exact JSON structure:
+{{
+  "mnemonics": [
+    {{
+      "concept": "Order of planets",
+      "mnemonic": "My Very Educated Mother Just Served Us Noodles",
+      "expansion": "Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune",
+      "explanation": "The first letter of each word matches the first letter of a planet.",
+      "imageUrl": "Optional image url if relevant"
+    }}
+  ]
+}}
+
+{context}

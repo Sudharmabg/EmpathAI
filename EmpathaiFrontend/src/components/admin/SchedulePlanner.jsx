@@ -489,7 +489,7 @@ export default function SchedulePlanner({ user }) {
   const role = user?.role
   const isSchoolAdmin = role === 'SCHOOL_ADMIN'
   const fixedSchoolId = user?.schoolId || user?.school_id
-  const fixedSchoolName = user?.schoolName || 'Your School'
+  const fixedSchoolName = user?.school || 'Your School'
 
   useEffect(() => {
     if (isSchoolAdmin) {

@@ -6,7 +6,9 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "chat_messages")
+@Table(name = "chat_messages", indexes = {
+        @Index(name = "idx_chat_msg_session", columnList = "session_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor

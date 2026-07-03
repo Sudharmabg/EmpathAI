@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 import com.empathai.analytics.dto.AnalysisRequest;
 import com.empathai.analytics.dto.AnalysisResult;
 import com.empathai.analytics.service.AIAnalysisService;
+import org.springframework.format.annotation.DateTimeFormat;
+import java.time.LocalDate;
 
 @Slf4j
 @RestController
@@ -19,10 +21,12 @@ public class AnalyticsController {
     private final AnalyticsService analyticsService;
 
     @GetMapping("/dashboard")
-    public ResponseEntity<AnalyticsDashboardResponse> getDashboard() {
-        log.info("GET /api/analytics/dashboard called");
+    public ResponseEntity<AnalyticsDashboardResponse> getDashboard(
+            @RequestParam(required = false) Long studentId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekStart) {
+        log.info("GET /api/analytics/dashboard called with studentId={} and weekStart={}", studentId, weekStart);
         try {
-            AnalyticsDashboardResponse response = analyticsService.getDashboard();
+            AnalyticsDashboardResponse response = analyticsService.getDashboard(studentId, weekStart);
             log.info("GET /api/analytics/dashboard completed successfully");
             return ResponseEntity.ok(response);
         } catch (Exception e) {

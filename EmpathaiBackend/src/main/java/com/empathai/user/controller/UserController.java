@@ -64,10 +64,7 @@ public class UserController {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             String principal = auth.getName();
             ResponseEntity<UserResponse> response = ResponseEntity.ok(
-                    userService.getAllUsers().stream()
-                            .filter(u -> principal.equals(u.getEmail()) || principal.equals(u.getUsername()))
-                            .findFirst()
-                            .orElseThrow(() -> new RuntimeException("User not found"))
+                    userService.getUserByEmailOrUsername(principal)
             );
             logger.info("getCurrentUser completed successfully");
             return response;
@@ -282,7 +279,7 @@ public class UserController {
     private String generateTempPassword() {
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         StringBuilder sb = new StringBuilder();
-        Random random = new Random();
+        java.security.SecureRandom random = new java.security.SecureRandom();
         for (int i = 0; i < 12; i++) sb.append(chars.charAt(random.nextInt(chars.length())));
         return sb.toString();
     }

@@ -14,9 +14,11 @@ import com.empathai.schedule.entity.ScheduleTask;
 import com.empathai.schedule.repository.ExamDateRepository;
 import com.empathai.schedule.repository.ScheduleTaskRepository;
 import com.empathai.schedule.repository.StudentSchedulePreferenceRepository;
+import com.empathai.user.entity.School;
 import com.empathai.user.entity.Student;
 import com.empathai.user.entity.User;
 import com.empathai.user.exception.EmpathaiException;
+import com.empathai.user.repository.SchoolRepository;
 import com.empathai.user.repository.UserRepository;
 import com.empathai.wellness.entity.MoodEntry;
 import com.empathai.wellness.entity.SleepEntry;
@@ -28,6 +30,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
+import jakarta.annotation.PostConstruct;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -46,8 +49,21 @@ public class ChatService {
     private final ChatMessageRepository messageRepo;
     private final ChatUsageRepository usageRepo;
     private final UserRepository userRepository;
+    private final SchoolRepository schoolRepository;
     private final WebClient.Builder webClientBuilder;
     private final FlaggedChatService flaggedChatService;
+
+    private WebClient webClient;
+
+    @Value("${chatbot.ai-service.api-key:empathai-internal-key-2026}")
+    private String internalApiKey;
+
+    @PostConstruct
+    public void init() {
+        this.webClient = webClientBuilder
+                .defaultHeader("X-Internal-Token", internalApiKey)
+                .build();
+    }
 
     // ── Repositories for context enrichment ───────────────────────────────────
     private final ScheduleTaskRepository scheduleTaskRepository;
@@ -70,7 +86,6 @@ public class ChatService {
     // SEND MESSAGE (ChatBuddy — goes through Python LangGraph pipeline)
     // ─────────────────────────────────────────────────────────────────────────
 
-    @Transactional
     public ChatMessageResponse sendMessage(
             Long studentId,
             String message,
@@ -165,7 +180,7 @@ public class ChatService {
                 requestId = java.util.UUID.randomUUID().toString();
             }
 
-            aiResponse = webClientBuilder.build()
+            aiResponse = this.webClient
                     .post()
                     .uri(aiServiceUrl + "/chat")
                     .header("X-Request-ID", requestId)
@@ -363,6 +378,82 @@ public class ChatService {
                 .build();
     }
 
+    public List<ChatSessionResponse> getAdminSessions() {
+        return sessionRepo.findAllByOrderByWeekStartDesc().stream()
+                .map(s -> {
+                    LocalDateTime lastMessageAt = messageRepo
+                            .findTopBySessionIdOrderByCreatedAtDesc(s.getId())
+                            .map(ChatMessage::getCreatedAt)
+                            .orElse(s.getCreatedAt());
+
+                    User user = userRepository.findById(s.getStudentId()).orElse(null);
+                    String studentName = user != null ? user.getName() : "Unknown Student";
+                    String className = null;
+                    String schoolName = null;
+                    
+                    if (user instanceof Student student) {
+                        className = student.getClassName();
+                        if (student.getSchoolId() != null) {
+                            School school = schoolRepository.findById(student.getSchoolId()).orElse(null);
+                            if (school != null) {
+                                schoolName = school.getName();
+                            }
+                        }
+                    }
+
+                    return ChatSessionResponse.builder()
+                            .id(s.getId())
+                            .weekStart(s.getWeekStart())
+                            .createdAt(lastMessageAt)
+                            .source(s.getSource())
+                            .studentId(s.getStudentId())
+                            .studentName(studentName)
+                            .className(className)
+                            .schoolName(schoolName)
+                            .build();
+                })
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .collect(Collectors.toList());
+    }
+
+    public ChatSessionResponse getAdminSessionMessages(Long sessionId) {
+        ChatSession session = sessionRepo.findById(sessionId)
+                .orElseThrow(() -> new EmpathaiException("Session not found"));
+
+        List<ChatMessageResponse> messages = messageRepo
+                .findBySessionIdOrderByCreatedAtAsc(sessionId)
+                .stream()
+                .map(this::toMessageResponse)
+                .collect(Collectors.toList());
+
+        User user = userRepository.findById(session.getStudentId()).orElse(null);
+        String studentName = user != null ? user.getName() : "Unknown Student";
+        String className = null;
+        String schoolName = null;
+        
+        if (user instanceof Student student) {
+            className = student.getClassName();
+            if (student.getSchoolId() != null) {
+                School school = schoolRepository.findById(student.getSchoolId()).orElse(null);
+                if (school != null) {
+                    schoolName = school.getName();
+                }
+            }
+        }
+
+        return ChatSessionResponse.builder()
+                .id(session.getId())
+                .weekStart(session.getWeekStart())
+                .createdAt(session.getCreatedAt())
+                .source(session.getSource())
+                .studentId(session.getStudentId())
+                .studentName(studentName)
+                .className(className)
+                .schoolName(schoolName)
+                .messages(messages)
+                .build();
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // CONTEXT HELPER METHODS
     // ─────────────────────────────────────────────────────────────────────────
@@ -536,15 +627,14 @@ public class ChatService {
     }
 
 
-    private Double calculateSleepHours(String bedtime, String wakeTime) {
+    private Double calculateSleepHours(java.time.LocalTime bed, java.time.LocalTime wake) {
         try {
-            java.time.LocalTime bed  = java.time.LocalTime.parse(bedtime);
-            java.time.LocalTime wake = java.time.LocalTime.parse(wakeTime);
+            if (bed == null || wake == null) return null;
             long minutes = java.time.Duration.between(bed, wake).toMinutes();
             if (minutes < 0) minutes += 24 * 60; // overnight
             return Math.round((minutes / 60.0) * 10.0) / 10.0;
         } catch (Exception e) {
-            log.warn("Could not parse sleep times bedtime={} wakeTime={}", bedtime, wakeTime);
+            log.warn("Could not calculate sleep hours bedtime={} wakeTime={}", bed, wake);
             return null;
         }
     }

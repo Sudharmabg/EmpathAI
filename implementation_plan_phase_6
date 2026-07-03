@@ -1,0 +1,692 @@
+# Phase 6: Admin Panel AI Knowledge Base + Ready Reckoner — Full Upgrade
+
+## Overview
+A comprehensive overhaul of the Admin Panel's AI Knowledge Base module and the Student Dashboard's Summary tool (renamed **Ready Reckoner**). Fixes the critical archive bug, delivers 10+ UX/functionality improvements across all 4 admin tabs, and completely redesigns the Summary AI tool to be a structured, formula-aware chapter revision tool.
+
+---
+
+## 🐛 Critical Bug Fix (Priority #1)
+
+### Archive Constraint Violation
+**Error:** `org.hibernate.exception.ConstraintViolationException` — `chapters_processing_status_check` violated when setting status to `ARCHIVED`.
+
+**Root Cause:** The live PostgreSQL DB has a `CHECK` constraint on `processing_status` created with only 5 allowed values (`PENDING, PROCESSING, PROCESSED, FAILED, PUBLISHED`). The Java enum `ProcessingStatus` has 6 values — `ARCHIVED` was added later but the DB constraint was never updated.
+
+> [!CAUTION]
+> This requires a one-time SQL migration on the live DB. Must be run **before** any archive actions are attempted.
+
+**Fix SQL:**
+```sql
+-- Step 1: Drop the stale constraint
+ALTER TABLE chapters DROP CONSTRAINT IF EXISTS chapters_processing_status_check;
+
+-- Step 2: Recreate with all 6 valid enum values
+ALTER TABLE chapters ADD CONSTRAINT chapters_processing_status_check
+  CHECK (processing_status IN ('PENDING','PROCESSING','PROCESSED','FAILED','PUBLISHED','ARCHIVED'));
+
+-- Step 3: Add missing columns (if not already present)
+ALTER TABLE chapters ADD COLUMN IF NOT EXISTS chapter_number INTEGER;
+ALTER TABLE chapters ADD COLUMN IF NOT EXISTS archived_by VARCHAR(100);
+ALTER TABLE chapters ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
+```
+
+---
+
+## ⚠️ Task Name Bug (Priority #2)
+
+### Wrong AI Task Names in ToolContentManager
+**Current broken code** in `ToolContentManager.jsx` line 4:
+```js
+const AI_TASKS = ['SUMMARY', 'QUIZ', 'QA', 'FLASHCARDS']
+```
+`QUIZ` and `QA` **do not exist** in the backend `AiTaskType` enum. Any generation call with these values would fail silently.
+
+**Correct task names** aligned with `AiTaskType.java` and Python `TASK_VALIDATORS`:
+```js
+const AI_TASKS = ['SUMMARY', 'FLASHCARDS', 'MNEMONIC', 'MOCK_TEST']
+```
+
+| Display Label | Task Enum | Student Tool |
+|---|---|---|
+| Generate Summary | `SUMMARY` | Ready Reckoner |
+| Generate Flashcards | `FLASHCARDS` | Flashcards |
+| Generate Mnemonic | `MNEMONIC` | Mnemonic |
+| Generate Mock Test | `MOCK_TEST` | Mock Test |
+
+---
+
+## Proposed Changes
+
+### Component 1: Database & SQL
+
+#### [MODIFY] [data.sql](file:///c:/empathai_updated_new/EmpathAI/EmpathaiBackend/src/main/resources/data.sql)
+Update the `CREATE TABLE IF NOT EXISTS chapters` block to include:
+- `chapter_number INTEGER` column
+- `archived_by VARCHAR(100)` column
+- `archived_at TIMESTAMP` column
+- `CHECK (processing_status IN ('PENDING','PROCESSING','PROCESSED','FAILED','PUBLISHED','ARCHIVED'))` constraint inline
+
+#### [NEW] `migration_phase6.sql` (project root)
+Standalone SQL migration file for running against the live DB:
+```sql
+-- Fix archive constraint
+ALTER TABLE chapters DROP CONSTRAINT IF EXISTS chapters_processing_status_check;
+ALTER TABLE chapters ADD CONSTRAINT chapters_processing_status_check
+  CHECK (processing_status IN ('PENDING','PROCESSING','PROCESSED','FAILED','PUBLISHED','ARCHIVED'));
+
+-- Add missing columns safely
+ALTER TABLE chapters ADD COLUMN IF NOT EXISTS chapter_number INTEGER;
+ALTER TABLE chapters ADD COLUMN IF NOT EXISTS archived_by VARCHAR(100);
+ALTER TABLE chapters ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
+```
+
+---
+
+### Component 2: Backend — ChapterUploadRequest DTO
+
+#### [MODIFY] [ChapterUploadRequest.java](file:///c:/empathai_updated_new/EmpathAI/EmpathaiBackend/src/main/java/com/empathai/curriculum/dto/request/ChapterUploadRequest.java)
+- Change `subtopics` from `String` → `List<String>`
+- Remove the old Javadoc comment "Comma separated list from upload form"
+
+**Before:**
+```java
+private String subtopics; // Comma separated list from upload form
+```
+**After:**
+```java
+private List<String> subtopics; // Array of subtopic names from chip input
+```
+
+#### [MODIFY] [ChapterIngestServiceImpl.java](file:///c:/empathai_updated_new/EmpathAI/EmpathaiBackend/src/main/java/com/empathai/curriculum/service/ChapterIngestServiceImpl.java)
+Remove lines 53–61 (manual comma-split logic):
+```java
+// REMOVE THIS BLOCK:
+if (request.getSubtopics() != null && !request.getSubtopics().trim().isEmpty()) {
+    List<String> stList = Arrays.stream(request.getSubtopics().split(","))
+        .map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toList());
+    subtopicsJson = objectMapper.writeValueAsString(stList);
+}
+```
+**Replace with:**
+```java
+String subtopicsJson = null;
+if (request.getSubtopics() != null && !request.getSubtopics().isEmpty()) {
+    subtopicsJson = objectMapper.writeValueAsString(request.getSubtopics());
+}
+```
+
+---
+
+### Component 3: Backend — ChapterResponse DTO
+
+#### [MODIFY] `ChapterResponse.java`
+Add missing fields that the frontend needs for richer cards:
+```java
+private Integer chapterNumber;   // "Ch. 3" display
+private String board;            // e.g. "CBSE"
+private String archivedBy;
+private LocalDateTime archivedAt;
+```
+Update `toChapterResponse()` in `ChapterIngestServiceImpl` to populate these new fields.
+
+---
+
+### Component 4: Backend — Coverage Endpoint
+
+> [!NOTE]
+> Stats bar will be **client-side calculated** (no new endpoint needed). Only the per-chapter coverage endpoint is needed for the AI coverage badge on chapter cards.
+
+#### [MODIFY] [AiContentController.java](file:///c:/empathai_updated_new/EmpathAI/EmpathaiBackend/src/main/java/com/empathai/curriculum/controller/AiContentController.java)
+Add one new endpoint:
+```java
+@GetMapping("/content/chapter/{chapterId}/coverage")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN','CONTENT_ADMIN')")
+public ResponseEntity<List<AiContentAdminResponse>> getChapterCoverage(@PathVariable Long chapterId) {
+    return ResponseEntity.ok(aiContentService.listContentForChapter(chapterId));
+}
+```
+> Note: `listContentForChapter` already exists — this is just a second route alias for it. No new service method needed.
+
+#### [MODIFY] [AiContentServiceImpl.java](file:///c:/empathai_updated_new/EmpathAI/EmpathaiBackend/src/main/java/com/empathai/curriculum/service/AiContentServiceImpl.java)
+Add `regenerateToolContent(Long id, String regeneratedBy)`:
+- Fetch existing content by ID
+- Re-call Python RAG with same `chapterId`, `taskType`, `topic`
+- Replace content in DB, reset `approvalStatus = PENDING`
+
+---
+
+### Component 5: Frontend API Layer
+
+#### [MODIFY] [curriculumAiApi.js](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/api/curriculumAiApi.js)
+Add new functions:
+```js
+// Coverage for a single chapter (for AI badge on cards)
+export async function getChapterCoverage(chapterId) {
+  return apiGet(`/api/ai/content/chapter/${chapterId}/coverage`);
+}
+
+// Regenerate rejected content
+export async function regenerateContent(id) {
+  return apiPost(`/api/ai/content/${id}/regenerate`, {});
+}
+```
+
+---
+
+### Component 6: Frontend — AiKnowledgeBase.jsx
+
+#### [MODIFY] [AiKnowledgeBase.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/admin/aiknowledgebase/AiKnowledgeBase.jsx)
+
+**Stats Bar (client-side):**
+- Fetch `getPublishedChapters()` and `getPendingAiContent()` on mount
+- Calculate client-side: `totalPublished`, `pendingCount`, (pass to children as props if needed)
+- Render a horizontal stats strip above the tabs:
+  ```
+  📚 12 Published    ⏳ 3 Pending Review    ✅ 28 Approved    🗄️ 2 Archived
+  ```
+- Each stat animates from 0 to value on first load (CSS counter animation or simple `useEffect` increment)
+
+**Tab improvements:**
+- Replace emoji tab icons with inline SVG icons (Upload ↑, Book, Clipboard, Archive)
+- Keep the amber badge on "Content Review" tab for pending count
+
+---
+
+### Component 7: Frontend — ChapterUpload.jsx
+
+#### [MODIFY] [ChapterUpload.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/admin/aiknowledgebase/ChapterUpload.jsx)
+
+**Subtopics — Chip/Pill Multi-Input:**
+
+Replace the single comma-separated `<input>` with:
+```jsx
+// State
+const [subtopicInput, setSubtopicInput] = useState('')
+const [subtopics, setSubtopics] = useState([])  // Array of strings
+
+// Add chip on Enter or + click
+const addSubtopic = () => {
+  const trimmed = subtopicInput.trim()
+  if (trimmed && !subtopics.includes(trimmed)) {
+    setSubtopics([...subtopics, trimmed])
+    setSubtopicInput('')
+  }
+}
+
+// Remove chip
+const removeSubtopic = (name) => setSubtopics(subtopics.filter(s => s !== name))
+```
+
+UI renders:
+- Text input + purple `+` button in a row
+- Chips below: `[Quantum Mechanics ×]  [Wave Theory ×]  [Optics ×]`
+- Helper text: "Add subtopics to guide AI metadata extraction (optional)"
+- Send `subtopics` array (not string) in the upload payload
+
+**Review Stage Expansion:**
+Currently only shows: Difficulty, Reading Time, Topics.
+
+Expand to show all AI-extracted metadata in a 2-section layout:
+
+*Section A — Core (always visible):*
+- Difficulty Level (dropdown: Easy / Medium / Hard)
+- Estimated Reading Time (number input)
+- Topics (editable tag chips)
+- Learning Objectives (editable list — add/remove bullets)
+
+*Section B — Advanced Metadata (collapsible accordion, closed by default):*
+- Bloom's Taxonomy Levels (multi-checkbox: Remember / Understand / Apply / Analyze / Evaluate / Create)
+- Prerequisites (tag chips, editable)
+- Keywords (tag chips, editable)
+- Key Definitions (read-only term→definition pairs from AI)
+- Common Misconceptions (read-only list from AI)
+
+---
+
+### Component 8: Frontend — PublishedChapters.jsx
+
+#### [MODIFY] [PublishedChapters.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/admin/aiknowledgebase/PublishedChapters.jsx)
+
+**Search & Filter Bar (above the grid):**
+```jsx
+<input placeholder="Search chapters..." onChange={...} />
+<select> Grade options </select>
+<select> Subject options </select>
+```
+All filtering runs **client-side** on the `chapters` array.
+
+**Richer Chapter Cards:**
+
+Current card shows: Subject • Grade badge, Title, Published date, Manage button, Archive icon.
+
+Upgraded card shows:
+- Header badge: `CBSE • Class 10 • Mathematics`
+- Chapter number: `Chapter 3` (if available)
+- Title (large, bold)
+- Published by + date
+- **AI Coverage Badge:**
+  ```
+  ✓ 3 / 4 tools approved   [green pill]
+  ⏳ 1 / 4 tools approved  [amber pill]
+  ✗ 0 / 4 tools approved   [red pill]
+  ```
+  Fetched from `getChapterCoverage(chapter.id)` — counts APPROVED vs total for that chapter
+- **Archive action:** Replace icon-only button with an inline "Archive?" confirmation:
+  - Click archive icon → card shows a red confirmation strip: `"Archive this chapter? [Confirm] [Cancel]"`
+  - On Confirm → calls `archiveChapter(id)`
+
+---
+
+### Component 9: Frontend — ChapterManager.jsx
+
+#### [MODIFY] [ChapterManager.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/admin/aiknowledgebase/ChapterManager.jsx)
+
+**Tab restructure — from 2 tabs to 2 tabs (different ones):**
+
+| Before | After |
+|---|---|
+| Manage Topics | ~~Removed~~ |
+| AI Tool Content | 📊 Knowledge Base |
+| *(missing)* | 📝 Chapter Metadata |
+
+**Header upgrade:**
+```
+← Back to Chapters
+Ch. 3  •  Mathematics  •  Class 10
+1.1 A Lakh Varieties!                    [CBSE badge]
+```
+
+**📝 Chapter Metadata tab:**
+- Reuses same editable fields as ChapterUpload Review Stage
+- Calls `updateChapterMetadata(chapterId, payload)` on save
+- Shows a "Save Changes" button at bottom
+- Fields: Difficulty, Reading Time, Topics, Learning Objectives, Bloom's Levels, Prerequisites, Keywords (read-only: Definitions, Misconceptions)
+
+---
+
+### Component 10: Frontend — ToolContentManager.jsx
+
+#### [MODIFY] [ToolContentManager.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/admin/aiknowledgebase/ToolContentManager.jsx)
+
+**🔴 Bug Fix — Correct Task Names:**
+```js
+// WRONG (current):
+const AI_TASKS = ['SUMMARY', 'QUIZ', 'QA', 'FLASHCARDS']
+
+// CORRECT (fixed):
+const AI_TASKS = [
+  { key: 'SUMMARY',   label: 'Ready Reckoner',  icon: '📋' },
+  { key: 'FLASHCARDS',label: 'Flashcards',       icon: '🃏' },
+  { key: 'MNEMONIC',  label: 'Mnemonic',         icon: '🧠' },
+  { key: 'MOCK_TEST', label: 'Mock Test',        icon: '📝' },
+]
+```
+
+**Topic Selector:**
+- Load topics via `getChapterTopics(chapter.id)` on mount
+- Add a selector row above the generate buttons:
+  ```
+  Generate for: [● Chapter Level]  [○ Topic: <dropdown>]
+  ```
+- Selected level/topic passes as `topic` param to `generateToolContent()`
+- "Chapter Level" → `topic: null`
+
+**Generate Buttons:**
+- 4 cards in a 2×2 grid (not a horizontal row)
+- Each card: icon + label + "Generate" CTA
+- Show spinner inside the button while generating
+- Disable all other buttons while one is generating
+
+**Existing Content List:**
+Each content item card shows:
+- Task type + colored status pill (🟢 APPROVED / 🟡 PENDING / 🔴 REJECTED)
+- Topic label if topic-level (e.g., "Topic: Quantum Mechanics")
+- `approvedBy` + `approvedAt` if approved
+- `editedBy` if edited
+- Actions row:
+  - `👁 Preview` → opens slide-over drawer with student-rendered component
+  - `✏️ Edit` → opens structured form editor (see below)
+  - `🔁 Regenerate` → only shown on REJECTED items; calls `regenerateContent(id)`
+  - `✅ Approve` / `❌ Reject` → approve/reject inline (no need to go to ContentReview tab)
+  - `🗑 Delete` → inline confirmation strip
+
+**Structured Form Editor (per task type):**
+
+*SUMMARY editor:*
+```
+Short Summary: [text area]
+Key Points:    [add/remove bullet list]
+Formulas:      [add/remove: name | LaTeX | where]
+Definitions:   [add/remove: term | meaning]
+```
+
+*FLASHCARDS editor:*
+```
+Flashcards:
+  Card 1: Front [input]  Back [input]  Hint [input]  Example [input]  Memory Tip [input]
+  [+ Add Card]
+```
+
+*MNEMONIC editor:*
+```
+Mnemonics:
+  Item 1: Concept [input]  Mnemonic [input]  Expansion [input]  Explanation [textarea]
+  [+ Add Item]
+```
+
+*MOCK_TEST editor:*
+```
+MCQ Questions:
+  Q1: Question [input]
+      Options: [A] [B] [C] [D] (4 inputs)
+      Correct: [radio 0-3]
+      Explanation: [input]
+  [+ Add MCQ]
+
+HOTS Questions:
+  Q1: Question [input]  Expected Answer [textarea]
+  [+ Add HOTS]
+```
+
+**"Preview as Student" Slide-over Drawer:**
+- Slides in from the right (fixed overlay, 60% width on desktop)
+- Renders the parsed JSON content using the actual student component:
+  - `SUMMARY` → renders `<Summary />` (ReadyReckoner)
+  - `FLASHCARDS` → renders `<Flashcards />`
+  - `MNEMONIC` → renders `<Mnemonic />`
+  - `MOCK_TEST` → renders `<MockTest />`
+- Close button (X) at top right
+
+---
+
+### Component 11: Frontend — ContentReview.jsx
+
+#### [MODIFY] [ContentReview.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/admin/aiknowledgebase/ContentReview.jsx)
+
+**Filter Bar:**
+```jsx
+// Task type filter tabs
+<FilterTab value="ALL" label="All" count={items.length} />
+<FilterTab value="SUMMARY"    label="Ready Reckoner" />
+<FilterTab value="FLASHCARDS" label="Flashcards" />
+<FilterTab value="MNEMONIC"   label="Mnemonic" />
+<FilterTab value="MOCK_TEST"  label="Mock Test" />
+```
+Filter runs client-side on loaded `items`.
+
+**Chapter Title Display:**
+- Currently shows `Chapter ID: 7` — ugly
+- Load chapter details via `getChapter(item.chapterId)` (batch or per-item)
+- Display: `Ch. 3 • Mathematics • Class 10` instead of raw ID
+
+**Bulk Actions Bar (shown when items exist):**
+```
+[Approve All (3)]   shown only when filter is active and items visible
+```
+Calls `approveAiContent` for each visible item in sequence.
+
+**Per-Item Actions:**
+- `👁 Preview as Student` toggle: switches between raw JSON preview and rendered student component
+- `✏️ Edit` → same structured form editor as ToolContentManager
+- `✅ Approve & Publish` (existing)
+- `❌ Reject` (existing)
+
+**Toast Notification System (custom, no library):**
+Replace all `alert()` calls. Add a simple `<Toast>` component:
+```jsx
+// Global toast state in parent
+const [toast, setToast] = useState(null) // { message, type: 'success'|'error' }
+
+// Auto-dismiss after 3s
+useEffect(() => {
+  if (toast) setTimeout(() => setToast(null), 3000)
+}, [toast])
+
+// Render: fixed bottom-right pill that slides in
+<div className="fixed bottom-6 right-6 animate-slide-up ...">
+  {toast.message}
+</div>
+```
+
+**Edit Mode:**
+Replace the raw `<textarea>` JSON editor with the same structured per-task-type forms described in Component 10.
+
+---
+
+### Component 12: Frontend — TopicManager.jsx
+
+#### [NO CHANGE] [TopicManager.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/admin/aiknowledgebase/TopicManager.jsx)
+- File kept as-is but **removed from ChapterManager's tab rendering**
+- Topics are now defined at chapter upload time via the chip input
+- No deletion of the file — preserve for potential future use
+
+---
+
+### Component 13: Frontend — ArchivedChapters.jsx
+
+#### [MODIFY] [ArchivedChapters.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/admin/aiknowledgebase/ArchivedChapters.jsx)
+
+**Card upgrades:**
+- Show: Chapter Number, Board, Subject, Grade, Title (same layout as PublishedChapters)
+- Show: `Archived by [name] on [date]` in the card footer
+- Muted/greyed visual treatment (opacity-75 on the card background)
+
+**Restore action:**
+Replace `confirm()` with inline confirmation strip (same pattern as archive in PublishedChapters).
+
+---
+
+### Component 14: Python AI — Ready Reckoner (Summary Overhaul)
+
+#### [MODIFY] [summary.txt](file:///c:/empathai_updated_new/EmpathAI/EmpathaiAI/prompts/summary.txt)
+Full rewrite:
+```
+You are an expert educator creating a "Ready Reckoner" — a crisp, exam-focused revision sheet — for CBSE students.
+This is NOT an essay. Every word must earn its place.
+Always respond with a valid JSON object only.
+
+---USER---
+Create a Ready Reckoner for the ENTIRE {subject} chapter "{chapter}" for {grade} students.
+Use ONLY the curriculum content provided below. Cover the whole chapter, not just one topic.
+
+Rules:
+- shortSummary: 1-2 sentences. What is this chapter fundamentally about?
+- keyPoints: 5 to 20 bullet points. Each must be a standalone revision fact. No fluff.
+- formulas: List every important formula/equation. Use LaTeX notation (e.g. "\\pi r^2").
+  If this subject/chapter has NO formulas, return an empty array [].
+- definitions: List every key term with a concise definition.
+  If this chapter has NO special terms, return an empty array [].
+
+Return ONLY this JSON:
+{{
+  "shortSummary": "...",
+  "keyPoints": ["...", "..."],
+  "formulas": [
+    {{ "name": "...", "formula": "LaTeX string", "where": "variable meanings" }}
+  ],
+  "definitions": [
+    {{ "term": "...", "meaning": "..." }}
+  ]
+}}
+
+{context}
+```
+
+#### [MODIFY] [validators.py](file:///c:/empathai_updated_new/EmpathAI/EmpathaiAI/curriculum/validators.py)
+```python
+# New models
+class FormulaItem(BaseModel):
+    name: str
+    formula: str       # LaTeX string e.g. "\\pi r^2"
+    where: Optional[str] = None
+
+class DefinitionItem(BaseModel):
+    term: str
+    meaning: str
+
+# Updated SummaryOutput
+class SummaryOutput(BaseModel):
+    shortSummary: str
+    keyPoints: list[str]                          # renamed from bulletPoints
+    formulas: list[FormulaItem] = []              # new, optional
+    definitions: list[DefinitionItem] = []        # new, optional
+
+    @field_validator("keyPoints")
+    @classmethod
+    def must_have_key_points(cls, v):
+        if not v:
+            raise ValueError("keyPoints must not be empty")
+        if len(v) > 20:
+            raise ValueError("keyPoints must not exceed 20 items")
+        return v
+```
+
+#### [MODIFY] [rag_orchestrator.py](file:///c:/empathai_updated_new/EmpathAI/EmpathaiAI/curriculum/rag_orchestrator.py)
+```python
+# 1. Force chapter-level for SUMMARY (line in process() function):
+if task == "SUMMARY":
+    topic = None   # Always chapter-level, ignore passed topic
+
+# 2. Increase token limit:
+TASK_MAX_TOKENS = {
+    "FLASHCARDS": 3000,
+    "SUMMARY":    3500,   # was 2000 — formulas + definitions need room
+    "MNEMONIC":   2000,
+    "MOCK_TEST":  4000,
+}
+
+# 3. Update query builder:
+"SUMMARY": f"All main ideas, formulas, definitions, and learning objectives for the complete chapter {chapter} in {subject} {grade}",
+```
+
+---
+
+### Component 15: Frontend — Summary.jsx → Ready Reckoner
+
+#### Install KaTeX
+```bash
+npm install katex
+```
+Import in `Summary.jsx`:
+```js
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
+```
+
+#### [MODIFY] [Summary.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/studentdashboard/tools/Summary.jsx)
+Complete rewrite. New props: `{ shortSummary, keyPoints, formulas, definitions }`.
+
+**Layout (all sections visible, no expand/collapse):**
+
+1. **Chapter Overview card** — `shortSummary` in a purple hero card (keep existing design)
+
+2. **Key Points section:**
+   ```jsx
+   <ol className="space-y-2">
+     {keyPoints.map((point, i) => (
+       <li key={i} className="flex items-start gap-3 text-sm text-gray-700 font-medium">
+         <span className="text-purple-500 font-black text-xs mt-0.5">{String(i+1).padStart(2,'0')}</span>
+         <span>{point}</span>
+       </li>
+     ))}
+   </ol>
+   ```
+
+3. **Formulas section** (hidden if `formulas.length === 0`):
+   - Grid of formula cards (2 per row on desktop)
+   - Each card: formula name (bold), rendered LaTeX (large, center), variable breakdown
+   - Render LaTeX using:
+     ```js
+     const renderLatex = (latex) => {
+       try {
+         return { __html: katex.renderToString(latex, { displayMode: true, throwOnError: false }) }
+       } catch { return { __html: latex } }
+     }
+     <div dangerouslySetInnerHTML={renderLatex(formula.formula)} />
+     ```
+
+4. **Definitions section** (hidden if `definitions.length === 0`):
+   - Two-column glossary table: Term (bold purple) | Meaning
+   - Alternating row shading for readability
+
+**Rename on student dashboard:**
+- Find `AiTools.jsx` or wherever tool tabs are defined and rename "Summary" → "Ready Reckoner"
+- Update any icon (use a bookmark or star icon)
+
+---
+
+## Confirmed Design Decisions
+
+> [!NOTE]
+> All design decisions confirmed:
+> - **Task names:** SUMMARY / FLASHCARDS / MNEMONIC / MOCK_TEST (fixes QUIZ/QA bug)
+> - **Content Editor:** Structured form per task type
+> - **Student Preview:** Slide-over drawer reusing student components
+> - **Topics Tab:** Removed from ChapterManager
+> - **Stats Bar:** Client-side calculated
+> - **Summary → Ready Reckoner:** LaTeX (KaTeX), definitions, key points max 20, chapter-level always
+> - **Subtopics UX:** Chip/pill multi-input
+> - **Formulas:** LaTeX rendered, hidden for subjects with none
+> - **Definitions:** Hidden for subjects with none
+> - **Archive confirm:** Inline card confirmation, no browser `confirm()`
+> - **Toasts:** Custom slide-in toast, no external library
+
+---
+
+## Execution Order
+
+1. 🗄️ SQL migration (`migration_phase6.sql`) + update `data.sql`
+2. ☕ Backend: DTO changes, ChapterResponse fields, coverage/regenerate endpoints
+3. 🐍 Python: `summary.txt` prompt, `validators.py`, `rag_orchestrator.py`
+4. ⚛️ Frontend API: `curriculumAiApi.js` additions
+5. ⚛️ Frontend — `AiKnowledgeBase.jsx` (stats bar)
+6. ⚛️ Frontend — `ChapterUpload.jsx` (chip subtopics + review expansion)
+7. ⚛️ Frontend — `PublishedChapters.jsx` (search/filter/coverage badge/inline confirm)
+8. ⚛️ Frontend — `ChapterManager.jsx` (remove Topics tab, add Metadata tab)
+9. ⚛️ Frontend — `ToolContentManager.jsx` (fix task names, topic selector, structured editor, preview drawer)
+10. ⚛️ Frontend — `ContentReview.jsx` (filter bar, bulk approve, toast, structured editor, student preview)
+11. ⚛️ Frontend — `ArchivedChapters.jsx` (card improvements, inline confirm)
+12. ⚛️ Frontend — `Summary.jsx` (Ready Reckoner, KaTeX)
+13. 📦 `npm install katex`
+
+---
+
+## Verification Checklist
+
+### Bug Fixes
+- [ ] Archive a published chapter → no constraint error → appears in Archived tab
+- [ ] Generate "Ready Reckoner" → no error (SUMMARY task) ✓
+- [ ] Generate "Flashcards" → works (was fine, verify still works) ✓
+- [ ] Click "Generate QUIZ" or "Generate QA" → these buttons **no longer exist** ✓
+- [ ] Generate "Mnemonic" → works ✓
+- [ ] Generate "Mock Test" → works ✓
+
+### Admin Panel
+- [ ] Chapter Upload: chip-based subtopics add/remove correctly
+- [ ] Chapter Upload: review stage shows all metadata (concepts, objectives, bloom's, etc.)
+- [ ] Published Chapters: search by title filters correctly
+- [ ] Published Chapters: Grade/Subject filter works
+- [ ] Published Chapters: AI coverage badge shows correct count and color
+- [ ] Published Chapters: archive uses inline confirmation, not browser dialog
+- [ ] ChapterManager: no "Manage Topics" tab
+- [ ] ChapterManager: Chapter Metadata tab shows and saves correctly
+- [ ] ChapterManager header: shows chapter number, subject, grade, title
+- [ ] ToolContentManager: 4 correct generate buttons (Ready Reckoner, Flashcards, Mnemonic, Mock Test)
+- [ ] ToolContentManager: topic selector generates at correct level
+- [ ] ToolContentManager: Preview drawer renders student view correctly
+- [ ] ToolContentManager: Regenerate button appears on REJECTED items
+- [ ] ToolContentManager: Structured form editor works for all 4 task types
+- [ ] ContentReview: filter by task type works
+- [ ] ContentReview: shows chapter name instead of chapter ID
+- [ ] ContentReview: Bulk Approve works
+- [ ] ContentReview: toast notifications on approve/reject/edit
+- [ ] ContentReview: student preview toggle works
+- [ ] ArchivedChapters: shows chapter number, subject, archivedBy, archivedAt
+- [ ] ArchivedChapters: restore uses inline confirmation
+
+### Student Dashboard
+- [ ] "Summary" renamed to "Ready Reckoner" everywhere
+- [ ] Ready Reckoner renders: shortSummary, keyPoints, formulas (if any), definitions (if any)
+- [ ] Formulas render as LaTeX via KaTeX (not raw strings)
+- [ ] Empty formulas/definitions sections are hidden
+- [ ] Summary is always chapter-level regardless of selected topic

@@ -9,7 +9,16 @@ import reactor.core.publisher.Mono;
 @RestController
 public class ChatProxyController {
 
-    private final WebClient webClient = WebClient.create("http://localhost:8000");
+    private final WebClient webClient;
+
+    public ChatProxyController(
+            WebClient.Builder webClientBuilder,
+            @org.springframework.beans.factory.annotation.Value("${chatbot.ai-service.url:http://localhost:8000}") String aiServiceUrl,
+            @org.springframework.beans.factory.annotation.Value("${chatbot.ai-service.api-key:empathai-internal-key-2026}") String internalApiKey) {
+        this.webClient = webClientBuilder.baseUrl(aiServiceUrl)
+                .defaultHeader("X-Internal-Token", internalApiKey)
+                .build();
+    }
 
     @PostMapping("/api/chat/chat")
     public Mono<String> chat(

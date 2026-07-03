@@ -17,4 +17,6 @@ public interface MoodEntryRepository extends JpaRepository<MoodEntry, Long> {
     // ── NEW: Fetch all moods logged after a given date (for last 7 days) ──
     List<MoodEntry> findByStudentIdAndLoggedAtAfterOrderByLoggedAtDesc(
             Long studentId, LocalDateTime fromDate);
+
+    List<MoodEntry> findAllByLoggedAtAfterOrderByLoggedAtDesc(LocalDateTime fromDate);
 }

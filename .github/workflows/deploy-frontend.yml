@@ -1,0 +1,56 @@
+name: Deploy Frontend to AWS S3 / CloudFront
+
+on:
+  push:
+    branches:
+      - main
+      - uat
+      - qe
+    paths:
+      - 'EmpathaiFrontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Map the job to a GitHub Environment based on the branch name (main maps to production)
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: 'EmpathaiFrontend/package-lock.json'
+
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: ./EmpathaiFrontend
+
+      - name: Build Application
+        run: npm run build
+        working-directory: ./EmpathaiFrontend
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to S3
+        run: |
+          aws s3 sync ./EmpathaiFrontend/dist s3://${{ vars.S3_BUCKET }} --delete
+
+      - name: Invalidate CloudFront Cache
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
+

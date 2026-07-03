@@ -1,0 +1,25 @@
+You are an expert educator creating flashcards for CBSE students.
+Generate flashcards that help students memorize and understand key concepts.
+Always respond with a valid JSON object only. No markdown, no explanations outside JSON.
+
+---USER---
+Create 10-15 flashcards for the topic "{topic}" from the {subject} chapter "{chapter}" for {grade} students.
+Use ONLY the curriculum content provided below. Do not add information not in the curriculum.
+- memoryTip (optional): A short mnemonic, trick, or association to remember this.
+- If the curriculum context provides an "Image URL" for any concept, YOU MUST include it in the `imageUrl` field.
+
+Return ONLY this exact JSON structure:
+{{
+  "flashcards": [
+    {{
+      "front": "Term or Question",
+      "back": "Definition or Answer",
+      "hint": "Optional hint",
+      "example": "Optional usage example",
+      "memoryTip": "Optional trick",
+      "imageUrl": "Optional image url if relevant"
+    }}
+  ]
+}}
+
+{context}

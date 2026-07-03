@@ -1,63 +1,57 @@
 package com.empathai.assessment.repository;
 
-import com.empathai.assessment.entity.AssessmentGroup;
 import com.empathai.assessment.entity.AssessmentResponse;
+import com.empathai.user.entity.School;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
-
 @Repository
 public interface AssessmentResponseRepository extends JpaRepository<AssessmentResponse, Long> {
 
-    List<AssessmentResponse> findByGroupName(String groupName);
+    @Query("SELECT r FROM AssessmentResponse r LEFT JOIN FETCH r.student LEFT JOIN FETCH r.group LEFT JOIN FETCH r.question WHERE r.group.name = :groupName")
+    List<AssessmentResponse> findByGroupName(@Param("groupName") String groupName);
 
+    @EntityGraph(attributePaths = {"student", "group", "question"})
     List<AssessmentResponse> findByStudentId(Long studentId);
 
-    List<AssessmentResponse> findByClassName(String className);
+    @Query("SELECT r FROM AssessmentResponse r LEFT JOIN FETCH r.student LEFT JOIN FETCH r.group LEFT JOIN FETCH r.question WHERE r.student.className = :className")
+    List<AssessmentResponse> findByClassName(@Param("className") String className);
 
     void deleteByQuestionId(Long questionId);
 
     void deleteByStudentId(Long studentId);
 
+    @Query("SELECT r FROM AssessmentResponse r LEFT JOIN FETCH r.student s LEFT JOIN FETCH r.group LEFT JOIN FETCH r.question WHERE LOWER(r.group.name) = LOWER(:groupName) OR LOWER(s.className) = LOWER(:className)")
     List<AssessmentResponse> findByGroupNameIgnoreCaseOrClassNameIgnoreCase(
-            String groupName, String className
+            @Param("groupName") String groupName, @Param("className") String className
     );
 
+    @Query("SELECT r FROM AssessmentResponse r LEFT JOIN FETCH r.student s LEFT JOIN FETCH r.group LEFT JOIN FETCH r.question LEFT JOIN School sch ON sch.id = s.schoolId WHERE LOWER(r.group.name) = LOWER(:groupName) OR LOWER(s.className) = LOWER(:className) OR LOWER(sch.name) = LOWER(:schoolName)")
     List<AssessmentResponse> findByGroupNameIgnoreCaseOrClassNameIgnoreCaseOrSchoolNameIgnoreCase(
-            String groupName, String className, String schoolName
+            @Param("groupName") String groupName, @Param("className") String className, @Param("schoolName") String schoolName
     );
+
     Optional<AssessmentResponse> findByStudentIdAndQuestionId(Long studentId, Long questionId);
-
-    @Modifying
-    @Query("UPDATE AssessmentResponse r SET r.gender = :gender, r.age = :age WHERE r.studentId = :studentId")
-    void updateGenderAndAgeByStudentId(@Param("studentId") Long studentId,
-                                       @Param("gender") String gender,
-                                       @Param("age") Integer age);
-
-    @Modifying
-    @Query("UPDATE AssessmentResponse r SET r.gender = :gender WHERE r.studentId = :studentId")
-    void updateGenderByStudentId(@Param("studentId") Long studentId,
-                                 @Param("gender") String gender);
-
-    @Modifying
-    @Query("UPDATE AssessmentResponse r SET r.age = :age WHERE r.studentId = :studentId")
-    void updateAgeByStudentId(@Param("studentId") Long studentId,
-                              @Param("age") Integer age);
-
-    @Modifying
-    @Query("UPDATE AssessmentResponse r SET r.studentName = :name WHERE r.studentId = :studentId")
-    void updateStudentNameByStudentId(@Param("studentId") Long studentId,
-                                      @Param("name") String name);
 
     @Query("SELECT COUNT(DISTINCT CONCAT(CAST(a.studentId AS string), '-', CAST(CAST(a.submittedAt AS date) AS string))) FROM AssessmentResponse a")
     long countDistinctSubmissions();
-    List<AssessmentResponse> findByGroupNameIgnoreCase(String groupName);
-    List<AssessmentResponse> findByClassNameIgnoreCase(String className);
 
+    @Query("SELECT COUNT(DISTINCT CONCAT(CAST(a.studentId AS string), '-', CAST(CAST(a.submittedAt AS date) AS string))) FROM AssessmentResponse a WHERE a.studentId = :studentId")
+    long countDistinctSubmissionsByStudentId(@Param("studentId") Long studentId);
 
+    @Query("SELECT r FROM AssessmentResponse r LEFT JOIN FETCH r.student LEFT JOIN FETCH r.group LEFT JOIN FETCH r.question WHERE LOWER(r.group.name) = LOWER(:groupName)")
+    List<AssessmentResponse> findByGroupNameIgnoreCase(@Param("groupName") String groupName);
+
+    @Query("SELECT r FROM AssessmentResponse r LEFT JOIN FETCH r.student LEFT JOIN FETCH r.group LEFT JOIN FETCH r.question WHERE LOWER(r.student.className) = LOWER(:className)")
+    List<AssessmentResponse> findByClassNameIgnoreCase(@Param("className") String className);
+
+    @EntityGraph(attributePaths = {"student", "group", "question"})
+    Page<AssessmentResponse> findAll(Pageable pageable);
 }

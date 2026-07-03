@@ -9,7 +9,7 @@ class HistoryMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     # ── Core input ───────────────────────────────────────────────────────────
-    student_id: str                                   
+    student_id: str = Field(..., pattern=r"^\d+$")
     student_name: str
     grade: str
     message: str

@@ -15,7 +15,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AiServiceHealthMonitor {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     @Value("${chatbot.ai-service.url:http://localhost:8000}")
     private String aiServiceUrl;

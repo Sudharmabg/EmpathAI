@@ -24,46 +24,27 @@ const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curri
 // ─── Subject extraction helper ────────────────────────────────────────────────
 const SUBJECT_KEYWORD_MAP = [
   {
-    keywords: [
-      'math', 'maths', 'mathematics',
-      'algebra', 'geometry', 'arithmetic', 'trigonometry', 'calculus',
-    ],
+    keywords: ['math', 'maths', 'mathematics', 'algebra', 'geometry', 'arithmetic', 'trigonometry', 'calculus'],
     subject: 'Mathematics'
   },
   {
-    keywords: [
-      'science', 'sci',
-      'physics', 'phy',
-      'chemistry', 'chem',
-      'biology', 'bio',
-    ],
+    keywords: ['science', 'sci', 'physics', 'phy', 'chemistry', 'chem', 'biology', 'bio'],
     subject: 'Science'
   },
   {
-    keywords: [
-      'english', 'eng',
-      'grammar', 'literature', 'reading', 'writing', 'comprehension',
-    ],
+    keywords: ['english', 'eng', 'grammar', 'literature', 'reading', 'writing', 'comprehension'],
     subject: 'English'
   },
   {
-    keywords: [
-      'hindi', 'हिंदी',
-    ],
+    keywords: ['hindi', 'हिंदी'],
     subject: 'Hindi'
   },
   {
-    keywords: [
-      'sst', 'social', 'social studies',
-      'history', 'geography', 'geo', 'hist',
-      'civics', 'economics', 'political science',
-    ],
+    keywords: ['sst', 'social', 'social studies', 'history', 'geography', 'geo', 'hist', 'civics', 'economics', 'political science'],
     subject: 'Social Studies'
   },
   {
-    keywords: [
-      'art', 'craft', 'art & craft', 'drawing', 'painting',
-    ],
+    keywords: ['art', 'craft', 'art & craft', 'drawing', 'painting'],
     subject: 'Art & Craft'
   },
 ]
@@ -71,38 +52,31 @@ const SUBJECT_KEYWORD_MAP = [
 function getScheduledSubjectsForDay(tasks, day) {
   const dayTasks = tasks[day] || []
   const matched = new Set()
-
   dayTasks.forEach(task => {
     const type = (task.detectedType || '').toLowerCase()
     if (type !== 'study') return
-
     const title = (task.title || '').toLowerCase()
     SUBJECT_KEYWORD_MAP.forEach(({ keywords, subject }) => {
-      if (keywords.some(kw => title.includes(kw))) {
-        matched.add(subject)
-      }
+      if (keywords.some(kw => title.includes(kw))) matched.add(subject)
     })
   })
-
   return Array.from(matched)
 }
 
 export default function Dashboard({ user, onLogout }) {
-  // ── URL-driven tab state ──────────────────────────────────────────────────
   const { tab } = useParams()
   const navigate = useNavigate()
 
   const activeTab = VALID_TABS.includes(tab) ? tab : 'overview'
   const setActiveTab = (id) => navigate(`/student/${id}`)
 
-  // ── State ─────────────────────────────────────────────────────────────────
   const [activeHeaderModal, setActiveHeaderModal] = useState(null)
   const [chatMessage, setChatMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [showScheduleDropdown, setShowScheduleDropdown] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
 
-  // ✅ XP state — initialized from user object returned at login
+  // ✅ XP state
   const [xp, setXp] = useState(user?.xp || 0)
 
   const [activeDay, setActiveDay] = useState(() => {
@@ -119,6 +93,7 @@ export default function Dashboard({ user, onLogout }) {
   const [tasks, setTasks] = useState(emptyWeek)
   const [tasksLoading, setTasksLoading] = useState(false)
   const [tasksError, setTasksError] = useState('')
+
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [confirmModalConfig, setConfirmModalConfig] = useState({
     title: '',
@@ -146,32 +121,21 @@ export default function Dashboard({ user, onLogout }) {
       .finally(() => setTasksLoading(false))
   }, [user?.id])
 
+  // ✅ Fixed toggleTaskComplete — validation + XP update
   const toggleTaskComplete = async (day, taskId) => {
-<<<<<<< HEAD
-    try {
-      const saved = await apiToggleTaskComplete(taskId)
-      setTasks(prev => ({ ...prev, [day]: prev[day].map(t => t.id === taskId ? { ...t, completed: saved.completed } : t) }))
-      // ✅ Update XP if task was completed
-      if (saved.completed && saved.xpEarned > 0) {
-        setXp(prev => prev + saved.xpEarned)
-      }
-    } catch (err) {
-      console.error('Failed to toggle task', err)
-=======
     const task = tasks[day]?.find(t => String(t.id) === String(taskId))
     if (!task) return
 
-    const toMins = (t) => { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+m }
+    const toMins = (t) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m }
 
     const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     const todayName = (() => {
       const DAYS_JS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
       return DAYS_JS[new Date().getDay()]
     })()
-    
+
     const taskDayIdx = DAYS_ORDER.indexOf(day)
     const todayIdx = DAYS_ORDER.indexOf(todayName)
-    
     const isFutureDay = taskDayIdx > todayIdx
     const isToday = taskDayIdx === todayIdx
     const now = new Date()
@@ -182,21 +146,29 @@ export default function Dashboard({ user, onLogout }) {
       setWarningModalMessage("You cannot mark a task as completed before its scheduled start time.")
       setShowWarningModal(true)
       return
->>>>>>> 27769a253f6926e6af04d5afd95e5788956fd62f
     }
 
     const willComplete = !task.completed
     setConfirmModalConfig({
       title: willComplete ? 'Complete Task?' : 'Mark Incomplete?',
-      message: willComplete 
-        ? `Are you sure you want to mark "${task.title}" as completed?` 
+      message: willComplete
+        ? `Are you sure you want to mark "${task.title}" as completed?`
         : `Are you sure you want to mark "${task.title}" as incomplete?`,
       confirmText: willComplete ? 'Yes, Complete' : 'Yes, Incomplete',
       confirmBg: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
       onConfirm: async () => {
         try {
           const saved = await apiToggleTaskComplete(taskId)
-          setTasks(prev => ({ ...prev, [day]: prev[day].map(t => String(t.id) === String(taskId) ? { ...t, completed: saved.completed } : t) }))
+          setTasks(prev => ({
+            ...prev,
+            [day]: prev[day].map(t =>
+              String(t.id) === String(taskId) ? { ...t, completed: saved.completed } : t
+            )
+          }))
+          // ✅ Update XP counter
+          if (saved.completed && saved.xpEarned > 0) {
+            setXp(prev => prev + saved.xpEarned)
+          }
         } catch (err) {
           console.error('Failed to toggle task', err)
         }
@@ -213,7 +185,6 @@ export default function Dashboard({ user, onLogout }) {
     { id: 'chatbuddy', name: 'ChatBuddy', icon: ChatBubbleLeftRightIcon },
     { id: 'schedule', name: 'My Schedule', icon: CalendarIcon },
     { id: 'questionnaire', name: 'Feelings Explorer', icon: ClipboardDocumentListIcon },
-    // { id: 'curriculum', name: 'Curriculum', icon: BookOpenIcon },
     { id: 'activities', name: 'Activities', icon: PuzzlePieceIcon },
   ]
 
@@ -231,9 +202,7 @@ export default function Dashboard({ user, onLogout }) {
     const studentId = user?.id || ''
     const className = user?.className || ''
     const start = Date.now()
-
     trackTabView(tabLabel, studentId, className)
-
     return () => {
       const seconds = Math.round((Date.now() - start) / 1000)
       trackTimeSpent(tabLabel, studentId, seconds)
@@ -277,7 +246,7 @@ export default function Dashboard({ user, onLogout }) {
           {/* Right actions */}
           <div className="flex items-center space-x-5">
 
-            {/* ✅ XP — now dynamic */}
+            {/* ✅ XP — dynamic */}
             <div className="flex items-center bg-yellow-400/10 border border-yellow-400/20 rounded-full px-4 py-1.5 shadow-sm">
               <BoltIcon className="w-4 h-4 text-yellow-500 mr-2" />
               <span className="text-yellow-700 font-bold text-sm">{xp} XP</span>
@@ -438,28 +407,26 @@ export default function Dashboard({ user, onLogout }) {
 
       {/* ── Confirmation Modal ── */}
       {showConfirmModal && (
-        <div 
+        <div
           onClick={() => setShowConfirmModal(false)}
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         >
-          <div 
+          <div
             onClick={e => e.stopPropagation()}
             className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-100 shadow-2xl flex flex-col items-center text-center"
           >
             <div className="w-12 h-12 rounded-full bg-violet-50 flex items-center justify-center mb-4 text-violet-600 text-xl">✨</div>
             <h3 className="text-lg font-black text-black mb-2">{confirmModalConfig.title}</h3>
-            <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">
-              {confirmModalConfig.message}
-            </p>
+            <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">{confirmModalConfig.message}</p>
             <div className="flex gap-3 w-full">
-              <button 
-                onClick={() => setShowConfirmModal(false)} 
+              <button
+                onClick={() => setShowConfirmModal(false)}
                 className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 border border-gray-200 transition-colors"
               >
                 Cancel
               </button>
-              <button 
-                onClick={confirmModalConfig.onConfirm} 
+              <button
+                onClick={confirmModalConfig.onConfirm}
                 className={`flex-1 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md ${confirmModalConfig.confirmBg}`}
               >
                 {confirmModalConfig.confirmText}
@@ -471,21 +438,19 @@ export default function Dashboard({ user, onLogout }) {
 
       {/* ── Warning Modal ── */}
       {showWarningModal && (
-        <div 
+        <div
           onClick={() => setShowWarningModal(false)}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         >
-          <div 
+          <div
             onClick={e => e.stopPropagation()}
-            className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-red-100 shadow-2xl flex flex-col items-center text-center animate-scale-up"
+            className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-red-100 shadow-2xl flex flex-col items-center text-center"
           >
-            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4 text-red-500 text-xl animate-bounce">⚠️</div>
+            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4 text-red-500 text-xl">⚠️</div>
             <h3 className="text-lg font-black text-black mb-2">Notice</h3>
-            <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">
-              {warningModalMessage}
-            </p>
-            <button 
-              onClick={() => setShowWarningModal(false)} 
+            <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">{warningModalMessage}</p>
+            <button
+              onClick={() => setShowWarningModal(false)}
               className="w-full bg-black text-white px-4 py-2.5 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-md"
             >
               Okay

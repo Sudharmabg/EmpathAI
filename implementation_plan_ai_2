@@ -1,4 +1,4 @@
-# EmpathAI Curriculum Intelligence Platform — Detailed Implementation Plan
+# MyMercurie Curriculum Intelligence Platform — Detailed Implementation Plan
 
 ---
 
@@ -19,7 +19,7 @@
 
 ## Step 1.1 — Update `requirements.txt`
 
-**File:** `EmpathaiAI/requirements.txt`
+**File:** `MyMercurieAI/requirements.txt`
 
 Add these lines:
 ```
@@ -33,15 +33,15 @@ aiofiles==23.2.1
 
 ## Step 1.2 — Update `.env`
 
-**File:** `EmpathaiAI/.env`
+**File:** `MyMercurieAI/.env`
 
 Add:
 ```
 # pgvector — can be same as POSTGRES_URL (same PostgreSQL instance)
-PGVECTOR_URL=postgresql://postgres:root@localhost:5432/empathai
+PGVECTOR_URL=postgresql://postgres:root@localhost:5432/mymercurie
 
 # Internal token (already exists — just confirming it's used for ingest router too)
-INTERNAL_API_KEY=empathai-internal-key-2026
+INTERNAL_API_KEY=mymercurie-internal-key-2026
 ```
 
 ---
@@ -85,7 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_curriculum_embeddings_subject_grade
 
 ### `curriculum/__init__.py`
 ```python
-# EmpathAI Curriculum Intelligence Package
+# MyMercurie Curriculum Intelligence Package
 ```
 
 ---
@@ -1235,7 +1235,7 @@ from fastapi import APIRouter, HTTPException, Depends, Header, status
 from pydantic import BaseModel, Field
 from typing import Optional
 
-INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "empathai-internal-key-2026")
+INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "mymercurie-internal-key-2026")
 
 async def verify_internal_token(x_internal_token: str = Header(None)):
     if x_internal_token != INTERNAL_TOKEN:
@@ -1375,7 +1375,7 @@ from fastapi import APIRouter, HTTPException, Depends, Header, status
 from pydantic import BaseModel
 from typing import Optional
 
-INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "empathai-internal-key-2026")
+INTERNAL_TOKEN = os.getenv("INTERNAL_API_KEY", "mymercurie-internal-key-2026")
 
 async def verify_internal_token(x_internal_token: str = Header(None)):
     if x_internal_token != INTERNAL_TOKEN:
@@ -1545,7 +1545,7 @@ CREATE TABLE ai_generated_content (
 
 ### `curriculum/entity/ProcessingStatus.java`
 ```java
-package com.empathai.curriculum.entity;
+package com.mymercurie.curriculum.entity;
 
 public enum ProcessingStatus {
     PENDING, PROCESSING, PROCESSED, FAILED, PUBLISHED
@@ -1554,7 +1554,7 @@ public enum ProcessingStatus {
 
 ### `curriculum/entity/AiTaskType.java`
 ```java
-package com.empathai.curriculum.entity;
+package com.mymercurie.curriculum.entity;
 
 public enum AiTaskType {
     FLASHCARDS, SUMMARY, MNEMONIC, MOCK_TEST
@@ -1563,7 +1563,7 @@ public enum AiTaskType {
 
 ### `curriculum/entity/Chapter.java`
 ```java
-package com.empathai.curriculum.entity;
+package com.mymercurie.curriculum.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -1672,7 +1672,7 @@ public class Chapter {
 
 ### `curriculum/entity/AiGeneratedContent.java`
 ```java
-package com.empathai.curriculum.entity;
+package com.mymercurie.curriculum.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -1738,10 +1738,10 @@ public class AiGeneratedContent {
 
 ### `curriculum/repository/ChapterRepository.java`
 ```java
-package com.empathai.curriculum.repository;
+package com.mymercurie.curriculum.repository;
 
-import com.empathai.curriculum.entity.Chapter;
-import com.empathai.curriculum.entity.ProcessingStatus;
+import com.mymercurie.curriculum.entity.Chapter;
+import com.mymercurie.curriculum.entity.ProcessingStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -1770,10 +1770,10 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
 
 ### `curriculum/repository/AiGeneratedContentRepository.java`
 ```java
-package com.empathai.curriculum.repository;
+package com.mymercurie.curriculum.repository;
 
-import com.empathai.curriculum.entity.AiGeneratedContent;
-import com.empathai.curriculum.entity.AiTaskType;
+import com.mymercurie.curriculum.entity.AiGeneratedContent;
+import com.mymercurie.curriculum.entity.AiTaskType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.util.Optional;
@@ -1801,7 +1801,7 @@ public interface AiGeneratedContentRepository extends JpaRepository<AiGeneratedC
 
 ### `curriculum/dto/request/ChapterUploadRequest.java`
 ```java
-package com.empathai.curriculum.dto.request;
+package com.mymercurie.curriculum.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -1830,7 +1830,7 @@ public class ChapterUploadRequest {
 
 ### `curriculum/dto/request/ChapterMetadataUpdateRequest.java`
 ```java
-package com.empathai.curriculum.dto.request;
+package com.mymercurie.curriculum.dto.request;
 
 import lombok.Data;
 import java.util.List;
@@ -1849,7 +1849,7 @@ public class ChapterMetadataUpdateRequest {
 
 ### `curriculum/dto/request/AiProcessRequest.java`
 ```java
-package com.empathai.curriculum.dto.request;
+package com.mymercurie.curriculum.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -1881,9 +1881,9 @@ public class AiProcessRequest {
 
 ### `curriculum/dto/response/ChapterResponse.java`
 ```java
-package com.empathai.curriculum.dto.response;
+package com.mymercurie.curriculum.dto.response;
 
-import com.empathai.curriculum.entity.ProcessingStatus;
+import com.mymercurie.curriculum.entity.ProcessingStatus;
 import lombok.Builder;
 import lombok.Data;
 import java.time.LocalDateTime;
@@ -1916,9 +1916,9 @@ public class ChapterResponse {
 
 ### `curriculum/dto/response/ChapterStatusResponse.java`
 ```java
-package com.empathai.curriculum.dto.response;
+package com.mymercurie.curriculum.dto.response;
 
-import com.empathai.curriculum.entity.ProcessingStatus;
+import com.mymercurie.curriculum.entity.ProcessingStatus;
 import lombok.Builder;
 import lombok.Data;
 import java.util.List;
@@ -1937,7 +1937,7 @@ public class ChapterStatusResponse {
 
 ### `curriculum/dto/response/AiProcessResponse.java`
 ```java
-package com.empathai.curriculum.dto.response;
+package com.mymercurie.curriculum.dto.response;
 
 import lombok.Builder;
 import lombok.Data;
@@ -1959,12 +1959,12 @@ public class AiProcessResponse {
 
 ### `curriculum/service/ChapterIngestService.java` (interface)
 ```java
-package com.empathai.curriculum.service;
+package com.mymercurie.curriculum.service;
 
-import com.empathai.curriculum.dto.request.ChapterMetadataUpdateRequest;
-import com.empathai.curriculum.dto.request.ChapterUploadRequest;
-import com.empathai.curriculum.dto.response.ChapterResponse;
-import com.empathai.curriculum.dto.response.ChapterStatusResponse;
+import com.mymercurie.curriculum.dto.request.ChapterMetadataUpdateRequest;
+import com.mymercurie.curriculum.dto.request.ChapterUploadRequest;
+import com.mymercurie.curriculum.dto.response.ChapterResponse;
+import com.mymercurie.curriculum.dto.response.ChapterStatusResponse;
 import java.util.List;
 
 public interface ChapterIngestService {
@@ -1993,7 +1993,7 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
     @Value("${ai.service.url:http://localhost:8000}")
     private String aiServiceUrl;
 
-    @Value("${chatbot.ai-service.api-key:empathai-internal-key-2026}")
+    @Value("${chatbot.ai-service.api-key:mymercurie-internal-key-2026}")
     private String internalApiKey;
 
     @Override
@@ -2068,10 +2068,10 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
     @Transactional
     public ChapterResponse publishChapter(Long chapterId, String publishedBy) {
         Chapter chapter = chapterRepository.findById(chapterId)
-            .orElseThrow(() -> new EmpathaiException("Chapter not found: " + chapterId, HttpStatus.NOT_FOUND));
+            .orElseThrow(() -> new MyMercurieException("Chapter not found: " + chapterId, HttpStatus.NOT_FOUND));
 
         if (chapter.getProcessingStatus() != ProcessingStatus.PROCESSED) {
-            throw new EmpathaiException(
+            throw new MyMercurieException(
                 "Chapter must be in PROCESSED status to publish. Current: " + chapter.getProcessingStatus(),
                 HttpStatus.CONFLICT
             );
@@ -2087,10 +2087,10 @@ public class ChapterIngestServiceImpl implements ChapterIngestService {
 
 ### `curriculum/service/AiContentService.java` (interface)
 ```java
-package com.empathai.curriculum.service;
+package com.mymercurie.curriculum.service;
 
-import com.empathai.curriculum.dto.request.AiProcessRequest;
-import com.empathai.curriculum.dto.response.AiProcessResponse;
+import com.mymercurie.curriculum.dto.request.AiProcessRequest;
+import com.mymercurie.curriculum.dto.response.AiProcessResponse;
 
 public interface AiContentService {
     AiProcessResponse process(AiProcessRequest request);
@@ -2114,7 +2114,7 @@ public class AiContentServiceImpl implements AiContentService {
     @Value("${ai.service.url:http://localhost:8000}")
     private String aiServiceUrl;
 
-    @Value("${chatbot.ai-service.api-key:empathai-internal-key-2026}")
+    @Value("${chatbot.ai-service.api-key:mymercurie-internal-key-2026}")
     private String internalApiKey;
 
     @Override
@@ -2159,14 +2159,14 @@ public class AiContentServiceImpl implements AiContentService {
                 .retrieve()
                 .onStatus(HttpStatusCode::is5xxServerError, resp ->
                     resp.bodyToMono(String.class)
-                        .map(body -> new EmpathaiException("AI service error: " + body, HttpStatus.BAD_GATEWAY))
+                        .map(body -> new MyMercurieException("AI service error: " + body, HttpStatus.BAD_GATEWAY))
                 )
                 .bodyToMono(Map.class)
                 .timeout(Duration.ofSeconds(120))
                 .block();
         } catch (Exception e) {
             log.error("Python AI call failed: {}", e.getMessage());
-            throw new EmpathaiException("AI generation temporarily unavailable. Please try again.", HttpStatus.SERVICE_UNAVAILABLE);
+            throw new MyMercurieException("AI generation temporarily unavailable. Please try again.", HttpStatus.SERVICE_UNAVAILABLE);
         }
 
         // ── 3. Extract content JSON from Python response ───────────────────────
@@ -2175,7 +2175,7 @@ public class AiContentServiceImpl implements AiContentService {
         try {
             contentJson = new ObjectMapper().writeValueAsString(contentObj);
         } catch (Exception e) {
-            throw new EmpathaiException("Failed to serialize AI response", HttpStatus.INTERNAL_SERVER_ERROR);
+            throw new MyMercurieException("Failed to serialize AI response", HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
         // ── 4. Store in MySQL cache ────────────────────────────────────────────

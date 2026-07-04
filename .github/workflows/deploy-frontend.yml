@@ -7,7 +7,7 @@ on:
       - uat
       - qe
     paths:
-      - 'EmpathaiFrontend/**'
+      - 'MyMercurieFrontend/**'
       - '.github/workflows/deploy-frontend.yml'
 
 permissions:
@@ -29,15 +29,15 @@ jobs:
         with:
           node-version: 18
           cache: 'npm'
-          cache-dependency-path: 'EmpathaiFrontend/package-lock.json'
+          cache-dependency-path: 'MyMercurieFrontend/package-lock.json'
 
       - name: Install Dependencies
         run: npm ci
-        working-directory: ./EmpathaiFrontend
+        working-directory: ./MyMercurieFrontend
 
       - name: Build Application
         run: npm run build
-        working-directory: ./EmpathaiFrontend
+        working-directory: ./MyMercurieFrontend
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -48,7 +48,7 @@ jobs:
 
       - name: Deploy to S3
         run: |
-          aws s3 sync ./EmpathaiFrontend/dist s3://${{ vars.S3_BUCKET }} --delete
+          aws s3 sync ./MyMercurieFrontend/dist s3://${{ vars.S3_BUCKET }} --delete
 
       - name: Invalidate CloudFront Cache
         run: |

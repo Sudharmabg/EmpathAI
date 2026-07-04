@@ -1,0 +1,1 @@
+# MyMercurie Curriculum Intelligence Package

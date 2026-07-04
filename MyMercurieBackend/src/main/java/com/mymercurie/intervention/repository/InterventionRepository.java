@@ -1,0 +1,15 @@
+package com.mymercurie.intervention.repository;
+
+import com.mymercurie.intervention.entity.Intervention;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface InterventionRepository extends JpaRepository<Intervention, Long> {
+    
+    List<Intervention> findByStudentId(Long studentId);
+    
+    long countByStudentId(Long studentId);
+}

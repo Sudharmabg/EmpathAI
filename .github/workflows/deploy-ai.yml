@@ -7,7 +7,7 @@ on:
       - uat
       - qe
     paths:
-      - 'EmpathaiAI/**'
+      - 'MyMercurieAI/**'
       - '.github/workflows/deploy-ai.yml'
 
 permissions:
@@ -41,7 +41,7 @@ jobs:
           ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./EmpathaiAI
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./MyMercurieAI
           docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
 
       - name: Deploy to ECS Fargate

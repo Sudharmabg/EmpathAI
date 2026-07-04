@@ -5,7 +5,7 @@ This plan details the steps to implement the **Analogy Storyteller** tool in the
 ## Proposed Changes
 
 ### 1. Spring Boot Backend
-#### [MODIFY] [AiTaskType.java](file:///c:/empathai_updated_new/EmpathAI/EmpathaiBackend/src/main/java/com/empathai/curriculum/entity/AiTaskType.java)
+#### [MODIFY] [AiTaskType.java](file:///c:/mymercurie_updated_new/MyMercurie/MyMercurieBackend/src/main/java/com/mymercurie/curriculum/entity/AiTaskType.java)
 - Add `ANALOGY` to the enum:
   ```java
   public enum AiTaskType {
@@ -17,7 +17,7 @@ This plan details the steps to implement the **Analogy Storyteller** tool in the
 ---
 
 ### 2. Python AI Service
-#### [MODIFY] [validators.py](file:///c:/empathai_updated_new/EmpathAI/EmpathaiAI/curriculum/validators.py)
+#### [MODIFY] [validators.py](file:///c:/mymercurie_updated_new/MyMercurie/MyMercurieAI/curriculum/validators.py)
 - Create new validation schemas:
   - `AnalogyDetails`: `title: str`, `base: str`, `description: str`, `imageUrl: Optional[str] = None`
   - `StoryDetails`: `title: str`, `narrative: str`, `moral: str`
@@ -25,10 +25,10 @@ This plan details the steps to implement the **Analogy Storyteller** tool in the
   - `AnalogyOutput`: `stories: list[AnalogyStoryItem]`
 - Add `"ANALOGY": AnalogyOutput` to `TASK_VALIDATORS` map.
 
-#### [NEW] [analogy.txt](file:///c:/empathai_updated_new/EmpathAI/EmpathaiAI/prompts/analogy.txt)
+#### [NEW] [analogy.txt](file:///c:/mymercurie_updated_new/MyMercurie/MyMercurieAI/prompts/analogy.txt)
 - Create a prompt template instructing GPT-4o-mini to generate 2 to 3 analogies and stories for the selected topic/chapter, returning the structured JSON.
 
-#### [MODIFY] [rag_orchestrator.py](file:///c:/empathai_updated_new/EmpathAI/EmpathaiAI/curriculum/rag_orchestrator.py)
+#### [MODIFY] [rag_orchestrator.py](file:///c:/mymercurie_updated_new/MyMercurie/MyMercurieAI/curriculum/rag_orchestrator.py)
 - Register `ANALOGY` in configuration maps:
   - `TASK_MODELS`: `"gpt-4o-mini"`
   - `TASK_TEMPERATURES`: `0.5`
@@ -39,7 +39,7 @@ This plan details the steps to implement the **Analogy Storyteller** tool in the
 ---
 
 ### 3. Frontend UI (Admin Panel)
-#### [MODIFY] [ToolContentManager.jsx](file:///c:/empathai_updated_new/EmpathAI/EmpathaiFrontend/src/components/admin/aiknowledgebase/ToolContentManager.jsx)
+#### [MODIFY] [ToolContentManager.jsx](file:///c:/mymercurie_updated_new/MyMercurie/MyMercurieFrontend/src/components/admin/aiknowledgebase/ToolContentManager.jsx)
 - Register `ANALOGY` in `AI_TASKS`:
   ```javascript
   { key: 'ANALOGY', label: 'Analogy Storyteller', icon: '📖', desc: 'Creative analogies & stories' }

@@ -7,7 +7,7 @@ on:
       - uat
       - qe
     paths:
-      - 'EmpathaiBackend/**'
+      - 'MyMercurieBackend/**'
       - '.github/workflows/deploy-backend.yml'
 
 permissions:
@@ -41,7 +41,7 @@ jobs:
           ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./EmpathaiBackend
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./MyMercurieBackend
           docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
 
       - name: Deploy to ECS Fargate

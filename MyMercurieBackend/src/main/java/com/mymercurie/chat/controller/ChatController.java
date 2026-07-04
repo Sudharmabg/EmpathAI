@@ -1,0 +1,167 @@
+package com.mymercurie.chat.controller;
+
+import com.mymercurie.chat.dto.ChatLogRequest;
+import com.mymercurie.chat.dto.ChatMessageRequest;
+import com.mymercurie.chat.dto.ChatMessageResponse;
+import com.mymercurie.chat.dto.ChatSessionResponse;
+import com.mymercurie.chat.dto.ChatUsageResponse;
+import com.mymercurie.chat.service.ChatService;
+import com.mymercurie.user.entity.User;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/chat")
+@RequiredArgsConstructor
+public class ChatController {
+
+    private static final Logger logger = LoggerFactory.getLogger(ChatController.class);
+
+    private final ChatService chatService;
+
+    /**
+     * Send a message and get AI reply.
+     * POST /api/chat/message
+     */
+    @PostMapping("/message")
+    public ResponseEntity<ChatMessageResponse> sendMessage(
+            @AuthenticationPrincipal User currentUser,
+            @RequestBody ChatMessageRequest request) {
+        logger.info("sendMessage started for userId={}", currentUser.getId());
+        try {
+            ChatMessageResponse response = chatService.sendMessage(
+                    currentUser.getId(),
+                    request.getMessage(),
+                    request.getImages(),
+                    request.getImageBase64(),
+                    request.getImageMimeType()
+            );
+            logger.info("sendMessage completed successfully for userId={}", currentUser.getId());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("sendMessage failed for userId={}: {}", currentUser.getId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Log a Schedule Assistant conversation turn (no AI call).
+     * POST /api/chat/log
+     */
+    @PostMapping("/log")
+    public ResponseEntity<Void> logScheduleMessage(
+            @AuthenticationPrincipal User currentUser,
+            @RequestBody ChatLogRequest request) {
+        logger.info("logScheduleMessage started for userId={}", currentUser.getId());
+        try {
+            chatService.logScheduleMessage(
+                    currentUser.getId(),
+                    request.getUserMessage(),
+                    request.getAssistantMessage()
+            );
+            logger.info("logScheduleMessage completed for userId={}", currentUser.getId());
+        } catch (Exception e) {
+            // Non-critical logging — don't fail the request
+            logger.warn("logScheduleMessage failed (non-critical) for userId={}: {}",
+                    currentUser.getId(), e.getMessage());
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Get all sessions for the current student (list, no messages).
+     * GET /api/chat/sessions
+     */
+    @GetMapping("/sessions")
+    public ResponseEntity<List<ChatSessionResponse>> getSessions(
+            @AuthenticationPrincipal User currentUser) {
+        logger.info("getSessions started for userId={}", currentUser.getId());
+        try {
+            ResponseEntity<List<ChatSessionResponse>> result =
+                    ResponseEntity.ok(chatService.getSessions(currentUser.getId()));
+            logger.info("getSessions completed successfully for userId={}", currentUser.getId());
+            return result;
+        } catch (Exception e) {
+            logger.error("getSessions failed for userId={}: {}", currentUser.getId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Get full message history for a specific session.
+     * GET /api/chat/session/{id}
+     */
+    @GetMapping("/session/{id}")
+    public ResponseEntity<ChatSessionResponse> getSession(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User currentUser) {
+        logger.info("getSession started for sessionId={}, userId={}", id, currentUser.getId());
+        try {
+            ResponseEntity<ChatSessionResponse> result =
+                    ResponseEntity.ok(chatService.getSessionMessages(id, currentUser.getId()));
+            logger.info("getSession completed successfully for sessionId={}, userId={}", id, currentUser.getId());
+            return result;
+        } catch (Exception e) {
+            logger.error("getSession failed for sessionId={}, userId={}: {}",
+                    id, currentUser.getId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Get today's usage stats.
+     * GET /api/chat/usage
+     */
+    @GetMapping("/usage")
+    public ResponseEntity<ChatUsageResponse> getUsage(
+            @AuthenticationPrincipal User currentUser) {
+        logger.info("getUsage started for userId={}", currentUser.getId());
+        try {
+            ResponseEntity<ChatUsageResponse> result =
+                    ResponseEntity.ok(chatService.getUsage(currentUser.getId()));
+            logger.info("getUsage completed successfully for userId={}", currentUser.getId());
+            return result;
+        } catch (Exception e) {
+            logger.error("getUsage failed for userId={}: {}", currentUser.getId(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Get all sessions for Admin (SuperAdmin and Psychologist).
+     * GET /api/chat/admin/sessions
+     */
+    @GetMapping("/admin/sessions")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PSYCHOLOGIST')")
+    public ResponseEntity<List<ChatSessionResponse>> getAdminSessions() {
+        logger.info("getAdminSessions started");
+        try {
+            return ResponseEntity.ok(chatService.getAdminSessions());
+        } catch (Exception e) {
+            logger.error("getAdminSessions failed: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Get full message history for a specific session for Admin.
+     * GET /api/chat/admin/session/{id}
+     */
+    @GetMapping("/admin/session/{id}")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('SUPER_ADMIN', 'PSYCHOLOGIST')")
+    public ResponseEntity<ChatSessionResponse> getAdminSession(@PathVariable Long id) {
+        logger.info("getAdminSession started for sessionId={}", id);
+        try {
+            return ResponseEntity.ok(chatService.getAdminSessionMessages(id));
+        } catch (Exception e) {
+            logger.error("getAdminSession failed for sessionId={}: {}", id, e.getMessage(), e);
+            throw e;
+        }
+    }
+}

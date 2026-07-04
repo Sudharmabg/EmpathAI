@@ -370,7 +370,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-EmpathaiBackend/src/main/resources/application.properties
+MyMercurieBackend/src/main/resources/application.properties
 
 # LangGraph checkpoints
 checkpoints.db

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
     addTask, editTask, deleteTask, toggleTaskComplete, getRecommendations,
-    savePreferences, getPreferences
+    savePreferences, getPreferences, getMonthTasks
 } from '../../../api/scheduleApi.js'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
@@ -10,7 +10,7 @@ import { apiRequest } from '../../../api/apiClient.js'
 import 'katex/dist/katex.min.css'
 import {
     CalendarIcon, PlusIcon, TrashIcon, CheckCircleIcon,
-    ArrowRightIcon, ChevronDownIcon, ChevronUpIcon,
+    ArrowRightIcon, ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon,
     PencilIcon, ExclamationTriangleIcon,
     ClockIcon, AcademicCapIcon, SparklesIcon,
     XMarkIcon, ArrowPathIcon, PaperAirplaneIcon,
@@ -18,6 +18,62 @@ import {
     MicrophoneIcon, CheckIcon, MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline'
 import chatService from '../../../services/chatService'
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DATE HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function toISO(d) {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+}
+function mondayOf(d) {
+    const date = new Date(d)
+    const day = date.getDay()
+    const diff = (day === 0 ? -6 : 1) - day
+    date.setDate(date.getDate() + diff)
+    date.setHours(0, 0, 0, 0)
+    return date
+}
+function addDays(d, n) {
+    const date = new Date(d)
+    date.setDate(date.getDate() + n)
+    return date
+}
+function weekDatesFrom(monday) {
+    return Array.from({ length: 7 }, (_, i) => toISO(addDays(monday, i)))
+}
+function dayLabel(iso) {
+    return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })
+}
+function shortDateLabel(iso) {
+    return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+function monthYearLabel(iso) {
+    return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+function todayISO() {
+    return toISO(new Date())
+}
+function firstOfMonth(d) {
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+function monthGridDates(viewMonth) {
+    const first = firstOfMonth(viewMonth)
+    const startWeekday = (first.getDay() + 6) % 7 // 0 = Monday
+    const gridStart = addDays(first, -startWeekday)
+    return Array.from({ length: 42 }, (_, i) => {
+        const d = addDays(gridStart, i)
+        return { iso: toISO(d), inMonth: d.getMonth() === viewMonth.getMonth() }
+    })
+}
+function monthLabel(d) {
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+function isWeekendISO(iso) {
+    const d = new Date(iso + 'T00:00:00').getDay()
+    return d === 0 || d === 6
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TIME SELECT
@@ -71,7 +127,7 @@ function TimeSelect({ value, onChange, label, is24h }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CONSTANTS
+// CONSTANTS  (DAYS / getTodayName retained — used only by weekday-based Preferences)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const STUDY_TIME_OPTIONS = [
@@ -98,8 +154,31 @@ function getTodayName() {
     return DAYS_JS[new Date().getDay()]
 }
 
+const WELLNESS_ACTIVITY_OPTIONS = [
+    'Listening to music',
+    'Painting / Drawing',
+    'Playing an instrument',
+    'Reading a book',
+    'Going for a walk',
+    'Meditation',
+    'Yoga / Stretching',
+    'Watching a show',
+    'Journaling',
+    'Hanging out with friends',
+    'Other (Custom Activity)',
+]
+
+const OTHER_ACTIVITY_OPTIONS = [
+    'Assigned Intervention',
+    'Counsellor Check-in',
+    'Peer Support Session',
+    'Skill-Building Exercise',
+    'Guided Reflection',
+    'Other (Custom Activity)',
+]
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// PREFERENCES MODAL
+// PREFERENCES MODAL  (unchanged — busy slots remain weekday-based by design)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip }) {
@@ -109,12 +188,12 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
     const [saving, setSaving]                         = useState(false)
     const [error, setError]                           = useState('')
     const [step, setStep]                             = useState(0)
-    const [busyForm, setBusyForm]                     = useState({ day: getTodayName(), startTime: '16:00', endTime: '18:00' })
+    const [busyForm, setBusyForm]                     = useState({ recurring: true, day: getTodayName(), date: todayISO(), startTime: '16:00', endTime: '18:00' })
     const [busyFormError, setBusyFormError]           = useState('')
     const [reasons, setReasons]                       = useState({})
 
     const toM = (t) => { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+m }
-    const fmt = (t) => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}` }
+    const fmt = (t) => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}` }
 
     useEffect(() => {
         if (initialPrefs) {
@@ -140,14 +219,34 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
         setBusyFormError('')
         if (!busyForm.startTime || !busyForm.endTime) { setBusyFormError('Set both times.'); return }
         if (toM(busyForm.endTime) <= toM(busyForm.startTime)) { setBusyFormError('End must be after start.'); return }
-        const sameDay = busySlots.filter(s => s.day === busyForm.day)
+        if (!busyForm.recurring && !busyForm.date) { setBusyFormError('Pick a date.'); return }
+
+        const effectiveDay = busyForm.recurring
+            ? busyForm.day
+            : new Date(busyForm.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })
+
+        const sameDay = busySlots.filter(s =>
+            s.recurring === busyForm.recurring
+                ? busyForm.recurring
+                    ? s.day === busyForm.day
+                    : s.date === busyForm.date
+                : false
+        )
         if (sameDay.some(s => toM(busyForm.startTime) < toM(s.endTime) && toM(busyForm.endTime) > toM(s.startTime))) {
             setBusyFormError('Overlaps with existing slot.'); return
         }
-        const newSlots = [...busySlots, { day: busyForm.day, startTime: busyForm.startTime, endTime: busyForm.endTime, reason: '' }]
+        const newSlot = {
+            day: effectiveDay,
+            startTime: busyForm.startTime,
+            endTime: busyForm.endTime,
+            reason: '',
+            recurring: busyForm.recurring,
+            date: busyForm.recurring ? null : busyForm.date
+        }
+        const newSlots = [...busySlots, newSlot]
         setBusySlots(newSlots)
         setReasons(prev => ({ ...prev, [newSlots.length - 1]: '' }))
-        setBusyForm({ day: getTodayName(), startTime: '16:00', endTime: '18:00' })
+        setBusyForm({ recurring: true, day: getTodayName(), date: todayISO(), startTime: '16:00', endTime: '18:00' })
     }
 
     const removeBusySlot = (index) => {
@@ -192,11 +291,11 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
     )
 
     return (
-        <div 
+        <div
             onClick={() => onSkip && onSkip()}
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-lora"
         >
-            <div 
+            <div
                 onClick={e => e.stopPropagation()}
                 className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border-2 border-violet-100 max-h-[92vh] overflow-hidden flex flex-col"
             >
@@ -305,12 +404,39 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
                                 </div>
                                 <div className="bg-violet-50 border-2 border-violet-100 rounded-2xl p-4 mb-4">
                                     <p className="text-[10px] font-black text-violet-500 uppercase tracking-widest mb-3">Add a busy slot</p>
+
+                                    {/* ── Recurring vs One-time toggle ── */}
+                                    <div className="flex gap-2 mb-3">
+                                        <button
+                                            onClick={() => { setBusyForm(p => ({ ...p, recurring: true })); setBusyFormError('') }}
+                                            className={`flex-1 text-xs font-black py-2 rounded-xl border-2 transition-all ${
+                                                busyForm.recurring ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200'
+                                            }`}
+                                        >
+                                            🔁 Repeats weekly
+                                        </button>
+                                        <button
+                                            onClick={() => { setBusyForm(p => ({ ...p, recurring: false })); setBusyFormError('') }}
+                                            className={`flex-1 text-xs font-black py-2 rounded-xl border-2 transition-all ${
+                                                !busyForm.recurring ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200'
+                                            }`}
+                                        >
+                                            📅 Just this once
+                                        </button>
+                                    </div>
+
                                     <div className="grid grid-cols-3 gap-2.5 mb-3">
                                         <div className="col-span-3 sm:col-span-1">
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1.5">Day</label>
-                                            <select value={busyForm.day} onChange={e => { setBusyForm(p => ({ ...p, day: e.target.value })); setBusyFormError('') }} className={inputClass}>
-                                                {DAYS.map(d => <option key={d}>{d}</option>)}
-                                            </select>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1.5">
+                                                {busyForm.recurring ? 'Day' : 'Date'}
+                                            </label>
+                                            {busyForm.recurring ? (
+                                                <select value={busyForm.day} onChange={e => { setBusyForm(p => ({ ...p, day: e.target.value })); setBusyFormError('') }} className={inputClass}>
+                                                    {DAYS.map(d => <option key={d}>{d}</option>)}
+                                                </select>
+                                            ) : (
+                                                <input type="date" value={busyForm.date} onChange={e => { setBusyForm(p => ({ ...p, date: e.target.value })); setBusyFormError('') }} className={inputClass} />
+                                            )}
                                         </div>
                                         <div>
                                             <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1.5">From</label>
@@ -345,8 +471,13 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
                                             <div key={i} className="flex items-center gap-3 bg-white border-2 border-red-100 rounded-xl px-3.5 py-2.5">
                                                 <div className="w-1.5 h-8 bg-red-400 rounded-full flex-shrink-0" />
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-black text-xs text-red-700">{slot.day}</p>
-                                                    <p className="text-[10px] text-red-400 font-medium">{fmt(slot.startTime)} – {fmt(slot.endTime)}</p>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <p className="font-black text-xs text-red-700">{slot.day}</p>
+                                                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${slot.recurring === false ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-500'}`}>
+                                                            {slot.recurring === false ? 'ONE-TIME' : 'WEEKLY'}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-[10px] text-red-400 font-medium">{fmt(slot.startTime)} – {fmt(slot.endTime)}{slot.recurring === false && slot.date ? ` · ${slot.date}` : ''}</p>
                                                 </div>
                                                 {slot.reason && <span className="text-[9px] font-bold text-gray-400 italic hidden sm:block">{slot.reason}</span>}
                                                 <button onClick={() => removeBusySlot(i)} className="text-gray-300 hover:text-red-400 transition-colors p-1 flex-shrink-0">
@@ -429,7 +560,7 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AGENT TOOL DEFINITIONS  (OpenAI function-calling format)
+// AGENT TOOL DEFINITIONS  (date-based now)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const AGENT_TOOLS = [
@@ -437,17 +568,17 @@ const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'add_task',
-            description: "Add a new task or study session to the student's weekly schedule. Always gather title, day, start time, and end time before calling. Ask one or two questions at a time if info is missing — never assume times.",
+            description: "Add a new task or study session to the student's schedule. Always gather title, date, start time, and end time before calling. Ask one or two questions at a time if info is missing — never assume times.",
             parameters: {
                 type: 'object',
                 properties: {
                     title:     { type: 'string', description: 'Short descriptive task title e.g. "Math revision", "Physics chapter 4"' },
-                    dayOfWeek: { type: 'string', enum: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'], description: 'Day of the week for the task' },
+                    date:      { type: 'string', description: 'ISO date in "yyyy-MM-dd" format e.g. "2026-07-10"' },
                     startTime: { type: 'string', description: 'Start time in 24-hr HH:MM format e.g. "09:00", "14:30"' },
                     endTime:   { type: 'string', description: 'End time in 24-hr HH:MM format e.g. "10:00", "16:00"' },
                     notes:     { type: 'string', description: 'Optional extra notes or reminders for the task' },
                 },
-                required: ['title', 'dayOfWeek', 'startTime', 'endTime'],
+                required: ['title', 'date', 'startTime', 'endTime'],
             },
         },
     },
@@ -455,18 +586,18 @@ const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'edit_task',
-            description: "Edit an existing task — change its title, start time, end time, or notes. Confirm new details with the student before calling. Only use IDs from the task list in the system prompt.",
+            description: "Edit an existing task — change its title, date, start time, end time, or notes. Confirm new details with the student before calling. Only use IDs from the task list in the system prompt.",
             parameters: {
                 type: 'object',
                 properties: {
                     taskId:    { type: 'string', description: 'The unique ID of the task to edit' },
                     title:     { type: 'string', description: 'New title for the task' },
-                    dayOfWeek: { type: 'string', enum: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'], description: 'Day of the week (same or updated)' },
+                    date:      { type: 'string', description: 'ISO date in "yyyy-MM-dd" format' },
                     startTime: { type: 'string', description: 'New start time in 24-hr HH:MM format' },
                     endTime:   { type: 'string', description: 'New end time in 24-hr HH:MM format' },
                     notes:     { type: 'string', description: 'Updated notes (optional)' },
                 },
-                required: ['taskId', 'title', 'dayOfWeek', 'startTime', 'endTime'],
+                required: ['taskId', 'title', 'date', 'startTime', 'endTime'],
             },
         },
     },
@@ -503,7 +634,7 @@ const AGENT_TOOLS = [
 ]
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VOICE INPUT BUTTON
+// VOICE INPUT BUTTON  (unchanged)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function VoiceInputButton({ onTranscript, disabled }) {
@@ -586,10 +717,10 @@ function VoiceInputButton({ onTranscript, disabled }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MINI CHATBUDDY  (no localStorage — history stored via backend)
+// MINI CHATBUDDY  (date-based now)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MiniChatBuddy({ user, tasks, setTasks, upcomingExams, activeDay, onClose, onTaskChanged, onOpenChatBuddy }) {
+function MiniChatBuddy({ user, tasksByDate, setTasksByDate, upcomingExams, activeDate, weekDates, onClose, onTaskChanged, onOpenChatBuddy }) {
     const CRISIS_KEYWORDS = [
     'suicide', 'kill myself', 'end my life', 'want to die',
     'self harm', 'self-harm', 'hurt myself', 'no reason to live',
@@ -606,13 +737,14 @@ function MiniChatBuddy({ user, tasks, setTasks, upcomingExams, activeDay, onClos
 
     // ── Build system prompt ────────────────────────────────────────────────────
     const buildSystemPrompt = () => {
-        const allTasksSummary = Object.entries(tasks)
-            .map(([day, dayTasks]) => {
-                if (!dayTasks?.length) return null
-                const lines = dayTasks.map(t =>
+        const weekTasksSummary = weekDates
+            .map(date => {
+                const dateTasks = tasksByDate[date] || []
+                if (!dateTasks.length) return null
+                const lines = dateTasks.map(t =>
                     `    • [ID:${t.id}] "${t.title}" ${t.startTime}–${t.endTime}${t.completed ? ' ✓' : ''}`
                 ).join('\n')
-                return `  ${day}:\n${lines}`
+                return `  ${dayLabel(date)}, ${shortDateLabel(date)} (${date}):\n${lines}`
             })
             .filter(Boolean)
             .join('\n')
@@ -624,55 +756,56 @@ function MiniChatBuddy({ user, tasks, setTasks, upcomingExams, activeDay, onClos
             : '  None'
 
         return `You are a smart, friendly Schedule Agent for a student learning platform called MyMercurie.
-Your job is to help the student manage their weekly study schedule through conversation.
+Your job is to help the student manage their study schedule through conversation.
 
 STUDENT INFO:
   Name: ${user?.firstName || 'Student'} ${user?.lastName || ''}
   Student ID: ${user?.id}
-  Currently viewing: ${activeDay}
+  Currently viewing: ${dayLabel(activeDate)}, ${shortDateLabel(activeDate)} (${activeDate})
 
-CURRENT WEEK'S TASKS:
-${allTasksSummary || '  No tasks scheduled yet'}
+THIS WEEK'S TASKS:
+${weekTasksSummary || '  No tasks scheduled yet'}
 
 UPCOMING EXAMS:
 ${examsSummary}
 
 YOUR BEHAVIOUR:
 1. Be warm, encouraging, and concise. Use emojis sparingly.
-2. When the student wants to ADD a task, gather title, day, start time, and end time — then IMMEDIATELY call add_task. Do NOT ask for confirmation. Do NOT say "just to confirm". Do NOT repeat the details back and ask "is that correct?". Just call the tool.
-3. If the student gives partial info like "add Math at 3pm for 1 hour on Tuesday", infer endTime = 16:00 yourself and call add_task immediately without confirming.
-4. If the student says "yes", "yes add", "proceed", "go ahead", or any affirmative — you already have all the info. CALL THE TOOL IMMEDIATELY. Never ask again.
-5. When the student wants to DELETE a task, identify it from the task list, then call delete_task immediately. No confirmation needed.
-6. When the student wants to EDIT a task, ask only what changed, then call edit_task immediately.
-7. When marking complete, identify the task and call mark_task_complete immediately.
-8. For queries like "what's on my schedule" or "am I on track", answer directly from the task list — no tool needed.
+2. When the student wants to ADD a task, gather title, date, start time, and end time — then IMMEDIATELY call add_task. Do NOT ask for confirmation. Do NOT say "just to confirm". Do NOT repeat the details back and ask "is that correct?". Just call the tool.
+3. If the student doesn't mention a date, assume they mean the date currently being viewed (${activeDate}) unless they say "tomorrow", a weekday name, or another date.
+4. If the student gives partial info like "add Math at 3pm for 1 hour", infer endTime = 16:00 yourself and call add_task immediately without confirming.
+5. If the student says "yes", "yes add", "proceed", "go ahead", or any affirmative — you already have all the info. CALL THE TOOL IMMEDIATELY. Never ask again.
+6. When the student wants to DELETE a task, identify it from the task list, then call delete_task immediately. No confirmation needed.
+7. When the student wants to EDIT a task, ask only what changed, then call edit_task immediately.
+8. When marking complete, identify the task and call mark_task_complete immediately.
 9. For queries like "what's on my schedule" or "am I on track", answer directly from the task list — no tool needed.
 10. IMPORTANT: If the student sends ANY emotional message, expresses stress, sadness, anxiety, loneliness, crisis, or any personal or mental health concern — DO NOT engage with it. Simply say: "I'm only able to help with your schedule here 😊 Please head over to ChatBuddy for support — opening it for you now! 💙" and stop. The app will automatically open ChatBuddy.
 11. IMPORTANT: If the student asks any general knowledge or subject question — DO NOT answer it. Say: "That's a great question! Head over to ChatBuddy for subject help — I only manage your schedule here 😊"
 12. NEVER provide emotional support, crisis response, mental health advice, or academic tutoring. Always redirect non-schedule topics to ChatBuddy.
 13. After any schedule action, briefly confirm what was done and offer to help further.
-14. Always use 24-hour format (HH:MM) when calling tools.
+14. Always use 24-hour format (HH:MM) when calling tools, and ISO "yyyy-MM-dd" format for dates.
 15. Never make up task IDs — only use IDs from the task list above.
 16. Today is ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}.
-17. CRITICAL: Once you have title + day + startTime + endTime, call the tool. Period. No more questions.`
+17. CRITICAL: Once you have title + date + startTime + endTime, call the tool. Period. No more questions.`
     }
 
     // ── Build welcome message ──────────────────────────────────────────────────
     const buildWelcomeMessage = () => {
-        const todayTasks     = tasks[activeDay] || []
-        const completedCount = todayTasks.filter(t => t.completed).length
-        const totalCount     = todayTasks.length
+        const activeTasks    = tasksByDate[activeDate] || []
+        const completedCount = activeTasks.filter(t => t.completed).length
+        const totalCount     = activeTasks.length
         const nearestExam    = upcomingExams?.[0]
+        const label          = `${dayLabel(activeDate)}, ${shortDateLabel(activeDate)}`
 
         let msg = `Hi **${user?.firstName || 'there'}**! 👋 I'm your Schedule Assistant.\n\n`
 
         if (totalCount > 0) {
-            msg += `📅 You have **${totalCount} task${totalCount > 1 ? 's' : ''}** planned for ${activeDay}`
+            msg += `📅 You have **${totalCount} task${totalCount > 1 ? 's' : ''}** planned for ${label}`
             if (completedCount > 0) msg += ` and you've completed **${completedCount}** — great work!`
             else msg += ` and none completed yet.`
             msg += '\n\n'
         } else {
-            msg += `📅 You have **no tasks planned** for ${activeDay} yet.\n\n`
+            msg += `📅 You have **no tasks planned** for ${label} yet.\n\n`
         }
 
         if (nearestExam) {
@@ -713,23 +846,23 @@ YOUR BEHAVIOUR:
                 case 'add_task': {
                     const result = await addTask(
                         user.id,
-                        toolInput.dayOfWeek,
+                        toolInput.date,
                         toolInput.title,
                         toolInput.startTime,
                         toolInput.endTime,
                         toolInput.notes || ''
                     )
-                    setTasks(prev => ({
+                    setTasksByDate(prev => ({
                         ...prev,
-                        [toolInput.dayOfWeek]: [
-                            ...(prev[toolInput.dayOfWeek] || []),
+                        [toolInput.date]: [
+                            ...(prev[toolInput.date] || []),
                             { ...result, completed: false }
                         ]
                     }))
                     onTaskChanged?.()
                     return {
                         success: true,
-                        message: `Task "${toolInput.title}" added on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`,
+                        message: `Task "${toolInput.title}" added on ${toolInput.date} from ${toolInput.startTime} to ${toolInput.endTime}.`,
                         task: result
                     }
                 }
@@ -737,31 +870,31 @@ YOUR BEHAVIOUR:
                     const result = await editTask(
                         toolInput.taskId,
                         user.id,
-                        toolInput.dayOfWeek,
+                        toolInput.date,
                         toolInput.title,
                         toolInput.startTime,
                         toolInput.endTime,
                         toolInput.notes || ''
                     )
-                    setTasks(prev => ({
+                    setTasksByDate(prev => ({
                         ...prev,
-                        [toolInput.dayOfWeek]: (prev[toolInput.dayOfWeek] || []).map(t =>
+                        [toolInput.date]: (prev[toolInput.date] || []).map(t =>
                             t.id === toolInput.taskId ? { ...t, ...result } : t
                         )
                     }))
                     onTaskChanged?.()
                     return {
                         success: true,
-                        message: `Task updated to "${toolInput.title}" on ${toolInput.dayOfWeek} from ${toolInput.startTime} to ${toolInput.endTime}.`,
+                        message: `Task updated to "${toolInput.title}" on ${toolInput.date} from ${toolInput.startTime} to ${toolInput.endTime}.`,
                         task: result
                     }
                 }
                 case 'delete_task': {
                     await deleteTask(toolInput.taskId)
-                    setTasks(prev => {
+                    setTasksByDate(prev => {
                         const updated = {}
-                        for (const day of Object.keys(prev)) {
-                            updated[day] = prev[day].filter(t => t.id !== toolInput.taskId)
+                        for (const date of Object.keys(prev)) {
+                            updated[date] = prev[date].filter(t => t.id !== toolInput.taskId)
                         }
                         return updated
                     })
@@ -773,10 +906,10 @@ YOUR BEHAVIOUR:
                 }
                 case 'mark_task_complete': {
                     const result = await toggleTaskComplete(toolInput.taskId)
-                    setTasks(prev => {
+                    setTasksByDate(prev => {
                         const updated = {}
-                        for (const day of Object.keys(prev)) {
-                            updated[day] = prev[day].map(t =>
+                        for (const date of Object.keys(prev)) {
+                            updated[date] = prev[date].map(t =>
                                 t.id === toolInput.taskId
                                     ? { ...t, completed: result.completed }
                                     : t
@@ -843,7 +976,6 @@ YOUR BEHAVIOUR:
                     ...currentHistory,
                     { role: 'assistant', content: message.content || '' }
                 ]
-                // ── Persist this turn to backend ───────────────────────────────
                 if (lastAssistantText) {
                     logTurnToBackend(userText, lastAssistantText)
                 }
@@ -883,7 +1015,6 @@ YOUR BEHAVIOUR:
     const text = inputMessage.trim()
     if (!text || isLoading) return
 
-    // ── Crisis detection — open ChatBuddy immediately ──────────────────────
     const lower = text.toLowerCase()
     const isCrisis = CRISIS_KEYWORDS.some(kw => lower.includes(kw))
     if (isCrisis) {
@@ -893,7 +1024,6 @@ YOUR BEHAVIOUR:
     return
 }
 
-    // ── Normal agent loop ──────────────────────────────────────────────────
     const userMsg = { id: `u-${Date.now()}`, role: 'user', content: text }
     setMessages(prev => [...prev, userMsg])
     setInputMessage('')
@@ -941,7 +1071,6 @@ YOUR BEHAVIOUR:
             className="fixed bottom-20 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl border-2 border-violet-200 shadow-2xl flex flex-col overflow-hidden"
             style={{ height: '480px', maxHeight: 'calc(100vh - 100px)' }}
         >
-            {/* ── Header ── */}
             <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
@@ -963,7 +1092,6 @@ YOUR BEHAVIOUR:
                 </button>
             </div>
 
-            {/* ── Chat area ── */}
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50/40">
                 {messages.map(msg => (
                     <div
@@ -1018,7 +1146,6 @@ YOUR BEHAVIOUR:
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* ── Quick chips ── */}
             <div className="px-4 py-2 border-t border-gray-100 bg-white flex-shrink-0">
                 <div className="flex flex-wrap gap-1.5">
                     {QUICK_CHIPS.map(chip => (
@@ -1034,7 +1161,6 @@ YOUR BEHAVIOUR:
                 </div>
             </div>
 
-            {/* ── Input ── */}
             <div className="px-4 py-3 border-t border-gray-100 bg-white flex-shrink-0">
                 <div className="flex gap-2 items-end">
                     <div className="flex-1 flex items-center border-2 border-gray-100 focus-within:border-violet-300 rounded-xl px-3 py-2 bg-white gap-2 transition-colors">
@@ -1074,11 +1200,22 @@ YOUR BEHAVIOUR:
 // MAIN SCHEDULE COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const jsToWeekIdx     = (jsDay) => (jsDay === 0 ? 6 : jsDay - 1)
-const weekIdx         = (day)   => DAYS.indexOf(day)
-const getTodayWeekIdx = ()      => jsToWeekIdx(new Date().getDay())
+// NOTE ON PROPS: `tasks` is now keyed by ISO date string ("2026-07-06") instead
+// of weekday name. `activeDay` now holds an ISO date string instead of "Monday".
+// Rename these upstream at your convenience — kept as-is here to minimize prop
+// signature churn with the parent component.
+export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, user, onOpenChatBuddy, onXpEarned }) {
 
-export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, user, onOpenChatBuddy,onXpEarned }) {
+    // Internal aliases for clarity — same underlying state as the props above.
+    const tasksByDate    = tasks
+    const setTasksByDate = setTasks
+    const activeDate     = activeDay || todayISO()
+    const setActiveDate  = setActiveDay
+
+    const [viewMonth, setViewMonth] = useState(() => firstOfMonth(new Date()))
+const calendarCells = monthGridDates(viewMonth)
+// Monday–Sunday range around activeDate — used only for MiniChatBuddy's context, not display
+const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00')))
 
     const [showAddTask, setShowAddTask]               = useState(false)
     const [newTask, setNewTask]                       = useState({ startTime: '09:00', endTime: '10:00', title: '', notes: '' })
@@ -1170,7 +1307,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         setPreferredStudyTime(savedPrefs.preferredStudyTime)
         setCachedPrefs(savedPrefs)
         setPrefStatus('ready')
-        setActiveDay(DAYS[getTodayWeekIdx()])
+        setActiveDate(todayISO())
         setRecsTrigger(t => t + 1)
     }
 
@@ -1186,24 +1323,41 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         setRecsTrigger(t => t + 1)
     }
 
-    const isPastDay   = (d) => weekIdx(d) < getTodayWeekIdx()
-    const isTodayDay  = (d) => weekIdx(d) === getTodayWeekIdx()
+    const isPastDay   = (iso) => iso < todayISO()
+    const isTodayDay  = (iso) => iso === todayISO()
+
+    // ── Fetch month(s) of tasks covering the current week ─────────────────────
+    useEffect(() => {
+    if (!user?.id || prefStatus !== 'ready') return
+
+    // Fetches every month touched by the visible grid (handles leading/trailing days too)
+    const monthsNeeded = new Set(calendarCells.map(c => c.iso.slice(0, 7)))
+    const fetches = Array.from(monthsNeeded).map(ym => {
+        const [y, m] = ym.split('-').map(Number)
+        return getMonthTasks(user.id, y, m).catch(() => ({}))
+    })
+
+    Promise.all(fetches).then(results => {
+        const merged = Object.assign({}, ...results)
+        setTasksByDate(prev => ({ ...prev, ...merged }))
+    })
+}, [user?.id, viewMonth, prefStatus])
 
     useEffect(() => {
         if (!user?.id || prefStatus !== 'ready') return
         setRecsLoading(true)
-        getRecommendations(user.id, activeDay)
+        getRecommendations(user.id, activeDate)
             .then(data => {
                 setBlockedWindows(data?.blockedWindows || [])
                 setBusySlotBlocks(data?.busySlots || [])
                 setUpcomingExams(data?.upcomingExams || [])
                 setPreferredStudyTime(data?.preferredStudyTime || null)
-                setSuggestions(isPastDay(activeDay) ? [] : (data?.suggestions || []))
+                setSuggestions(isPastDay(activeDate) ? [] : (data?.suggestions || []))
                 setSuggestionStates({}); setSuggestionTimePicker(null)
             })
             .catch(() => { setBlockedWindows([]); setBusySlotBlocks([]); setUpcomingExams([]); setSuggestions([]) })
             .finally(() => setRecsLoading(false))
-    }, [user?.id, activeDay, recsTrigger, prefStatus])
+    }, [user?.id, activeDate, recsTrigger, prefStatus])
 
     const normaliseTask = (task) => {
         if (task.startTime) return task
@@ -1215,12 +1369,12 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
     }
 
     const toMins  = (t) => { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+m }
-    const fmtTime = (t) => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}` }
+    const fmtTime = (t) => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}` }
     const getDur  = (s,e) => { const d = toMins(e)-toMins(s); if(d<=0) return ''; const h=Math.floor(d/60),m=d%60; return h&&m?`${h}h ${m}m`:h?`${h}h`:`${m}m` }
     const totalMins = () => normTasks.reduce((a,t) => { const d = toMins(t.endTime)-toMins(t.startTime); return a+(d>0?d:0) }, 0)
 
-    const hasOverlap = (day,s,e,excl=null) =>
-        tasks[day].some(r => { const t = normaliseTask(r); if(t.id===excl) return false; return toMins(s)<toMins(t.endTime)&&toMins(e)>toMins(t.startTime) })
+    const hasOverlap = (date,s,e,excl=null) =>
+        (tasksByDate[date] || []).some(r => { const t = normaliseTask(r); if(t.id===excl) return false; return toMins(s)<toMins(t.endTime)&&toMins(e)>toMins(t.startTime) })
 
     const isBlockedBySchool = (s,e) => {
         const schoolBlocked = blockedWindows.some(w => toMins(s)<toMins(w.endTime)&&toMins(e)>toMins(w.startTime))
@@ -1230,8 +1384,8 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
 
     const isOverdue = (t) => {
         if (t.completed) return false
-        if (isPastDay(activeDay)) return true
-        if (isTodayDay(activeDay)) { const n = new Date(); return toMins(t.endTime) < n.getHours()*60+n.getMinutes() }
+        if (isPastDay(activeDate)) return true
+        if (isTodayDay(activeDate)) { const n = new Date(); return toMins(t.endTime) < n.getHours()*60+n.getMinutes() }
         return false
     }
 
@@ -1242,18 +1396,18 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         for (const [max,mins] of caps) if (n<=max) return mins; return 300
     }
 
-    const activeDayIsLocked = isPastDay(activeDay)
-    const normTasks  = tasks[activeDay].map(normaliseTask)
+    const activeDayIsLocked = isPastDay(activeDate)
+    const normTasks  = (tasksByDate[activeDate] || []).map(normaliseTask)
     const totalT     = normTasks.length
     const doneT      = normTasks.filter(t => t.completed).length
     const pct        = totalT > 0 ? Math.round((doneT/totalT)*100) : 0
-    const incomplete = tasks[activeDay].filter(t => !t.completed).length
+    const incomplete = (tasksByDate[activeDate] || []).filter(t => !t.completed).length
     const sorted     = [...normTasks].sort((a,b) => a.startTime.localeCompare(b.startTime))
     const tMins      = totalMins()
     const tHrs       = Math.floor(tMins/60)
     const tMin       = tMins % 60
-    const nextDay    = DAYS[(DAYS.indexOf(activeDay)+1)%7]
-    const maxDailyStudyMins = getMaxDailyStudyMins(user?.className, activeDay==='Saturday'||activeDay==='Sunday')
+    const nextDate   = toISO(addDays(new Date(activeDate + 'T00:00:00'), 1))
+    const maxDailyStudyMins = getMaxDailyStudyMins(user?.className, isWeekendISO(activeDate))
 
     const typeColors = {
         Study:   { bg:'bg-blue-500',    light:'bg-blue-100',   text:'text-blue-700',   border:'border-blue-200' },
@@ -1283,14 +1437,14 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         ].sort((a,b) => toMins(a.startTime)-toMins(b.startTime))
         const prefWindows = { MORNING:[6,12], AFTERNOON:[12,17], EVENING:[17,21], NIGHT:[21,23] }
         const prefWindow  = preferredStudyTime ? prefWindows[preferredStudyTime] : null
-        const dayStartMins = isTodayDay(activeDay) ? currentTimeMins : 6*60
+        const dayStartMins = isTodayDay(activeDate) ? currentTimeMins : 6*60
         const tryFindSlot = (searchStart, searchEnd) => {
             for (let startMins = Math.max(searchStart,dayStartMins); startMins <= searchEnd-durationMins; startMins += 15) {
                 const endMins   = startMins + durationMins
                 const startTime = `${String(Math.floor(startMins/60)).padStart(2,'0')}:${String(startMins%60).padStart(2,'0')}`
                 const endTime   = `${String(Math.floor(endMins/60)).padStart(2,'0')}:${String(endMins%60).padStart(2,'0')}`
                 if (isBlockedBySchool(startTime,endTime)) continue
-                if (hasOverlap(activeDay,startTime,endTime)) continue
+                if (hasOverlap(activeDate,startTime,endTime)) continue
                 if (taskType === 'STUDY') {
                     const studyBlocks = allBlocks.filter(t => t.detectedType?.toLowerCase()==='study')
                     const tooClose = studyBlocks.some(t => {
@@ -1306,13 +1460,13 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         }
         if (prefWindow) { const slot = tryFindSlot(prefWindow[0]*60, prefWindow[1]*60); if (slot) return slot }
         return tryFindSlot(dayStartMins, 22*60)
-    }, [normTasks, blockedWindows, busySlotBlocks, activeDay, currentTimeMins, preferredStudyTime])
+    }, [normTasks, blockedWindows, busySlotBlocks, activeDate, currentTimeMins, preferredStudyTime])
 
     const handleRecommendationClick = (suggestion) => {
         if (activeDayIsLocked) return
         const durationMins = suggestion.estimatedMinutes || 30
         const slot = findFreeSlot(durationMins, suggestion.taskType) || { startTime: '15:00', endTime: '15:45' }
-        
+
         let titleInputVal = suggestion.title
         if (suggestion.taskType === 'STUDY') {
             titleInputVal = ''
@@ -1320,11 +1474,25 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
             titleInputVal = ''
         }
 
+        const matchedWellnessOption = suggestion.taskType === 'WELLNESS'
+            ? WELLNESS_ACTIVITY_OPTIONS.find(o => o.toLowerCase() === suggestion.title?.toLowerCase())
+            : null
+        const matchedOtherOption = suggestion.taskType !== 'STUDY' && suggestion.taskType !== 'WELLNESS'
+            ? OTHER_ACTIVITY_OPTIONS.find(o => o.toLowerCase() === suggestion.title?.toLowerCase())
+            : null
+
+        let defaultSubjectSelect = 'Mathematics'
+        if (suggestion.taskType === 'WELLNESS') {
+            defaultSubjectSelect = matchedWellnessOption || WELLNESS_ACTIVITY_OPTIONS[WELLNESS_ACTIVITY_OPTIONS.length - 1]
+        } else if (suggestion.taskType !== 'STUDY') {
+            defaultSubjectSelect = matchedOtherOption || OTHER_ACTIVITY_OPTIONS[0]
+        }
+
         setRecModalData({
             taskType: suggestion.taskType,
             originalTitle: suggestion.title,
             titleInput: titleInputVal,
-            subjectSelect: 'Mathematics',
+            subjectSelect: defaultSubjectSelect,
             startTime: slot.startTime,
             endTime: slot.endTime,
             notes: '',
@@ -1347,17 +1515,21 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
             }
             finalTitle = `Study session - ${subject.trim()}`
         } else if (recModalData.taskType === 'WELLNESS') {
-            if (!recModalData.titleInput || !recModalData.titleInput.trim()) {
-                setRecModalData(p => ({ ...p, error: 'Please enter a relaxing activity name.' }))
+            const isOther = recModalData.subjectSelect === 'Other (Custom Activity)'
+            const activity = isOther ? recModalData.titleInput : recModalData.subjectSelect
+            if (!activity || !activity.trim()) {
+                setRecModalData(p => ({ ...p, error: isOther ? 'Please enter a relaxing activity name.' : 'Please select an activity.' }))
                 return
             }
-            finalTitle = recModalData.titleInput.trim()
+            finalTitle = activity.trim()
         } else {
-            if (!recModalData.titleInput || !recModalData.titleInput.trim()) {
-                setRecModalData(p => ({ ...p, error: 'Please enter the activity name.' }))
+            const isOtherCustom = recModalData.subjectSelect === 'Other (Custom Activity)'
+            const activity = isOtherCustom ? recModalData.titleInput : recModalData.subjectSelect
+            if (!activity || !activity.trim()) {
+                setRecModalData(p => ({ ...p, error: isOtherCustom ? 'Please enter the activity name.' : 'Please select an activity.' }))
                 return
             }
-            finalTitle = recModalData.titleInput.trim()
+            finalTitle = activity.trim()
         }
 
         const { startTime, endTime, notes } = recModalData
@@ -1369,15 +1541,15 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
             setRecModalData(p => ({ ...p, error: 'This time slot is blocked.' }))
             return
         }
-        if (hasOverlap(activeDay, startTime, endTime)) {
+        if (hasOverlap(activeDate, startTime, endTime)) {
             setRecModalData(p => ({ ...p, error: 'This slot overlaps with another task.' }))
             return
         }
 
         setIsSaving(true)
         try {
-            const saved = await addTask(user.id, activeDay, finalTitle, startTime, endTime, notes, recModalData.taskType)
-            setTasks(prev => ({ ...prev, [activeDay]: [...prev[activeDay], { ...saved, completed: false }] }))
+            const saved = await addTask(user.id, activeDate, finalTitle, startTime, endTime, notes, recModalData.taskType)
+            setTasksByDate(prev => ({ ...prev, [activeDate]: [...(prev[activeDate] || []), { ...saved, completed: false }] }))
             setShowRecModal(false)
             setSuccessMessage("Activity added successfully!")
             setTimeout(() => setSuccessMessage(''), 3000)
@@ -1400,8 +1572,8 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         if (isBlockedBySchool(newTask.startTime,newTask.endTime)) { setOverlapError('This time slot is blocked.'); return }
         setIsSaving(true)
         try {
-            const saved = await addTask(user.id, activeDay, newTask.title, newTask.startTime, newTask.endTime, newTask.notes)
-            setTasks(prev => ({...prev,[activeDay]:[...prev[activeDay],{...saved,completed:false}]}))
+            const saved = await addTask(user.id, activeDate, newTask.title, newTask.startTime, newTask.endTime, newTask.notes)
+            setTasksByDate(prev => ({...prev,[activeDate]:[...(prev[activeDate] || []),{...saved,completed:false}]}))
             setSuccessMessage("Activity added successfully!")
             setTimeout(() => setSuccessMessage(''), 3000)
             if (saved.warnings?.length>0) {
@@ -1416,7 +1588,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
 
     const handleDelete = (e, id) => {
         e.stopPropagation(); if (activeDayIsLocked) return
-        const task = tasks[activeDay]?.find(t => String(t.id) === String(id))
+        const task = (tasksByDate[activeDate] || []).find(t => String(t.id) === String(id))
         if (!task) return
 
         setConfirmModalConfig({
@@ -1427,7 +1599,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
             onConfirm: async () => {
                 try {
                     await deleteTask(id)
-                    setTasks(prev => ({...prev,[activeDay]:prev[activeDay].filter(t=>String(t.id)!==String(id))}))
+                    setTasksByDate(prev => ({...prev,[activeDate]:(prev[activeDate] || []).filter(t=>String(t.id)!==String(id))}))
                     if (expandedTask===id) setExpandedTask(null)
                     setTimeout(()=>setRecsTrigger(t=>t+1), 400)
                 } catch (err) { console.error('Delete failed:', err.message) }
@@ -1439,11 +1611,11 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
 
     const toggleDone = async (id) => {
         if (activeDayIsLocked) return
-        const task = tasks[activeDay]?.find(t => String(t.id) === String(id))
+        const task = (tasksByDate[activeDate] || []).find(t => String(t.id) === String(id))
         if (!task) return
 
-        const isFutureDay = weekIdx(activeDay) > getTodayWeekIdx()
-        const isToday = weekIdx(activeDay) === getTodayWeekIdx()
+        const isFutureDay = activeDate > todayISO()
+        const isToday = activeDate === todayISO()
         const now = new Date()
         const currentMins = now.getHours() * 60 + now.getMinutes()
         const taskStartMins = toMins(task.startTime)
@@ -1457,15 +1629,15 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         const willComplete = !task.completed
         setConfirmModalConfig({
             title: willComplete ? 'Complete Task?' : 'Mark Incomplete?',
-            message: willComplete 
-                ? `Are you sure you want to mark "${task.title}" as completed?` 
+            message: willComplete
+                ? `Are you sure you want to mark "${task.title}" as completed?`
                 : `Are you sure you want to mark "${task.title}" as incomplete?`,
             confirmText: willComplete ? 'Yes, Complete' : 'Yes, Incomplete',
             confirmBg: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
             onConfirm: async () => {
                 try {
                     const saved = await toggleTaskComplete(id)
-                    setTasks(prev => ({ ...prev, [activeDay]: prev[activeDay].map(t => String(t.id) === String(id) ? { ...t, completed: saved.completed } : t) }))
+                    setTasksByDate(prev => ({ ...prev, [activeDate]: (prev[activeDate] || []).map(t => String(t.id) === String(id) ? { ...t, completed: saved.completed } : t) }))
                 } catch (err) { console.error('Toggle failed:', err.message) }
                 setShowConfirmModal(false)
             }
@@ -1486,8 +1658,8 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
         if (isBlockedBySchool(editData.startTime,editData.endTime)) { setEditError('This slot is blocked.'); return }
         setIsSaving(true)
         try {
-            const saved = await editTask(editingTask.id, user.id, activeDay, editData.title, editData.startTime, editData.endTime, editData.notes)
-            setTasks(prev => ({...prev,[activeDay]:prev[activeDay].map(t => t.id===editingTask.id?{...t,...saved}:t)}))
+            const saved = await editTask(editingTask.id, user.id, activeDate, editData.title, editData.startTime, editData.endTime, editData.notes)
+            setTasksByDate(prev => ({...prev,[activeDate]:(prev[activeDate] || []).map(t => t.id===editingTask.id?{...t,...saved}:t)}))
             if (saved.warnings?.length>0) {
                 setEditWarnings(saved.warnings); setDayWarnings(saved.warnings)
                 setTimeout(()=>{ setEditWarnings([]); setEditingTask(null) }, 4000)
@@ -1500,7 +1672,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
     const isValidConflict = (id) => {
         const t = conflictTimes[id]; if (!t) return false
         if (toMins(t.endTime)<=toMins(t.startTime)) return false
-        if (hasOverlap(nextDay,t.startTime,t.endTime)) return false
+        if (hasOverlap(nextDate,t.startTime,t.endTime)) return false
         if (pushNonConflicts.some(x => toMins(t.startTime)<toMins(x.endTime)&&toMins(t.endTime)>toMins(x.startTime))) return false
         if (pushConflicts.some(x => { if(x.id===id) return false; const o=conflictTimes[x.id]; if(!o) return false; return toMins(t.startTime)<toMins(o.endTime)&&toMins(t.endTime)>toMins(o.startTime) })) return false
         return true
@@ -1508,26 +1680,46 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
 
     const initPush = () => {
         if (activeDayIsLocked) return
-        const inc = tasks[activeDay].filter(t => !t.completed).map(normaliseTask)
-        const nc  = inc.filter(t => !hasOverlap(nextDay,t.startTime,t.endTime))
-        const c   = inc.filter(t =>  hasOverlap(nextDay,t.startTime,t.endTime))
+        const inc = (tasksByDate[activeDate] || []).filter(t => !t.completed).map(normaliseTask)
+        const nc  = inc.filter(t => !hasOverlap(nextDate,t.startTime,t.endTime))
+        const c   = inc.filter(t =>  hasOverlap(nextDate,t.startTime,t.endTime))
         setPushNonConflicts(nc); setPushConflicts(c)
         const init = {}; c.forEach(t => { init[t.id] = {startTime:t.startTime,endTime:t.endTime} })
         setConflictTimes(init); setPushError(''); setShowPushModal(true)
     }
 
-    const doPush = () => {
+    const doPush = async () => {
         setPushError('')
         for (const t of pushConflicts) {
             if (toMins(conflictTimes[t.id].endTime)<=toMins(conflictTimes[t.id].startTime)) { setPushError(`"${t.title}" has invalid times.`); return }
             if (!isValidConflict(t.id)) { setPushError(`"${t.title}" still conflicts.`); return }
         }
-        const toMove = [
-            ...pushNonConflicts.map(t => ({...t,id:Date.now()+Math.random()})),
-            ...pushConflicts.map(t => ({...t,...conflictTimes[t.id],id:Date.now()+Math.random()}))
-        ]
-        setTasks(p => ({...p,[activeDay]:p[activeDay].filter(t=>t.completed),[nextDay]:[...p[nextDay],...toMove]}))
-        setShowPushModal(false); setPushNonConflicts([]); setPushConflicts([]); setConflictTimes({}); setPushError('')
+        setIsSaving(true)
+        try {
+            const moved = []
+            for (const t of pushNonConflicts) {
+                const saved = await addTask(user.id, nextDate, t.title, t.startTime, t.endTime, t.notes, t.detectedType)
+                moved.push({ ...saved, completed: false })
+                await deleteTask(t.id)
+            }
+            for (const t of pushConflicts) {
+                const ct = conflictTimes[t.id]
+                const saved = await addTask(user.id, nextDate, t.title, ct.startTime, ct.endTime, t.notes, t.detectedType)
+                moved.push({ ...saved, completed: false })
+                await deleteTask(t.id)
+            }
+            setTasksByDate(p => ({
+                ...p,
+                [activeDate]: (p[activeDate] || []).filter(t => t.completed),
+                [nextDate]: [...(p[nextDate] || []), ...moved]
+            }))
+            setShowPushModal(false); setPushNonConflicts([]); setPushConflicts([]); setConflictTimes({}); setPushError('')
+            setTimeout(() => setRecsTrigger(t => t + 1), 400)
+        } catch (err) {
+            setPushError(err.message || 'Failed to push tasks.')
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     const closePush = () => { setShowPushModal(false); setPushNonConflicts([]); setPushConflicts([]); setConflictTimes({}); setPushError('') }
@@ -1535,6 +1727,10 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
     const schoolBlocks = blockedWindows.map((w,i) => ({id:`school-${i}`,title:'School Hours',startTime:w.startTime,endTime:w.endTime,isSchoolBlock:true,isBusyBlock:false,completed:false}))
     const busyBlocks   = busySlotBlocks.map((b,i) => ({id:`busy-${i}`,title:b.reason||'Busy',startTime:b.startTime,endTime:b.endTime,isSchoolBlock:false,isBusyBlock:true,completed:false}))
     const allItems     = [...sorted,...schoolBlocks,...busyBlocks].sort((a,b) => a.startTime.localeCompare(b.startTime))
+
+    const goPrevMonth = () => setViewMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+const goNextMonth = () => setViewMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+const goThisMonth = () => { setViewMonth(firstOfMonth(new Date())); setActiveDate(todayISO()) }
 
     if (prefStatus === 'checking') {
         return (
@@ -1627,7 +1823,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
                 <div className="mb-6 bg-white border-2 border-violet-200 rounded-2xl p-4">
                     <div className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-black text-black text-sm">{activeDay}'s Progress</span>
+                            <span className="font-black text-black text-sm">{dayLabel(activeDate)}'s Progress</span>
                             {pct===100 && <span className="text-xs bg-green-100 text-green-700 font-black px-2 py-0.5 rounded-full border border-green-200">✓ All done!</span>}
                             {tMins>0 && <span className="text-xs bg-violet-50 text-violet-500 font-black px-2 py-0.5 rounded-full border border-violet-100">⏱ {tHrs>0?`${tHrs}h `:''}{tMin>0?`${tMin}m`:''} scheduled</span>}
                         </div>
@@ -1646,36 +1842,61 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
 
             <div className="grid lg:grid-cols-4 gap-6">
                 <div className="lg:col-span-1 bg-white border-2 border-violet-200 rounded-2xl p-4 h-fit">
-                    <div className="space-y-2">
-                        {DAYS.map(day => {
-                            const dt = tasks[day]; const dc = dt.filter(t => t.completed).length
-                            const dp = dt.length > 0 ? (dc/dt.length)*100 : 0
-                            const isActive = activeDay===day; const isPast = isPastDay(day); const isToday = isTodayDay(day)
+                    {/* ── Month navigation ── */}
+                    <div className="flex items-center justify-between mb-4">
+                        <button onClick={goPrevMonth} className="p-1.5 rounded-lg hover:bg-violet-50 text-violet-500 transition-colors">
+                            <ChevronLeftIcon className="w-4 h-4" />
+                        </button>
+                        <button onClick={goThisMonth} className="text-sm font-black text-gray-700 hover:text-violet-600 transition-colors text-center px-1">
+                            {monthLabel(viewMonth)}
+                        </button>
+                        <button onClick={goNextMonth} className="p-1.5 rounded-lg hover:bg-violet-50 text-violet-500 transition-colors">
+                            <ArrowRightIcon className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {/* ── Weekday header ── */}
+                    <div className="grid grid-cols-7 gap-1 mb-1.5">
+                        {['M','T','W','T','F','S','S'].map((d, i) => (
+                            <div key={i} className="text-center text-[10px] font-black text-gray-400 uppercase">{d}</div>
+                        ))}
+                    </div>
+
+                    {/* ── Calendar grid ── */}
+                    <div className="grid grid-cols-7 gap-1">
+                        {calendarCells.map(cell => {
+                            const dt = tasksByDate[cell.iso] || []
+                            const isActive = activeDate === cell.iso
+                            const isPast = isPastDay(cell.iso)
+                            const isToday = isTodayDay(cell.iso)
+                            const dayNum = parseInt(cell.iso.slice(8, 10), 10)
                             return (
-                                <button key={day} onClick={() => setActiveDay(day)}
-                                    className={`group w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${
-                                        isActive
-                                            ? isPast ? 'bg-white text-gray-400 border-2 border-gray-200 shadow-sm'
-                                                     : 'bg-white text-black border-2 border-violet-500 shadow-lg shadow-violet-100'
-                                            : isPast  ? 'text-gray-400 bg-gray-50 border-2 border-gray-100 opacity-60 hover:opacity-80'
-                                            : isToday ? 'text-black hover:bg-violet-50 border-2 border-violet-200'
-                                                      : 'text-black hover:bg-[#f3f0fb] border-2 border-transparent'
-                                    }`}>
-                                    <div className="flex justify-between items-center mb-1">
-                                        <div className="flex items-center gap-2">
-                                            <span>{day}</span>
-                                            {isToday && <span className="text-[9px] font-black bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full uppercase tracking-wide">Today</span>}
-                                        </div>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${isPast?'bg-gray-100 text-gray-400':'bg-violet-100 text-violet-500'}`}>{dt.length}</span>
-                                    </div>
+                                <button
+                                    key={cell.iso}
+                                    onClick={() => setActiveDate(cell.iso)}
+                                    className={`relative aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-bold transition-all ${
+                                        !cell.inMonth ? 'text-gray-300' :
+                                        isActive ? 'bg-violet-600 text-white shadow-md' :
+                                        isToday ? 'bg-violet-100 text-violet-700 border-2 border-violet-300' :
+                                        isPast ? 'text-gray-400 hover:bg-gray-50' :
+                                        'text-gray-700 hover:bg-violet-50'
+                                    }`}
+                                >
+                                    <span>{dayNum}</span>
                                     {dt.length > 0 && (
-                                        <div className="h-1 rounded-full overflow-hidden bg-gray-100">
-                                            <div className="h-full rounded-full transition-all duration-500 bg-green-400" style={{width:`${dp}%`}} />
-                                        </div>
+                                        <span className={`w-1 h-1 rounded-full mt-0.5 ${isActive ? 'bg-white' : 'bg-violet-500'}`} />
                                     )}
                                 </button>
                             )
                         })}
+                    </div>
+
+                    {/* ── Selected day summary ── */}
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                        <p className="text-xs font-black text-gray-700">{dayLabel(activeDate)}, {shortDateLabel(activeDate)}</p>
+                        <p className="text-[11px] text-gray-400 font-medium mt-0.5">
+                            {(tasksByDate[activeDate] || []).length} task{(tasksByDate[activeDate] || []).length !== 1 ? 's' : ''} scheduled
+                        </p>
                     </div>
                 </div>
 
@@ -1684,14 +1905,15 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
 
                         <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
                             <div className="flex items-center gap-3 flex-wrap">
-                                <h2 className="text-2xl font-black text-black">{activeDay}'s Plan</h2>
-                                {isTodayDay(activeDay) && <span className="text-xs font-black bg-violet-100 text-violet-600 border border-violet-200 px-3 py-1.5 rounded-full">📅 Today</span>}
+                                <h2 className="text-2xl font-black text-black">{dayLabel(activeDate)}'s Plan</h2>
+                                <span className="text-sm font-medium text-gray-400">{shortDateLabel(activeDate)}</span>
+                                {isTodayDay(activeDate) && <span className="text-xs font-black bg-violet-100 text-violet-600 border border-violet-200 px-3 py-1.5 rounded-full">📅 Today</span>}
                             </div>
                             {!activeDayIsLocked && (
                                 <div className="flex items-center gap-2 flex-wrap">
                                     {incomplete > 0 && (
                                         <button onClick={initPush} className="flex items-center gap-2 bg-purple-50 text-purple-600 border-2 border-purple-200 px-4 py-2 rounded-xl font-bold text-sm hover:bg-purple-100 transition-all">
-                                            <ArrowRightIcon className="w-4 h-4" />Push {incomplete} to {nextDay}
+                                            <ArrowRightIcon className="w-4 h-4" />Push {incomplete} to {shortDateLabel(nextDate)}
                                         </button>
                                     )}
                                     <button onClick={() => { setShowAddTask(true); setOverlapError(''); setAddWarnings([]) }}
@@ -1705,7 +1927,7 @@ export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, use
                         {allItems.length===0 && suggestions.length===0 && !recsLoading && (
                             <div className="flex flex-col items-center justify-center h-64 text-center">
                                 <div className="w-16 h-16 bg-violet-50 rounded-full flex items-center justify-center mb-4"><CalendarIcon className="w-8 h-8 text-violet-300" /></div>
-                                <p className="text-gray-500 font-medium">No plans for {activeDay}</p>
+                                <p className="text-gray-500 font-medium">No plans for {dayLabel(activeDate)}</p>
                                 {activeDayIsLocked
                                     ? <p className="text-sm text-gray-400 mt-1">Nothing was recorded for this day.</p>
                                     : <>
@@ -1868,7 +2090,6 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
     const alreadyAdded = normTasks.some(t => t.title?.toLowerCase() === s.title?.toLowerCase())
     if (alreadyAdded) return false
 
-    // ✅ Also filter if same subject is already scheduled today
     const suggestionSubject = extractSubject(s.title)
     if (suggestionSubject) {
         const subjectAlreadyScheduled = normTasks.some(t =>
@@ -1876,7 +2097,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
         )
         if (subjectAlreadyScheduled) return false
     }
-                                if (isTodayDay(activeDay)) {
+                                if (isTodayDay(activeDate)) {
                                     const durationMins = s.estimatedMinutes || 45
                                     if (currentTimeMins + durationMins > 22*60) return false
                                     if (s.taskType==='STUDY' && preferredStudyTime) {
@@ -1900,7 +2121,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                                 <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm"><SparklesIcon className="w-5 h-5 text-white"/></div>
                                                 <div>
                                                     <p className="text-white font-black text-sm tracking-wide">AI Study Planner</p>
-                                                    <p className="text-violet-200 text-[11px] font-medium">Personalised suggestions for {activeDay}</p>
+                                                    <p className="text-violet-200 text-[11px] font-medium">Personalised suggestions for {dayLabel(activeDate)}</p>
                                                 </div>
                                             </div>
                                             {!recsLoading && filteredSuggestions.length > 0 && (
@@ -1953,7 +2174,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                             )
                                         })}
                                         {!recsLoading && filteredSuggestions.length===0 && (
-                                            <div className="text-center py-4"><p className="text-sm text-violet-400 font-medium">✨ All suggestions added for {activeDay}!</p></div>
+                                            <div className="text-center py-4"><p className="text-sm text-violet-400 font-medium">✨ All suggestions added for {dayLabel(activeDate)}!</p></div>
                                         )}
                                         {!recsLoading && filteredSuggestions.length > 0 && (
                                             <p className="text-[10px] text-gray-400 text-center pt-1 font-medium">Powered by MyMercurie · Based on your exams, goals & schedule</p>
@@ -1968,11 +2189,11 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Recommendation Detail Modal ── */}
             {showRecModal && !activeDayIsLocked && (
-                <div 
+                <div
                     onClick={() => setShowRecModal(false)}
                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                 >
-                    <div 
+                    <div
                         onClick={e => e.stopPropagation()}
                         className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl relative"
                     >
@@ -1982,7 +2203,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                  recModalData.taskType === 'WELLNESS' ? 'Schedule Relaxing Activity' :
                                  'Schedule Assigned Intervention'}
                             </h3>
-                            <button 
+                            <button
                                 onClick={() => setShowRecModal(false)}
                                 className="p-1 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
                             >
@@ -1994,8 +2215,8 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                 <>
                                     <div>
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Select Subject</label>
-                                        <select 
-                                            value={recModalData.subjectSelect} 
+                                        <select
+                                            value={recModalData.subjectSelect}
                                             onChange={e => setRecModalData({ ...recModalData, subjectSelect: e.target.value, error: '' })}
                                             className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm bg-white"
                                         >
@@ -2010,12 +2231,12 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                     {recModalData.subjectSelect === 'Other' && (
                                         <div>
                                             <label className="block text-sm font-bold text-gray-700 mb-1">Enter Subject Name</label>
-                                            <input 
-                                                autoFocus 
-                                                type="text" 
-                                                value={recModalData.titleInput} 
-                                                onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })} 
-                                                placeholder="e.g. History, Art, etc." 
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                value={recModalData.titleInput}
+                                                onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })}
+                                                placeholder="e.g. History, Art, etc."
                                                 className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm"
                                             />
                                         </div>
@@ -2024,31 +2245,63 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                             )}
 
                             {recModalData.taskType === 'WELLNESS' && (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">Relaxing Activity Name</label>
-                                    <input 
-                                        autoFocus 
-                                        type="text" 
-                                        value={recModalData.titleInput} 
-                                        onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })} 
-                                        placeholder="e.g. Paint a portrait, Play guitar, etc." 
-                                        className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm"
-                                    />
-                                </div>
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Select Activity</label>
+                                        <select
+                                            value={recModalData.subjectSelect}
+                                            onChange={e => setRecModalData({ ...recModalData, subjectSelect: e.target.value, error: '' })}
+                                            className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm bg-white"
+                                        >
+                                            {WELLNESS_ACTIVITY_OPTIONS.map(opt => (
+                                                <option key={opt} value={opt}>{opt}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    {recModalData.subjectSelect === 'Other (Custom Activity)' && (
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 mb-1">Enter Activity Name</label>
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                value={recModalData.titleInput}
+                                                onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })}
+                                                placeholder="e.g. Paint a portrait, Play guitar, etc."
+                                                className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm"
+                                            />
+                                        </div>
+                                    )}
+                                </>
                             )}
 
                             {recModalData.taskType !== 'STUDY' && recModalData.taskType !== 'WELLNESS' && (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">Intervention Name</label>
-                                    <input 
-                                        type="text" 
-                                        value={recModalData.titleInput} 
-                                        onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })} 
-                                        placeholder="Assigned Intervention" 
-                                        className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm bg-gray-50 text-gray-600"
-                                        disabled={true}
-                                    />
-                                </div>
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Select Activity</label>
+                                        <select
+                                            value={recModalData.subjectSelect}
+                                            onChange={e => setRecModalData({ ...recModalData, subjectSelect: e.target.value, error: '' })}
+                                            className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm bg-white"
+                                        >
+                                            {OTHER_ACTIVITY_OPTIONS.map(opt => (
+                                                <option key={opt} value={opt}>{opt}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    {recModalData.subjectSelect === 'Other (Custom Activity)' && (
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 mb-1">Enter Activity Name</label>
+                                            <input
+                                                autoFocus
+                                                type="text"
+                                                value={recModalData.titleInput}
+                                                onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })}
+                                                placeholder="e.g. Follow-up Session"
+                                                className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm"
+                                            />
+                                        </div>
+                                    )}
+                                </>
                             )}
 
                             <div className="grid grid-cols-2 gap-4">
@@ -2058,10 +2311,10 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Notes <span className="text-gray-400 font-medium">(optional)</span></label>
-                                <textarea 
-                                    value={recModalData.notes} 
-                                    onChange={e => setRecModalData({ ...recModalData, notes: e.target.value })} 
-                                    rows={2} 
+                                <textarea
+                                    value={recModalData.notes}
+                                    onChange={e => setRecModalData({ ...recModalData, notes: e.target.value })}
+                                    rows={2}
                                     className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none resize-none text-sm"
                                 />
                             </div>
@@ -2080,11 +2333,11 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Edit Task Modal ── */}
             {editingTask && !activeDayIsLocked && (
-                <div 
+                <div
                     onClick={() => setEditingTask(null)}
                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                 >
-                    <div 
+                    <div
                         onClick={e => e.stopPropagation()}
                         className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl"
                     >
@@ -2098,8 +2351,8 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                 <input autoFocus type="text" value={editData.title} onChange={e=>setEditData({...editData,title:e.target.value})} className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none"/>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <TimeSelect label="Start Time" value={editData.startTime} onChange={v=>setEditData({...editData,startTime:v})}/>
-                                <TimeSelect label="End Time" value={editData.endTime} onChange={v=>setEditData({...editData,endTime:v})}/>
+                                <TimeSelect label="Start Time" value={editData.startTime} onChange={v=>setEditData({...editData,startTime:v})} is24h={true}/>
+                                <TimeSelect label="End Time" value={editData.endTime} onChange={v=>setEditData({...editData,endTime:v})} is24h={true}/>
                             </div>
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Notes <span className="text-gray-400 font-medium">(optional)</span></label>
@@ -2125,11 +2378,11 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Add Task Modal ── */}
             {showAddTask && !activeDayIsLocked && (
-                <div 
+                <div
                     onClick={() => { setShowAddTask(false); setOverlapError(''); setAddWarnings([]) }}
                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                 >
-                    <div 
+                    <div
                         onClick={e => e.stopPropagation()}
                         className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl"
                     >
@@ -2140,8 +2393,8 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                 <input autoFocus type="text" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Math Revision" className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none"/>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <TimeSelect label="Start Time" value={newTask.startTime} onChange={v=>setNewTask({...newTask,startTime:v})}/>
-                                <TimeSelect label="End Time" value={newTask.endTime} onChange={v=>setNewTask({...newTask,endTime:v})}/>
+                                <TimeSelect label="Start Time" value={newTask.startTime} onChange={v=>setNewTask({...newTask,startTime:v})} is24h={true}/>
+                                <TimeSelect label="End Time" value={newTask.endTime} onChange={v=>setNewTask({...newTask,endTime:v})} is24h={true}/>
                             </div>
                             {(blockedWindows.length>0||busySlotBlocks.length>0) && (
                                 <div className="space-y-1.5">
@@ -2183,18 +2436,18 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Push Modal ── */}
             {showPushModal && !activeDayIsLocked && (
-                <div 
+                <div
                     onClick={closePush}
                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                 >
-                    <div 
+                    <div
                         onClick={e => e.stopPropagation()}
                         className="bg-white rounded-2xl p-6 w-full max-w-md border-2 border-amber-200 shadow-xl max-h-[90vh] overflow-y-auto"
                     >
                         <div className="flex items-center gap-3 mb-5">
                             <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center"><ArrowRightIcon className="w-5 h-5 text-amber-600"/></div>
                             <div>
-                                <h3 className="text-lg font-black text-black">Push to {nextDay}</h3>
+                                <h3 className="text-lg font-black text-black">Push to {shortDateLabel(nextDate)}</h3>
                                 <p className="text-xs text-gray-500 font-medium">Moving {pushNonConflicts.length+pushConflicts.length} task(s)</p>
                             </div>
                         </div>
@@ -2229,11 +2482,11 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 mb-1">New Start</label>
-                                                        <TimeSelect value={ct.startTime} onChange={v=>setConflictTimes(p=>({...p,[task.id]:{...p[task.id],startTime:v}}))}/>
+                                                        <TimeSelect value={ct.startTime} onChange={v=>setConflictTimes(p=>({...p,[task.id]:{...p[task.id],startTime:v}}))} is24h={true}/>
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 mb-1">New End</label>
-                                                        <TimeSelect value={ct.endTime} onChange={v=>setConflictTimes(p=>({...p,[task.id]:{...p[task.id],endTime:v}}))}/>
+                                                        <TimeSelect value={ct.endTime} onChange={v=>setConflictTimes(p=>({...p,[task.id]:{...p[task.id],endTime:v}}))} is24h={true}/>
                                                     </div>
                                                 </div>
                                             </div>
@@ -2247,9 +2500,9 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                             <div className="flex justify-between text-sm"><span className="text-gray-600 font-medium">Total:</span><span className="font-black">{pushNonConflicts.length+pushConflicts.length}</span></div>
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={closePush} className="flex-1 px-4 py-2 rounded-xl font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
-                            <button onClick={doPush} className="flex-1 bg-amber-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-amber-600 flex items-center justify-center gap-2">
-                                <ArrowRightIcon className="w-4 h-4"/>Push All
+                            <button onClick={closePush} disabled={isSaving} className="flex-1 px-4 py-2 rounded-xl font-bold text-gray-500 hover:bg-gray-100 disabled:opacity-50">Cancel</button>
+                            <button onClick={doPush} disabled={isSaving} className="flex-1 bg-amber-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-amber-600 flex items-center justify-center gap-2 disabled:opacity-50">
+                                {isSaving ? 'Pushing...' : <><ArrowRightIcon className="w-4 h-4"/>Push All</>}
                             </button>
                         </div>
                     </div>
@@ -2280,10 +2533,11 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
             {showMiniChat && (
     <MiniChatBuddy
         user={user}
-        tasks={tasks}
-        setTasks={setTasks}
+        tasksByDate={tasksByDate}
+        setTasksByDate={setTasksByDate}
         upcomingExams={upcomingExams}
-        activeDay={activeDay}
+        activeDate={activeDate}
+        weekDates={contextWeekDates}
         onClose={() => setShowMiniChat(false)}
         onTaskChanged={() => setRecsTrigger(t => t + 1)}
         onOpenChatBuddy={(message) => {
@@ -2295,11 +2549,11 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Confirmation Modal ── */}
             {showConfirmModal && (
-                <div 
+                <div
                     onClick={() => setShowConfirmModal(false)}
                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
                 >
-                    <div 
+                    <div
                         onClick={e => e.stopPropagation()}
                         className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-100 shadow-2xl flex flex-col items-center text-center animate-scale-up"
                     >
@@ -2311,14 +2565,14 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                             {confirmModalConfig.message}
                         </p>
                         <div className="flex gap-3 w-full">
-                            <button 
-                                onClick={() => setShowConfirmModal(false)} 
+                            <button
+                                onClick={() => setShowConfirmModal(false)}
                                 className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 border border-gray-200 transition-colors"
                             >
                                 Cancel
                             </button>
-                            <button 
-                                onClick={confirmModalConfig.onConfirm} 
+                            <button
+                                onClick={confirmModalConfig.onConfirm}
                                 className={`flex-1 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md ${confirmModalConfig.confirmBg}`}
                             >
                                 {confirmModalConfig.confirmText}
@@ -2330,11 +2584,11 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Warning Modal ── */}
             {showWarningModal && (
-                <div 
+                <div
                     onClick={() => setShowWarningModal(false)}
                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
                 >
-                    <div 
+                    <div
                         onClick={e => e.stopPropagation()}
                         className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-red-100 shadow-2xl flex flex-col items-center text-center animate-scale-up"
                     >
@@ -2343,8 +2597,8 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                         <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">
                             {warningModalMessage}
                         </p>
-                        <button 
-                            onClick={() => setShowWarningModal(false)} 
+                        <button
+                            onClick={() => setShowWarningModal(false)}
                             className="w-full bg-black text-white px-4 py-2.5 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-md"
                         >
                             Okay

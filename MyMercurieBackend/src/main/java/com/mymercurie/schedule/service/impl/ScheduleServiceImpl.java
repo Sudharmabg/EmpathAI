@@ -15,9 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.temporal.TemporalAdjusters;
+import java.time.LocalTime;
+import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,21 +49,19 @@ public class ScheduleServiceImpl implements IScheduleService {
             detectedType = detectedType.toUpperCase();
         }
 
-        LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         ScheduleTask task = ScheduleTask.builder()
                 .studentId(request.getStudentId())
-                .weekStartDate(weekStart)
-                .dayOfWeek(request.getDayOfWeek())
+                .taskDate(request.getDate())
                 .title(request.getTitle())
-                .startTime(request.getStartTime() != null ? java.time.LocalTime.parse(request.getStartTime()) : null)
-                .endTime(request.getEndTime() != null ? java.time.LocalTime.parse(request.getEndTime()) : null)
+                .startTime(request.getStartTime() != null ? LocalTime.parse(request.getStartTime()) : null)
+                .endTime(request.getEndTime() != null ? LocalTime.parse(request.getEndTime()) : null)
                 .notes(request.getNotes())
                 .detectedType(detectedType)
                 .completed(false)
                 .build();
         ScheduleTask saved = taskRepository.save(task);
-        log.info("Task added: studentId={} day={} title={} type={}",
-                saved.getStudentId(), saved.getDayOfWeek(), saved.getTitle(), saved.getDetectedType());
+        log.info("Task added: studentId={} date={} title={} type={}",
+                saved.getStudentId(), saved.getTaskDate(), saved.getTitle(), saved.getDetectedType());
         return toResponse(saved, result.getWarnings());
     }
 
@@ -80,10 +78,10 @@ public class ScheduleServiceImpl implements IScheduleService {
         }
         String detectedType = ruleEngine.detectType(request.getTitle());
         existing.setTitle(request.getTitle());
-        existing.setStartTime(request.getStartTime() != null ? java.time.LocalTime.parse(request.getStartTime()) : null);
-        existing.setEndTime(request.getEndTime() != null ? java.time.LocalTime.parse(request.getEndTime()) : null);
+        existing.setStartTime(request.getStartTime() != null ? LocalTime.parse(request.getStartTime()) : null);
+        existing.setEndTime(request.getEndTime() != null ? LocalTime.parse(request.getEndTime()) : null);
         existing.setNotes(request.getNotes());
-        existing.setDayOfWeek(request.getDayOfWeek());
+        existing.setTaskDate(request.getDate());
         existing.setDetectedType(detectedType);
         ScheduleTask saved = taskRepository.save(existing);
         log.info("Task edited: id={} title={} type={}", taskId, saved.getTitle(), saved.getDetectedType());
@@ -126,31 +124,32 @@ public class ScheduleServiceImpl implements IScheduleService {
     }
 
     @Override
-    public List<TaskResponse> getTasksForDay(Long studentId, String day) {
-        LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        return taskRepository.findByStudentIdAndDayOfWeekAndWeekStartDate(studentId, day, weekStart)
+    public List<TaskResponse> getTasksForDate(Long studentId, LocalDate date) {
+        return taskRepository.findByStudentIdAndTaskDate(studentId, date)
                 .stream()
-                .sorted((a, b) -> a.getStartTime().compareTo(b.getStartTime()))
+                .sorted(Comparator.comparing(ScheduleTask::getStartTime))
                 .map(t -> toResponse(t, List.of()))
                 .collect(Collectors.toList());
     }
 
     @Override
-    public Map<String, List<TaskResponse>> getWeekTasks(Long studentId) {
-        LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        List<ScheduleTask> allTasks = taskRepository.findByStudentIdAndWeekStartDate(studentId, weekStart);
-        Map<String, List<ScheduleTask>> tasksByDay = allTasks.stream()
-                .collect(Collectors.groupingBy(ScheduleTask::getDayOfWeek));
-        List<String> days = List.of("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday");
-        return days.stream().collect(Collectors.toMap(
-                day -> day,
-                day -> tasksByDay.getOrDefault(day, List.of()).stream()
-                        .sorted(Comparator.comparing(ScheduleTask::getStartTime))
-                        .map(t -> toResponse(t, List.of()))
-                        .collect(Collectors.toList()),
-                (v1, v2) -> v1,
-                LinkedHashMap::new
-        ));
+    public Map<LocalDate, List<TaskResponse>> getMonthTasks(Long studentId, YearMonth month) {
+        LocalDate start = month.atDay(1);
+        LocalDate end = month.atEndOfMonth();
+        List<ScheduleTask> allTasks = taskRepository.findByStudentIdAndTaskDateBetween(studentId, start, end);
+
+        Map<LocalDate, List<ScheduleTask>> tasksByDate = allTasks.stream()
+                .collect(Collectors.groupingBy(ScheduleTask::getTaskDate));
+
+        Map<LocalDate, List<TaskResponse>> result = new LinkedHashMap<>();
+        for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
+            List<TaskResponse> dayTasks = tasksByDate.getOrDefault(d, List.of()).stream()
+                    .sorted(Comparator.comparing(ScheduleTask::getStartTime))
+                    .map(t -> toResponse(t, List.of()))
+                    .collect(Collectors.toList());
+            result.put(d, dayTasks);
+        }
+        return result;
     }
 
     private String getStudentGrade(Long studentId) {
@@ -163,6 +162,7 @@ public class ScheduleServiceImpl implements IScheduleService {
         return TaskResponse.builder()
                 .id(task.getId())
                 .studentId(task.getStudentId())
+                .date(task.getTaskDate())
                 .dayOfWeek(task.getDayOfWeek())
                 .title(task.getTitle())
                 .startTime(task.getStartTime() != null ? task.getStartTime().toString() : "")

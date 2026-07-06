@@ -12,10 +12,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -28,40 +30,27 @@ public class ScheduleRuleEngine {
 
     // ── Keywords that identify a task as a STUDY task ─────────────────────────
     private static final List<String> STUDY_KEYWORDS = Arrays.asList(
-            // Core study actions
             "study", "revision", "revise", "session",
-            // Subject names
             "math", "maths", "mathematics", "science", "english", "hindi", "sst",
             "history", "geography", "physics", "chemistry", "biology", "computer",
-            // Academic tasks
             "exam", "test", "assignment", "lecture", "chapter", "worksheet", "essay",
             "homework",
-            // Note-taking (specific phrases — "organise notes" is OTHER, "make notes"/"read notes" is STUDY)
             "make notes", "read notes", "write notes", "study notes", "take notes"
     );
 
-    private static final List<String> WEEKEND_DAYS = Arrays.asList("Saturday", "Sunday");
-
     // ── Time constants in minutes ──────────────────────────────────────────────
-    private static final int START_OF_DAY_MINS  = 6 * 60;    // 06:00 = 360 mins
-    private static final int END_OF_DAY_MINS    = 23 * 60;   // 23:00 = 1380 mins
-    private static final int GRACE_BOUNDARY     = 15;        // 15 mins past 11PM allowed
-    private static final int MIN_BREAK_MINS     = 10;        // min break between study sessions
-    private static final int MIN_DURATION_MINS  = 15;        // min task duration
-    private static final int MAX_TASKS_PER_DAY  = 8;         // max tasks on any single day
-    private static final int MAX_STUDY_SESSIONS = 3;         // max study sessions per day
+    private static final int START_OF_DAY_MINS  = 6 * 60;
+    private static final int END_OF_DAY_MINS    = 23 * 60;
+    private static final int GRACE_BOUNDARY     = 15;
+    private static final int MIN_BREAK_MINS     = 10;
+    private static final int MIN_DURATION_MINS  = 15;
+    private static final int MAX_TASKS_PER_DAY  = 8;
+    private static final int MAX_STUDY_SESSIONS = 3;
 
     // ─────────────────────────────────────────────────────────────────────────
     // PUBLIC ENTRY POINT
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Runs all 12 rules in priority order (from DB).
-     * Returns RuleResult with errors (hard blocks) and warnings (soft).
-     *
-     * @param request      the task being added or edited
-     * @param studentGrade the student's grade string from Student entity (e.g. "8th Standard")
-     */
     public RuleResult validate(TaskRequest request, String studentGrade) {
         RuleResult result = RuleResult.builder().build();
 
@@ -69,16 +58,16 @@ public class ScheduleRuleEngine {
         int endMins   = toMins(request.getEndTime());
         int duration  = endMins - startMins;
 
-        boolean isStudy   = isStudyTask(request.getTitle());
-        boolean isWeekend = isWeekend(request.getDayOfWeek());
+        boolean isStudy = isStudyTask(request.getTitle());
 
-        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        LocalDate taskDate = request.getDate();
+        boolean isWeekend = taskDate.getDayOfWeek() == DayOfWeek.SATURDAY
+                || taskDate.getDayOfWeek() == DayOfWeek.SUNDAY;
         List<ScheduleTask> dayTasks = taskRepository
-                .findByStudentIdAndDayOfWeekAndWeekStartDate(request.getStudentId(), request.getDayOfWeek(), weekStart);
+                .findByStudentIdAndTaskDate(request.getStudentId(), taskDate);
 
         ClassConfig config = resolveClassConfig(studentGrade);
 
-        // fetch rules ordered by priority from DB
         List<ScheduleRule> rules = ruleRepository.findByActiveTrueOrderByPriorityAsc();
 
         boolean gracePassed = false;
@@ -98,7 +87,6 @@ public class ScheduleRuleEngine {
 
                 case "R10" -> applyRule10_MaxTasksPerDay(result, request, dayTasks);
 
-                // ── Study-only rules ──────────────────────────────────────────
                 case "R02" -> {
                     if (isStudy) applyRule02_DailyStudyCap(result, request, duration, dayTasks, config, isWeekend);
                 }
@@ -121,10 +109,7 @@ public class ScheduleRuleEngine {
                 default -> log.warn("Unknown rule ID in DB: {}", rule.getRuleId());
             }
 
-            // stop processing hard blocks early — no point running more rules
             if (result.hasErrors()) {
-                // still run soft warnings even if hard errors exist, but skip other hard rules
-                // by breaking here we return the first error immediately
                 break;
             }
         }
@@ -136,31 +121,19 @@ public class ScheduleRuleEngine {
     // RULE IMPLEMENTATIONS
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Rule 6 — Min Duration (runs first, priority 1)
-     * LET duration = toMins(endTime) - toMins(startTime)
-     * IF duration < MIN_DURATION_MINS THEN block
-     */
     private void applyRule06_MinDuration(RuleResult result, int duration) {
         if (duration < MIN_DURATION_MINS) {
             result.getErrors().add("Task must be at least " + MIN_DURATION_MINS + " minutes long.");
         }
     }
 
-    /**
-     * Rule 11 — After 11 PM Grace Rule (priority 2, runs before Rule 5)
-     * LET overMins = toMins(endTime) - END_OF_DAY_MINS
-     * IF overMins > 0 AND overMins <= GRACE_BOUNDARY THEN allow with warning
-     * ELSE IF overMins > GRACE_BOUNDARY THEN block
-     * Returns true if grace is granted (Rule 5 skips the after-11 check)
-     */
     private boolean applyRule11_GraceRule(RuleResult result, int endMins) {
         int overMins = endMins - END_OF_DAY_MINS;
         if (overMins > 0) {
             if (overMins <= GRACE_BOUNDARY) {
                 result.getWarnings().add(
                         "Task finishes just after 11:00 PM — allowed as a grace exception.");
-                return true; // grace granted
+                return true;
             } else {
                 result.getErrors().add(
                         "Task extends too far past 11:00 PM. Shorten it or move the rest to tomorrow.");
@@ -170,12 +143,6 @@ public class ScheduleRuleEngine {
         return false;
     }
 
-    /**
-     * Rule 5 — Time Boundary 6 AM to 11 PM (priority 3)
-     * IF gracePassed = false
-     *   IF startMins < START_OF_DAY_MINS THEN block
-     *   IF endMins > END_OF_DAY_MINS THEN block
-     */
     private void applyRule05_TimeBoundary(RuleResult result, int startMins, int endMins, boolean gracePassed) {
         if (startMins < START_OF_DAY_MINS) {
             result.getErrors().add("Tasks cannot be scheduled before 6:00 AM.");
@@ -185,14 +152,6 @@ public class ScheduleRuleEngine {
         }
     }
 
-    /**
-     * Rule 1 — No Overlapping Tasks (priority 4)
-     * FOR EACH existingTask in dayTasks
-     *   IF existingTask.id != excludeTaskId
-     *   AND startMins < toMins(existingTask.endTime)
-     *   AND endMins > toMins(existingTask.startTime)
-     *   THEN block
-     */
     private void applyRule01_NoOverlap(RuleResult result, TaskRequest request,
                                        int startMins, int endMins, List<ScheduleTask> dayTasks) {
         boolean overlaps = dayTasks.stream()
@@ -208,13 +167,6 @@ public class ScheduleRuleEngine {
         }
     }
 
-    /**
-     * Rule 9 — No Duplicate Task Names on Same Day (priority 5)
-     * FOR EACH existingTask in dayTasks
-     *   IF existingTask.id != excludeTaskId
-     *   AND existingTask.title.toLowerCase() == newTitle.toLowerCase()
-     *   THEN block
-     */
     private void applyRule09_NoDuplicateNames(RuleResult result, TaskRequest request,
                                               List<ScheduleTask> dayTasks) {
         boolean duplicate = dayTasks.stream()
@@ -226,11 +178,6 @@ public class ScheduleRuleEngine {
         }
     }
 
-    /**
-     * Rule 10 — Max 8 Tasks Per Day (priority 6)
-     * LET taskCount = COUNT of tasks excluding the one being edited
-     * IF taskCount >= MAX_TASKS_PER_DAY THEN block
-     */
     private void applyRule10_MaxTasksPerDay(RuleResult result, TaskRequest request,
                                             List<ScheduleTask> dayTasks) {
         long taskCount = dayTasks.stream()
@@ -243,12 +190,6 @@ public class ScheduleRuleEngine {
         }
     }
 
-    /**
-     * Rule 2 — Max Daily Study Time by Class, Weekday vs Weekend (priority 7)
-     * LET cap = isWeekend ? config.weekendCapMins : config.weekdayCapMins
-     * LET studyMinsUsed = SUM of durations of existing study tasks
-     * IF studyMinsUsed + duration > cap THEN block
-     */
     private void applyRule02_DailyStudyCap(RuleResult result, TaskRequest request,
                                            int duration, List<ScheduleTask> dayTasks,
                                            ClassConfig config, boolean isWeekend) {
@@ -270,11 +211,6 @@ public class ScheduleRuleEngine {
         }
     }
 
-    /**
-     * Rule 3 — Max Single Study Session Length by Class (priority 8)
-     * LET sessionMax = config.sessionMaxMins
-     * IF duration > sessionMax THEN block
-     */
     private void applyRule03_MaxSessionLength(RuleResult result, int duration,
                                               ClassConfig config, String studentGrade) {
         if (config == null) return;
@@ -286,13 +222,6 @@ public class ScheduleRuleEngine {
         }
     }
 
-    /**
-     * Rule 4 — Min 10 Min Break Between Study Sessions (priority 9)
-     * LET prevStudy = last study task where endTime <= startTime
-     * LET nextStudy = first study task where startTime >= endTime
-     * IF gap between prevStudy.end and newTask.start < MIN_BREAK_MINS THEN block
-     * IF gap between newTask.end and nextStudy.start < MIN_BREAK_MINS THEN block
-     */
     private void applyRule04_MinBreakBetweenSessions(RuleResult result, TaskRequest request,
                                                      int startMins, int endMins,
                                                      List<ScheduleTask> dayTasks) {
@@ -301,12 +230,10 @@ public class ScheduleRuleEngine {
                 .filter(t -> "STUDY".equals(t.getDetectedType()))
                 .toList();
 
-        // nearest study task that ends before this task starts
         Optional<ScheduleTask> prevStudy = studyTasks.stream()
                 .filter(t -> toMins(t.getEndTime()) <= startMins)
                 .max((a, b) -> Integer.compare(toMins(a.getEndTime()), toMins(b.getEndTime())));
 
-        // nearest study task that starts after this task ends
         Optional<ScheduleTask> nextStudy = studyTasks.stream()
                 .filter(t -> toMins(t.getStartTime()) >= endMins)
                 .min((a, b) -> Integer.compare(toMins(a.getStartTime()), toMins(b.getStartTime())));
@@ -330,11 +257,6 @@ public class ScheduleRuleEngine {
         }
     }
 
-    /**
-     * Rule 7 — Max 3 Study Sessions Per Day (priority 10)
-     * LET studyCount = COUNT of study tasks excluding this one
-     * IF studyCount >= MAX_STUDY_SESSIONS THEN block
-     */
     private void applyRule07_MaxStudySessions(RuleResult result, TaskRequest request,
                                               List<ScheduleTask> dayTasks) {
         long studyCount = dayTasks.stream()
@@ -348,11 +270,6 @@ public class ScheduleRuleEngine {
         }
     }
 
-    /**
-     * Rule 8 — Soft Warning: No Wellness/Break Task Exists (priority 11)
-     * LET hasNonStudy = any task on day where detectedType != STUDY
-     * IF hasNonStudy = false THEN warn
-     */
     private void applyRule08_WellnessWarning(RuleResult result, List<ScheduleTask> dayTasks,
                                              TaskRequest request) {
         boolean hasNonStudy = dayTasks.stream()
@@ -420,16 +337,16 @@ public class ScheduleRuleEngine {
         String newSubject = extractSubjectFromTitle(request.getTitle());
         if (newSubject == null) return;
 
-        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
-        List<ScheduleTask> weekTasks = taskRepository.findByStudentIdAndWeekStartDate(request.getStudentId(), weekStart);
+        LocalDate taskDate = request.getDate();
+        LocalDate weekStart = taskDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate weekEnd = weekStart.plusDays(6);
 
-        // Map containing set of days for each subject
-        java.util.Map<String, java.util.Set<String>> subjectDays = new java.util.HashMap<>();
+        List<ScheduleTask> weekTasks = taskRepository.findByStudentIdAndTaskDateBetween(
+                request.getStudentId(), weekStart, weekEnd);
 
-        // Add the task from the request
-        subjectDays.computeIfAbsent(newSubject, k -> new java.util.HashSet<>()).add(request.getDayOfWeek());
+        java.util.Map<String, java.util.Set<LocalDate>> subjectDays = new java.util.HashMap<>();
+        subjectDays.computeIfAbsent(newSubject, k -> new java.util.HashSet<>()).add(taskDate);
 
-        // Add all existing STUDY tasks from the week (except the one being edited)
         for (ScheduleTask task : weekTasks) {
             if (request.getExcludeTaskId() != null && task.getId().equals(request.getExcludeTaskId())) {
                 continue;
@@ -437,16 +354,15 @@ public class ScheduleRuleEngine {
             if ("STUDY".equalsIgnoreCase(task.getDetectedType())) {
                 String sub = extractSubjectFromTitle(task.getTitle());
                 if (sub != null) {
-                    subjectDays.computeIfAbsent(sub, k -> new java.util.HashSet<>()).add(task.getDayOfWeek());
+                    subjectDays.computeIfAbsent(sub, k -> new java.util.HashSet<>()).add(task.getTaskDate());
                 }
             }
         }
 
-        // Check if the subject from request is studied for 3 or more days
-        java.util.Set<String> days = subjectDays.get(newSubject);
+        java.util.Set<LocalDate> days = subjectDays.get(newSubject);
         if (days != null && days.size() >= 3) {
             result.getWarnings().add(
-                "⚠ " + newSubject + " should not be studied for 3 days in a week. Consider balancing your schedule with other subjects."
+                    "⚠ " + newSubject + " should not be studied for 3 days in a week. Consider balancing your schedule with other subjects."
             );
         }
     }
@@ -455,44 +371,27 @@ public class ScheduleRuleEngine {
     // HELPER METHODS
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Detects if a task title contains study-related keywords.
-     * Used to silently assign STUDY type without showing it on the frontend.
-     */
     public boolean isStudyTask(String title) {
         if (title == null) return false;
         String lower = title.toLowerCase();
         return STUDY_KEYWORDS.stream().anyMatch(lower::contains);
     }
 
-    /**
-     * Auto-detects task type from title keywords.
-     * Returns "STUDY", "WELLNESS", or "OTHER".
-     * Stored in DB but never shown on frontend.
-     */
     public String detectType(String title) {
         if (title == null) return "OTHER";
         String lower = title.toLowerCase();
         if (STUDY_KEYWORDS.stream().anyMatch(lower::contains)) return "STUDY";
         List<String> wellnessKeywords = List.of(
-                // Physical activity
                 "gym", "yoga", "walk", "run", "jog", "exercise", "workout", "sport",
                 "swim", "cycle", "stretch",
-                // Rest & recovery — matches AI suggestion titles
                 "sleep", "nap", "rest", "break", "relax", "free time",
-                // Mindfulness
                 "meditation", "meditate", "breathing",
-                // Meals
                 "meal", "lunch", "dinner", "breakfast",
-                // Water
                 "drink water");
         if (wellnessKeywords.stream().anyMatch(lower::contains)) return "WELLNESS";
         return "OTHER";
     }
 
-    /**
-     * Converts "HH:MM" string to total minutes since midnight.
-     */
     public int toMins(String time) {
         if (time == null || !time.contains(":")) return 0;
         String[] parts = time.split(":");
@@ -504,16 +403,6 @@ public class ScheduleRuleEngine {
         return time.getHour() * 60 + time.getMinute();
     }
 
-    /**
-     * Checks if the given day is Saturday or Sunday.
-     */
-    private boolean isWeekend(String day) {
-        return WEEKEND_DAYS.contains(day);
-    }
-
-    /**
-     * Formats minutes into a human-readable string like "3h" or "1h 30m".
-     */
     private String formatMins(int mins) {
         int h = mins / 60;
         int m = mins % 60;
@@ -522,23 +411,9 @@ public class ScheduleRuleEngine {
         return m + "m";
     }
 
-    /**
-     * Resolves the ClassConfig for a student based on their grade string.
-     *
-     * Strategy: First extract the numeric class number from the grade string
-     * (handles "10th Standard", "Class 10", "Grade 10", "10" etc.), then
-     * map that number to the correct ClassConfig group. This avoids substring
-     * false-positives (e.g. "10th" matching pattern "1st" or "Class 10"
-     * matching pattern "class 1").
-     *
-     * Falls back to pattern matching for non-numeric grade strings, and
-     * finally to Class 7-8 if nothing matches.
-     */
     private ClassConfig resolveClassConfig(String studentGrade) {
         if (studentGrade == null) return null;
 
-        // ── Step 1: Extract the leading class number from the grade string ──
-        // Matches patterns like: "10th Standard", "Class 10", "Grade 10", "10"
         java.util.regex.Matcher m = java.util.regex.Pattern
                 .compile("(?:class|grade|std|standard)?\\s*(\\d{1,2})(?:st|nd|rd|th)?",
                         java.util.regex.Pattern.CASE_INSENSITIVE)
@@ -557,7 +432,6 @@ public class ScheduleRuleEngine {
             return classConfigRepository.findByClassGroup(targetGroup).orElse(null);
         }
 
-        // ── Step 2: Fallback — pattern matching for non-numeric grade strings ──
         String gradeLower = studentGrade.toLowerCase();
         List<ClassConfig> allConfigs = classConfigRepository.findAll();
         for (ClassConfig config : allConfigs) {
@@ -570,7 +444,6 @@ public class ScheduleRuleEngine {
             }
         }
 
-        // ── Step 3: Last resort default ──
         log.warn("Could not resolve ClassConfig for grade '{}', falling back to Class 7-8", studentGrade);
         return classConfigRepository.findByClassGroup("Class 7-8").orElse(null);
     }

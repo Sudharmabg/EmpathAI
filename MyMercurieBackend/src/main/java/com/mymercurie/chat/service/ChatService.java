@@ -124,8 +124,6 @@ public class ChatService {
         String className = (user instanceof Student s) ? s.getClassName() : null;
 
         // ── Build enriched AI request ──────────────────────────────────────────
-        // ✅ student_id added — used as LangGraph thread_id
-        // ✅ history removed — LangGraph SQLite checkpointer manages it automatically
         Map<String, Object> aiRequest = new HashMap<>();
         aiRequest.put("student_id",   String.valueOf(studentId));
         aiRequest.put("student_name", user.getName());
@@ -342,7 +340,6 @@ public class ChatService {
                             .source(s.getSource())
                             .build();
                 })
-                // ✅ Sort by latest message time — most recent chat on top
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .collect(Collectors.toList());
     }
@@ -390,7 +387,7 @@ public class ChatService {
                     String studentName = user != null ? user.getName() : "Unknown Student";
                     String className = null;
                     String schoolName = null;
-                    
+
                     if (user instanceof Student student) {
                         className = student.getClassName();
                         if (student.getSchoolId() != null) {
@@ -430,7 +427,7 @@ public class ChatService {
         String studentName = user != null ? user.getName() : "Unknown Student";
         String className = null;
         String schoolName = null;
-        
+
         if (user instanceof Student student) {
             className = student.getClassName();
             if (student.getSchoolId() != null) {
@@ -460,12 +457,9 @@ public class ChatService {
 
     private List<Map<String, Object>> buildTodayTasks(Long studentId) {
         try {
-            String today = LocalDate.now().getDayOfWeek()
-                    .getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH);
-            today = today.substring(0, 1).toUpperCase() + today.substring(1).toLowerCase();
-            LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            LocalDate today = LocalDate.now();
             List<ScheduleTask> tasks = scheduleTaskRepository
-                    .findByStudentIdAndDayOfWeekAndWeekStartDate(studentId, today, weekStart);
+                    .findByStudentIdAndTaskDate(studentId, today);
             return tasks.stream().map(t -> {
                 Map<String, Object> map = new HashMap<>();
                 map.put("title",        t.getTitle());
@@ -547,12 +541,10 @@ public class ChatService {
 
     private int getCompletedTasksCount(Long studentId) {
         try {
-            List<String> weekDays = List.of(
-                    "Monday", "Tuesday", "Wednesday",
-                    "Thursday", "Friday", "Saturday", "Sunday");
             LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            LocalDate weekEnd = weekStart.plusDays(6);
             return (int) scheduleTaskRepository
-                    .findByStudentIdAndDayOfWeekInAndWeekStartDate(studentId, weekDays, weekStart)
+                    .findByStudentIdAndTaskDateBetween(studentId, weekStart, weekEnd)
                     .stream()
                     .filter(ScheduleTask::isCompleted)
                     .count();
@@ -564,12 +556,10 @@ public class ChatService {
 
     private int getTotalTasksCount(Long studentId) {
         try {
-            List<String> weekDays = List.of(
-                    "Monday", "Tuesday", "Wednesday",
-                    "Thursday", "Friday", "Saturday", "Sunday");
             LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            LocalDate weekEnd = weekStart.plusDays(6);
             return scheduleTaskRepository
-                    .findByStudentIdAndDayOfWeekInAndWeekStartDate(studentId, weekDays, weekStart)
+                    .findByStudentIdAndTaskDateBetween(studentId, weekStart, weekEnd)
                     .size();
         } catch (Exception e) {
             log.warn("Failed to fetch total tasks count: {}", e.getMessage());

@@ -3,6 +3,7 @@ package com.mymercurie.schedule.dto;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -10,6 +11,7 @@ import java.util.List;
 public class TaskResponse {
     private Long id;
     private Long studentId;
+    private LocalDate date;
     private String dayOfWeek;
     private String title;
     private String startTime;
@@ -18,7 +20,5 @@ public class TaskResponse {
     private boolean completed;
     private String detectedType;
     private List<String> warnings;
-
-    // ✅ XP earned when this task was completed (0 if unchecked or not completed)
     private int xpEarned;
 }

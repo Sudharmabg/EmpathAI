@@ -45,9 +45,7 @@ public class RecommendationServiceImpl implements IRecommendationService {
             "Mathematics", "Science", "SST", "English", "Hindi"
     );
 
-    // ── Subject alias map — maps any variation to canonical subject name ──────
     private static final Map<String, String> SUBJECT_ALIAS_MAP = new HashMap<>() {{
-        // Mathematics
         put("math",              "Mathematics");
         put("maths",             "Mathematics");
         put("mathematics",       "Mathematics");
@@ -56,7 +54,6 @@ public class RecommendationServiceImpl implements IRecommendationService {
         put("arithmetic",        "Mathematics");
         put("trigonometry",      "Mathematics");
         put("calculus",          "Mathematics");
-        // Science
         put("science",           "Science");
         put("sci",               "Science");
         put("physics",           "Science");
@@ -65,7 +62,6 @@ public class RecommendationServiceImpl implements IRecommendationService {
         put("chem",              "Science");
         put("biology",           "Science");
         put("bio",               "Science");
-        // SST / Social Studies
         put("sst",               "SST");
         put("social",            "SST");
         put("social studies",    "SST");
@@ -75,13 +71,11 @@ public class RecommendationServiceImpl implements IRecommendationService {
         put("civics",            "SST");
         put("economics",         "SST");
         put("political science", "SST");
-        // English
         put("english",           "English");
         put("eng",               "English");
         put("grammar",           "English");
         put("literature",        "English");
         put("comprehension",     "English");
-        // Hindi
         put("hindi",             "Hindi");
         put("हिंदी",              "Hindi");
     }};
@@ -117,11 +111,6 @@ public class RecommendationServiceImpl implements IRecommendationService {
             Pattern.CASE_INSENSITIVE
     );
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Extract canonical subject names from a task title using alias map
-    // e.g. "Math revision" → {"Mathematics"}
-    //      "Study SST chapter 3" → {"SST"}
-    // ─────────────────────────────────────────────────────────────────────────
     private Set<String> extractSubjectsFromTitle(String title) {
         if (title == null) return Collections.emptySet();
         String lower = title.toLowerCase().trim();
@@ -134,9 +123,6 @@ public class RecommendationServiceImpl implements IRecommendationService {
         return found;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Extract class number
-    // ─────────────────────────────────────────────────────────────────────────
     private int extractClassNumber(String className) {
         if (className == null) return -1;
         Matcher m = CLASS_NUMBER_PATTERN.matcher(className.trim());
@@ -144,9 +130,6 @@ public class RecommendationServiceImpl implements IRecommendationService {
         return -1;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // RULE 3: Max single session by class
-    // ─────────────────────────────────────────────────────────────────────────
     private int getMaxSessionMins(String className) {
         int n = extractClassNumber(className);
         if (n < 0)   return 45;
@@ -158,9 +141,6 @@ public class RecommendationServiceImpl implements IRecommendationService {
         return 45;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // RULE 2: Max daily study time by class
-    // ─────────────────────────────────────────────────────────────────────────
     private int getMaxDailyStudyMins(String className, boolean isWeekend) {
         int n = extractClassNumber(className);
         if (n < 0)   return 120;
@@ -182,7 +162,7 @@ public class RecommendationServiceImpl implements IRecommendationService {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Override
-    public ScheduleRecommendationResponse getRecommendations(Long studentId, String dayOfWeek) {
+    public ScheduleRecommendationResponse getRecommendations(Long studentId, String dayOfWeek, LocalDate date) {
 
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new RuntimeException("Student not found: " + studentId));
@@ -192,8 +172,8 @@ public class RecommendationServiceImpl implements IRecommendationService {
         int    classNum  = extractClassNumber(className);
 
         log.info("══════════════════════════════════════════════════════════");
-        log.info("🔍 RECOMMENDATIONS — student={}, class='{}', classNum={}, day={}",
-                studentId, className, classNum, dayOfWeek);
+        log.info("🔍 RECOMMENDATIONS — student={}, class='{}', classNum={}, day={}, date={}",
+                studentId, className, classNum, dayOfWeek, date);
 
         // ── Preferences ───────────────────────────────────────────────────────
         String preferredStudyTime = null;
@@ -206,7 +186,7 @@ public class RecommendationServiceImpl implements IRecommendationService {
             preferredStudyTime = pref.getPreferredStudyTime();
             List<BusySlotDTO> allBusySlots = deserializeBusySlots(pref.getBusySlots());
             todayBusySlots = allBusySlots.stream()
-                    .filter(s -> dayOfWeek.equalsIgnoreCase(s.getDay()))
+                    .filter(s -> matchesDate(s, dayOfWeek, date))
                     .collect(Collectors.toList());
             log.info("📋 Preferences: studyTime={}, busySlotsToday={}",
                     preferredStudyTime, todayBusySlots.size());
@@ -266,6 +246,18 @@ public class RecommendationServiceImpl implements IRecommendationService {
                 .build();
     }
 
+    /**
+     * A busy slot applies to the given date if:
+     *  - it's recurring (or legacy/null → treated as recurring) and its weekday matches, OR
+     *  - it's one-time and its stored date matches exactly.
+     */
+    private boolean matchesDate(BusySlotDTO slot, String dayOfWeek, LocalDate date) {
+        if (slot.isEffectivelyRecurring()) {
+            return dayOfWeek.equalsIgnoreCase(slot.getDay());
+        }
+        return slot.getDate() != null && slot.getDate().equals(date.toString());
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // CONSECUTIVE STUDY DAYS
     // ─────────────────────────────────────────────────────────────────────────
@@ -275,7 +267,6 @@ public class RecommendationServiceImpl implements IRecommendationService {
         int todayIdx = DAYS_ORDER.indexOf(dayOfWeek);
         if (todayIdx < 0) return 0;
         int count = 0;
-        // Check up to 6 preceding days (to count consecutive days wrapping around the weekly cycle)
         for (int i = 1; i <= 6; i++) {
             int prevIdx = (todayIdx - i + 7) % 7;
             String prevDay = DAYS_ORDER.get(prevIdx);
@@ -316,7 +307,6 @@ public class RecommendationServiceImpl implements IRecommendationService {
                         .build())
                 .collect(Collectors.toCollection(ArrayList::new));
     }
-
 
     // ─────────────────────────────────────────────────────────────────────────
     // UPCOMING EXAMS

@@ -9,7 +9,7 @@ import lombok.*;
 @Builder
 public class BusySlotDTO {
 
-    // "Monday" | "Tuesday" ... "Sunday"
+    // "Monday" | "Tuesday" ... "Sunday" — used when recurring, or informational when one-time
     private String day;
 
     // "HH:MM" 24hr format
@@ -19,6 +19,17 @@ public class BusySlotDTO {
     private String endTime;
 
     // What the student does during this time
-    // e.g. "Football practice", "Tuition", "Family time"
     private String reason;
+
+    // true/null = repeats every week on `day`. false = applies only to `date` below.
+    // Boxed Boolean so missing JSON (old saved records) is treated as recurring via isEffectivelyRecurring().
+    private Boolean recurring;
+
+    // ISO "yyyy-MM-dd" — only set when recurring = false
+    private String date;
+
+    // Helper: treats null (legacy data, before this field existed) as recurring=true
+    public boolean isEffectivelyRecurring() {
+        return recurring == null || recurring;
+    }
 }

@@ -2,12 +2,15 @@ package com.mymercurie.rewards.service;
 
 import com.mymercurie.rewards.dto.response.AchievementResponse;
 import com.mymercurie.rewards.dto.response.BadgeResponse;
+import com.mymercurie.rewards.dto.response.XpResponse;
 import com.mymercurie.rewards.entity.Achievement;
 import com.mymercurie.rewards.entity.Badge;
 import com.mymercurie.rewards.entity.StudentBadge;
 import com.mymercurie.rewards.repository.AchievementRepository;
 import com.mymercurie.rewards.repository.BadgeRepository;
 import com.mymercurie.rewards.repository.StudentBadgeRepository;
+import com.mymercurie.user.entity.Student;
+import com.mymercurie.user.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +30,9 @@ public class RewardsServiceImpl implements RewardsService {
     private final BadgeRepository badgeRepository;
     private final AchievementRepository achievementRepository;
     private final StudentBadgeRepository studentBadgeRepository;
+
+    // ✅ Added for XP updates
+    private final StudentRepository studentRepository;
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -80,11 +86,6 @@ public class RewardsServiceImpl implements RewardsService {
         }
     }
 
-    /**
-     * Awards a badge to a student if:
-     *   1. A badge with the given triggerType and triggerValue exists.
-     *   2. The student has not already earned that badge.
-     */
     private void awardIfEligible(Long studentId, String triggerType, String milestoneValue) {
         List<Badge> candidates = badgeRepository.findAll().stream()
                 .filter(b -> triggerType.equalsIgnoreCase(b.getTriggerType())
@@ -162,8 +163,6 @@ public class RewardsServiceImpl implements RewardsService {
     @Override
     @Transactional(readOnly = true)
     public List<BadgeResponse> getStudentBadges(Long studentId) {
-        // Uses JOIN FETCH to eagerly load badge within transaction
-        // This prevents LazyInitializationException
         return studentBadgeRepository.findByStudentId(studentId)
                 .stream()
                 .map(this::toStudentBadgeResponse)
@@ -231,5 +230,33 @@ public class RewardsServiceImpl implements RewardsService {
             throw new RuntimeException("Achievement not found: " + id);
         }
         achievementRepository.deleteById(id);
+    }
+
+    // ✅ XP ────────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public XpResponse awardActivityXP(Long studentId) {
+        final int XP_PER_ACTIVITY = 10;
+
+        // Atomically add XP in DB
+        studentRepository.addXP(studentId, XP_PER_ACTIVITY);
+
+        // Fetch updated student to return new total
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new RuntimeException("Student not found: " + studentId));
+
+        log.info("✅ +{} XP awarded to student {}. Total XP: {}",
+                XP_PER_ACTIVITY, studentId, student.getXp());
+
+        return new XpResponse(studentId, student.getXp(), XP_PER_ACTIVITY);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public XpResponse getStudentXP(Long studentId) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new RuntimeException("Student not found: " + studentId));
+        return new XpResponse(studentId, student.getXp(), 0);
     }
 }

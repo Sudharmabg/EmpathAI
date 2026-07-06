@@ -44,6 +44,15 @@ function toEmbedUrl(url) {
   return url
 }
 
+// ─── Format an ISO date (activeDay) into a readable label ─────────────────────
+function formatActiveDayLabel(iso) {
+  if (!iso) return ''
+  const todayISO = new Date().toISOString().slice(0, 10)
+  if (iso === todayISO) return 'today'
+  const d = new Date(iso + 'T00:00:00')
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+}
+
 // ─── Loading skeleton ──────────────────────────────────────────────────────────
 function Skeleton({ className = '' }) {
   return <div className={`animate-pulse bg-gray-200 rounded ${className}`} />
@@ -376,7 +385,7 @@ function ScheduleBanner({ scheduledSubjects, activeDay, syllabi, onSubjectClick 
           <CalendarIcon className="w-4 h-4 text-purple-600" />
         </div>
         <div>
-          <p className="text-sm font-bold text-purple-800">Scheduled for {activeDay}</p>
+          <p className="text-sm font-bold text-purple-800">Scheduled for {formatActiveDayLabel(activeDay)}</p>
           <p className="text-xs text-purple-500">Jump straight into what you planned to study today</p>
         </div>
       </div>
@@ -550,7 +559,7 @@ export default function Curriculum({ user, setActiveTab, navigateToChat, schedul
                 <div className="flex items-center gap-1.5 mb-3">
                   <CalendarIcon className="w-3.5 h-3.5 text-purple-600" />
                   <span className="text-xs font-bold text-purple-600 uppercase tracking-wide">
-                    Scheduled for {activeDay}
+                    Scheduled for {formatActiveDayLabel(activeDay)}
                   </span>
                 </div>
               )}

@@ -19,6 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -35,13 +38,11 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
     private final ScheduleRuleEngine ruleEngine;
     private final ObjectMapper objectMapper;
 
-    // ── Days in order ─────────────────────────────────────────────────────────
     private static final List<String> ALL_DAYS = List.of(
             "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
             "Saturday", "Sunday"
     );
 
-    // ── Preferred study time → start/end hour (24hr) ──────────────────────────
     private static final Map<String, int[]> TIME_WINDOWS = Map.of(
             "MORNING",   new int[]{6,  12},
             "AFTERNOON", new int[]{12, 17},
@@ -58,15 +59,12 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
     public StudentSchedulePreferenceResponse savePreferences(
             StudentSchedulePreferenceRequest request) {
 
-        // Validate student exists
         studentRepository.findById(request.getStudentId())
                 .orElseThrow(() -> new MyMercurieException(
                         "Student not found: " + request.getStudentId(), "NOT_FOUND"));
 
-        // Serialize busy slots to JSON
         String busySlotsJson = serializeBusySlots(request.getBusySlots());
 
-        // Upsert preference
         StudentSchedulePreference preference = preferenceRepository
                 .findByStudentId(request.getStudentId())
                 .orElse(StudentSchedulePreference.builder()
@@ -100,7 +98,6 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
                 .orElse(null);
 
         if (preference == null) {
-            // Return empty response — onboarding not done yet
             return StudentSchedulePreferenceResponse.builder()
                     .studentId(studentId)
                     .onboardingComplete(false)
@@ -134,10 +131,9 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
                 .orElseThrow(() -> new MyMercurieException(
                         "Student not found: " + request.getStudentId(), "NOT_FOUND"));
 
-        java.time.LocalDate weekStart = java.time.LocalDate.now().with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        LocalDate weekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
 
         String className  = student.getClassName();
-        Long   schoolId   = student.getSchoolId();
         String studentGrade = className;
 
         List<String> targetDays = (request.getTargetDays() != null
@@ -145,21 +141,19 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
                 ? request.getTargetDays()
                 : ALL_DAYS;
 
-        // Preferred window hours
         int[] window = TIME_WINDOWS.getOrDefault(
                 request.getPreferredStudyTime(), new int[]{17, 21});
         int windowStartHour = window[0];
         int windowEndHour   = window[1];
 
-        // Parse busy slots for quick lookup
         Map<String, List<BusySlotDTO>> busyByDay = groupBusySlotsByDay(
                 request.getBusySlots());
 
-        // ── Delete existing generated tasks for these days ────────────────────
-        // Only delete tasks for target days so manual tasks on other days are safe
+        // ── Delete existing generated tasks for these days (by actual date now) ──
         for (String day : targetDays) {
+            LocalDate date = dateForDay(weekStart, day);
             List<ScheduleTask> existing =
-                    taskRepository.findByStudentIdAndDayOfWeekAndWeekStartDate(request.getStudentId(), day, weekStart);
+                    taskRepository.findByStudentIdAndTaskDate(request.getStudentId(), date);
             taskRepository.deleteAll(existing);
         }
 
@@ -170,31 +164,24 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
 
         for (String day : targetDays) {
 
-            log.info("══ Generating schedule for day={}", day);
+            LocalDate date = dateForDay(weekStart, day);
+            log.info("══ Generating schedule for day={} date={}", day, date);
 
-            // Get recommendations for this day (reuses existing engine)
             ScheduleRecommendationResponse rec =
-                    recommendationService.getRecommendations(request.getStudentId(), day);
+                    recommendationService.getRecommendations(request.getStudentId(), day, date);
 
             List<TaskSuggestion> suggestions = rec.getSuggestions();
-
-            // School blocked windows for this day
             List<SchoolTimingResponse> blocked = rec.getBlockedWindows();
-
-            // Student busy slots for this day
             List<BusySlotDTO> busySlots = busyByDay.getOrDefault(day, Collections.emptyList());
 
-            // Build list of already-occupied intervals (school + busy)
             List<int[]> occupiedSlots = buildOccupiedSlots(blocked, busySlots);
 
-            // Generate tasks for this day
             List<ScheduleTask> dayTasks = generateDayTasks(
-                    request.getStudentId(), day, suggestions,
+                    request.getStudentId(), date, suggestions,
                     occupiedSlots, windowStartHour, windowEndHour,
-                    studentGrade, weekWarnings, weekStart
+                    studentGrade, weekWarnings, day
             );
 
-            // Save all tasks for this day
             List<ScheduleTask> saved = taskRepository.saveAll(dayTasks);
 
             List<TaskResponse> dayResponses = saved.stream()
@@ -223,59 +210,58 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
                 .build();
     }
 
+    private LocalDate dateForDay(LocalDate weekStart, String day) {
+        int offset = ALL_DAYS.indexOf(day);
+        return offset >= 0 ? weekStart.plusDays(offset) : weekStart;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // GENERATE TASKS FOR ONE DAY
     // ─────────────────────────────────────────────────────────────────────────
 
     private List<ScheduleTask> generateDayTasks(
             Long studentId,
-            String day,
+            LocalDate date,
             List<TaskSuggestion> suggestions,
             List<int[]> occupiedSlots,
             int windowStartHour,
             int windowEndHour,
             String studentGrade,
             List<String> weekWarnings,
-            java.time.LocalDate weekStart) {
+            String dayLabel) {
 
         List<ScheduleTask> result = new ArrayList<>();
 
-        // Track slots used in this day's generation (to avoid internal overlaps)
         List<int[]> usedSlots = new ArrayList<>(occupiedSlots);
         usedSlots.sort(Comparator.comparingInt(s -> s[0]));
-
 
         for (TaskSuggestion suggestion : suggestions) {
 
             int durationMins = suggestion.getEstimatedMinutes();
 
-            // Find a free slot in preferred window first, then full day
             int[] slot = findFreeSlot(
                     usedSlots, durationMins,
                     windowStartHour * 60,
                     windowEndHour * 60
             );
 
-            // If no slot in preferred window → try full day
             if (slot == null) {
                 slot = findFreeSlot(usedSlots, durationMins, 6 * 60, 23 * 60);
             }
 
-            // If still no slot → skip this suggestion, add warning
             if (slot == null) {
-                weekWarnings.add(day + ": Could not fit \"" + suggestion.getTitle()
+                weekWarnings.add(dayLabel + ": Could not fit \"" + suggestion.getTitle()
                         + "\" — no available slot found.");
-                log.warn("   ✗ No slot for '{}' on {}", suggestion.getTitle(), day);
+                log.warn("   ✗ No slot for '{}' on {}", suggestion.getTitle(), dayLabel);
                 continue;
             }
 
             String startTime = minsToTime(slot[0]);
             String endTime   = minsToTime(slot[1]);
 
-            // Validate against rule engine before saving
             TaskRequest taskRequest = new TaskRequest();
             taskRequest.setStudentId(studentId);
-            taskRequest.setDayOfWeek(day);
+            taskRequest.setDate(date);
             taskRequest.setTitle(suggestion.getTitle());
             taskRequest.setStartTime(startTime);
             taskRequest.setEndTime(endTime);
@@ -285,30 +271,25 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
             RuleResult ruleResult = ruleEngine.validate(taskRequest, studentGrade);
 
             if (ruleResult.hasErrors()) {
-                // Rule engine rejected — try next suggestion
                 log.warn("   ✗ Rule rejected '{}' on {}: {}",
-                        suggestion.getTitle(), day, ruleResult.getErrors().get(0));
-                weekWarnings.add(day + ": \"" + suggestion.getTitle()
+                        suggestion.getTitle(), dayLabel, ruleResult.getErrors().get(0));
+                weekWarnings.add(dayLabel + ": \"" + suggestion.getTitle()
                         + "\" skipped — " + ruleResult.getErrors().get(0));
                 continue;
             }
 
-            // Collect soft warnings
             if (!ruleResult.getWarnings().isEmpty()) {
-                ruleResult.getWarnings().forEach(w -> weekWarnings.add(day + ": " + w));
+                ruleResult.getWarnings().forEach(w -> weekWarnings.add(dayLabel + ": " + w));
             }
 
-            // Mark slot as used (with 10-min break gap after study tasks)
             int breakGap = "STUDY".equals(suggestion.getTaskType()) ? 10 : 0;
             insertSorted(usedSlots, new int[]{slot[0], slot[1] + breakGap});
-
 
             String detectedType = ruleEngine.detectType(suggestion.getTitle());
 
             ScheduleTask task = ScheduleTask.builder()
                     .studentId(studentId)
-                    .weekStartDate(weekStart)
-                    .dayOfWeek(day)
+                    .taskDate(date)
                     .title(suggestion.getTitle())
                     .startTime(startTime != null ? java.time.LocalTime.parse(startTime) : null)
                     .endTime(endTime != null ? java.time.LocalTime.parse(endTime) : null)
@@ -320,10 +301,9 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
             result.add(task);
 
             log.info("   ✓ Placed '{}' at {}-{} on {}",
-                    suggestion.getTitle(), startTime, endTime, day);
+                    suggestion.getTitle(), startTime, endTime, dayLabel);
         }
 
-        // Sort by start time
         result.sort(Comparator.comparing(ScheduleTask::getStartTime));
 
         return result;
@@ -333,16 +313,6 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
     // FIND FREE SLOT
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Finds the first available time slot of the given duration
-     * within [windowStart, windowEnd] that doesn't overlap any occupied slot.
-     *
-     * @param occupiedSlots list of [startMins, endMins] already taken
-     * @param durationMins  how long the task needs
-     * @param windowStart   search window start in minutes
-     * @param windowEnd     search window end in minutes
-     * @return [startMins, endMins] of free slot, or null if none found
-     */
     private int[] findFreeSlot(List<int[]> occupiedSlots, int durationMins,
                                int windowStart, int windowEnd) {
 
@@ -352,30 +322,25 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
             int slotStart = slot[0];
             int slotEnd   = slot[1];
 
-            // Skip slots entirely before window
             if (slotEnd <= cursor) continue;
 
-            // Gap before this occupied slot
             int gapEnd = Math.min(slotStart, windowEnd);
 
             if (gapEnd - cursor >= durationMins) {
                 return new int[]{cursor, cursor + durationMins};
             }
 
-            // Move cursor past this occupied slot
             if (slotEnd > cursor) {
                 cursor = slotEnd;
             }
         }
 
-        // Check remaining time after all occupied slots
         if (windowEnd - cursor >= durationMins) {
             return new int[]{cursor, cursor + durationMins};
         }
 
-        return null; // no slot found
+        return null;
     }
-
 
     // ─────────────────────────────────────────────────────────────────────────
     // BUILD OCCUPIED SLOTS
@@ -460,6 +425,7 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
         return TaskResponse.builder()
                 .id(task.getId())
                 .studentId(task.getStudentId())
+                .date(task.getTaskDate())
                 .dayOfWeek(task.getDayOfWeek())
                 .title(task.getTitle())
                 .startTime(task.getStartTime() != null ? task.getStartTime().toString() : "")
@@ -478,4 +444,4 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
         }
         list.add(index, newSlot);
     }
-}
+}

@@ -4,10 +4,13 @@ import com.mymercurie.user.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
+
 @Entity
 @Table(name = "schedule_tasks", indexes = {
         @Index(name = "idx_schedule_tasks_student", columnList = "student_id"),
-        @Index(name = "idx_schedule_tasks_week", columnList = "week_start_date")
+        @Index(name = "idx_schedule_tasks_date", columnList = "task_date")
 })
 @Getter
 @Setter
@@ -23,20 +26,17 @@ public class ScheduleTask extends BaseEntity {
     @Column(name = "student_id", nullable = false)
     private Long studentId;
 
-    @Column(name = "week_start_date")
-    private java.time.LocalDate weekStartDate;
-
-    @Column(name = "day_of_week", nullable = false, length = 10)
-    private String dayOfWeek;
+    @Column(name = "task_date", nullable = false)
+    private LocalDate taskDate;
 
     @Column(name = "title", nullable = false)
     private String title;
 
     @Column(name = "start_time", nullable = false)
-    private java.time.LocalTime startTime;
+    private LocalTime startTime;
 
     @Column(name = "end_time", nullable = false)
-    private java.time.LocalTime endTime;
+    private LocalTime endTime;
 
     @Column(name = "detected_type", length = 20)
     private String detectedType;
@@ -46,5 +46,12 @@ public class ScheduleTask extends BaseEntity {
 
     @Builder.Default
     @Column(name = "is_completed", nullable = false)
-    private boolean completed = false;     // ← Changed to primitive boolean
+    private boolean completed = false;
+
+    @Transient
+    public String getDayOfWeek() {
+        return taskDate != null
+                ? taskDate.getDayOfWeek().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)
+                : null;
+    }
 }

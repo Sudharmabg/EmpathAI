@@ -7,11 +7,16 @@ import com.mymercurie.schedule.service.IRecommendationService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/schedule")
@@ -85,35 +90,42 @@ public class ScheduleController {
         }
     }
 
-    // ── Get all tasks for a student on a specific day ─────────────────────────
-    @GetMapping("/{studentId}/{day}")
-    public ResponseEntity<ApiResponse<List<TaskResponse>>> getDayTasks(
+    // ── Get all tasks for a student on a specific date ─────────────────────────
+    @GetMapping("/{studentId}/day/{date}")
+    public ResponseEntity<ApiResponse<List<TaskResponse>>> getTasksForDate(
             @PathVariable Long studentId,
-            @PathVariable String day) {
-        logger.info("getDayTasks started for studentId={}, day={}", studentId, day);
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        logger.info("getTasksForDate started for studentId={}, date={}", studentId, date);
         try {
-            List<TaskResponse> tasks = scheduleService.getTasksForDay(studentId, day);
-            ResponseEntity<ApiResponse<List<TaskResponse>>> result = ResponseEntity.ok(ApiResponse.success(tasks, "Tasks fetched for " + day));
-            logger.info("getDayTasks completed successfully for studentId={}, day={}", studentId, day);
+            List<TaskResponse> tasks = scheduleService.getTasksForDate(studentId, date);
+            ResponseEntity<ApiResponse<List<TaskResponse>>> result = ResponseEntity.ok(ApiResponse.success(tasks, "Tasks fetched for " + date));
+            logger.info("getTasksForDate completed successfully for studentId={}, date={}", studentId, date);
             return result;
         } catch (Exception e) {
-            logger.error("getDayTasks failed for studentId={}, day={}: {}", studentId, day, e.getMessage(), e);
+            logger.error("getTasksForDate failed for studentId={}, date={}: {}", studentId, date, e.getMessage(), e);
             throw e;
         }
     }
 
-    // ── Get full week schedule for a student ──────────────────────────────────
-    @GetMapping("/{studentId}/week")
-    public ResponseEntity<ApiResponse<Map<String, List<TaskResponse>>>> getWeekTasks(
-            @PathVariable Long studentId) {
-        logger.info("getWeekTasks started for studentId={}", studentId);
+    // ── Get full month schedule for a student ───────────────────────────────────
+    @GetMapping("/{studentId}/month")
+    public ResponseEntity<ApiResponse<Map<String, List<TaskResponse>>>> getMonthTasks(
+            @PathVariable Long studentId,
+            @RequestParam int year,
+            @RequestParam int month) {
+        logger.info("getMonthTasks started for studentId={}, year={}, month={}", studentId, year, month);
         try {
-            Map<String, List<TaskResponse>> week = scheduleService.getWeekTasks(studentId);
-            ResponseEntity<ApiResponse<Map<String, List<TaskResponse>>>> result = ResponseEntity.ok(ApiResponse.success(week, "Full week schedule fetched."));
-            logger.info("getWeekTasks completed successfully for studentId={}", studentId);
+            Map<LocalDate, List<TaskResponse>> monthMap =
+                    scheduleService.getMonthTasks(studentId, YearMonth.of(year, month));
+            Map<String, List<TaskResponse>> response = monthMap.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            e -> e.getKey().toString(), Map.Entry::getValue,
+                            (a, b) -> a, LinkedHashMap::new));
+            ResponseEntity<ApiResponse<Map<String, List<TaskResponse>>>> result = ResponseEntity.ok(ApiResponse.success(response, "Month schedule fetched."));
+            logger.info("getMonthTasks completed successfully for studentId={}", studentId);
             return result;
         } catch (Exception e) {
-            logger.error("getWeekTasks failed for studentId={}: {}", studentId, e.getMessage(), e);
+            logger.error("getMonthTasks failed for studentId={}: {}", studentId, e.getMessage(), e);
             throw e;
         }
     }
@@ -125,10 +137,12 @@ public class ScheduleController {
     @GetMapping("/{studentId}/recommendations")
     public ResponseEntity<ApiResponse<ScheduleRecommendationResponse>> getRecommendations(
             @PathVariable Long studentId,
-            @RequestParam(defaultValue = "Monday") String day) {
-        logger.info("getRecommendations started for studentId={}, day={}", studentId, day);
+            @RequestParam(defaultValue = "Monday") String day,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        logger.info("getRecommendations started for studentId={}, day={}, date={}", studentId, day, date);
         try {
-            ScheduleRecommendationResponse response = recommendationService.getRecommendations(studentId, day);
+            LocalDate effectiveDate = date != null ? date : LocalDate.now();
+            ScheduleRecommendationResponse response = recommendationService.getRecommendations(studentId, day, effectiveDate);
             ResponseEntity<ApiResponse<ScheduleRecommendationResponse>> result = ResponseEntity.ok(ApiResponse.success(response, "Recommendations fetched."));
             logger.info("getRecommendations completed successfully for studentId={}, day={}", studentId, day);
             return result;

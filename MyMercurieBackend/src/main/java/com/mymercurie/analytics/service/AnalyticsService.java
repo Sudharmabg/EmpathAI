@@ -34,7 +34,7 @@ public class AnalyticsService {
     private final UserRepository userRepository;
     private final SchoolRepository schoolRepository;
     private final AssessmentResponseRepository assessmentResponseRepository;
-    
+
     private final MoodEntryRepository moodEntryRepository;
     private final SleepEntryRepository sleepEntryRepository;
     private final ScheduleTaskRepository scheduleTaskRepository;
@@ -50,7 +50,6 @@ public class AnalyticsService {
         long totalSchools = schoolRepository.count();
         long openFlaggedChats = flaggedChatRepository.countByStatus(com.mymercurie.chat.entity.FlagStatus.PENDING);
 
-        // Date boundaries
         LocalDate startDate;
         LocalDate endDate;
         LocalDateTime startDateTime;
@@ -63,43 +62,40 @@ public class AnalyticsService {
             endDateTime = endDate.atStartOfDay();
         } else {
             startDate = LocalDate.now().minusDays(7);
-            endDate = LocalDate.now().plusDays(1); // Future bound
+            endDate = LocalDate.now().plusDays(1);
             startDateTime = LocalDateTime.now().minusDays(7);
             endDateTime = LocalDateTime.now().plusDays(1);
         }
 
-        // Fetch Data
         List<ScheduleTask> tasks;
         List<MoodEntry> moods;
         List<SleepEntry> sleeps;
         List<Intervention> interventions;
 
         if (studentId != null) {
-            tasks = scheduleTaskRepository.findByStudentIdAndWeekStartDateGreaterThanEqual(studentId, startDate);
+            tasks = scheduleTaskRepository.findByStudentIdAndTaskDateGreaterThanEqual(studentId, startDate);
             moods = moodEntryRepository.findByStudentIdAndLoggedAtAfterOrderByLoggedAtDesc(studentId, startDateTime);
             sleeps = sleepEntryRepository.findByStudentIdAndLoggedAtAfterOrderByLoggedAtDesc(studentId, startDateTime);
             interventions = interventionRepository.findByStudentId(studentId);
         } else {
-            tasks = scheduleTaskRepository.findByWeekStartDateGreaterThanEqual(startDate);
+            tasks = scheduleTaskRepository.findByTaskDateGreaterThanEqual(startDate);
             moods = moodEntryRepository.findAllByLoggedAtAfterOrderByLoggedAtDesc(startDateTime);
             sleeps = sleepEntryRepository.findAllByLoggedAtAfterOrderByLoggedAtDesc(startDateTime);
             interventions = interventionRepository.findAll();
         }
 
-        // Filter out items that are beyond the end boundary (only strictly needed if weekStart is provided and is in the past)
         if (weekStart != null) {
-            tasks = tasks.stream().filter(t -> !t.getWeekStartDate().isAfter(endDate)).collect(Collectors.toList());
+            tasks = tasks.stream().filter(t -> !t.getTaskDate().isAfter(endDate)).collect(Collectors.toList());
             moods = moods.stream().filter(m -> m.getLoggedAt().isBefore(endDateTime)).collect(Collectors.toList());
             sleeps = sleeps.stream().filter(s -> s.getLoggedAt().isBefore(endDateTime)).collect(Collectors.toList());
             interventions = interventions.stream().filter(i -> i.getCreatedAt().isBefore(endDateTime) && i.getCreatedAt().isAfter(startDateTime)).collect(Collectors.toList());
         } else {
-            // For interventions when weekStart is null (last 7 days), we still need to filter since we do findAll()
             interventions = interventions.stream().filter(i -> i.getCreatedAt().isAfter(startDateTime)).collect(Collectors.toList());
         }
 
         // 1. Schedule Stats
         Map<String, List<ScheduleTask>> tasksByDate = tasks.stream()
-                .collect(Collectors.groupingBy(t -> t.getWeekStartDate().toString()));
+                .collect(Collectors.groupingBy(t -> t.getTaskDate().toString()));
         List<AnalyticsDashboardResponse.ScheduleStat> scheduleStats = tasksByDate.entrySet().stream()
                 .map(e -> AnalyticsDashboardResponse.ScheduleStat.builder()
                         .date(e.getKey())
@@ -112,7 +108,6 @@ public class AnalyticsService {
         Map<String, Long> moodStats = moods.stream()
                 .collect(Collectors.groupingBy(MoodEntry::getMood, Collectors.counting()));
 
-        // Calculate predominant mood per day for the week tracker
         List<AnalyticsDashboardResponse.DailyMoodStat> dailyMoods = new java.util.ArrayList<>();
         Map<LocalDate, List<MoodEntry>> moodsByDate = moods.stream()
                 .collect(Collectors.groupingBy(m -> m.getLoggedAt().toLocalDate()));

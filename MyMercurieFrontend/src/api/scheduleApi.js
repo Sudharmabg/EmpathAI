@@ -2,26 +2,26 @@ import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from './apiClient.js';
 
 // ── TASKS ─────────────────────────────────────────────────────────────────────
 
-export async function getWeekTasks(studentId) {
-    const res = await apiGet(`/api/schedule/${studentId}/week`);
+export async function getMonthTasks(studentId, year, month) {
+    const res = await apiGet(`/api/schedule/${studentId}/month?year=${year}&month=${month}`);
     return res.data;
 }
 
-export async function getDayTasks(studentId, day) {
-    const res = await apiGet(`/api/schedule/${studentId}/${day}`);
+export async function getDayTasks(studentId, date) {
+    const res = await apiGet(`/api/schedule/${studentId}/day/${date}`);
     return res.data;
 }
 
-export async function addTask(studentId, dayOfWeek, title, startTime, endTime, notes, detectedType) {
+export async function addTask(studentId, date, title, startTime, endTime, notes, detectedType) {
     const res = await apiPost('/api/schedule/task', {
-        studentId, dayOfWeek, title, startTime, endTime, notes: notes || '', detectedType
+        studentId, date, title, startTime, endTime, notes: notes || '', detectedType
     });
     return res.data;
 }
 
-export async function editTask(taskId, studentId, dayOfWeek, title, startTime, endTime, notes, detectedType) {
+export async function editTask(taskId, studentId, date, title, startTime, endTime, notes, detectedType) {
     const res = await apiPut(`/api/schedule/task/${taskId}`, {
-        studentId, dayOfWeek, title, startTime, endTime, notes: notes || '', detectedType
+        studentId, date, title, startTime, endTime, notes: notes || '', detectedType
     });
     return res.data;
 }
@@ -41,9 +41,12 @@ export async function deleteTask(taskId) {
 }
 
 // ── RECOMMENDATIONS ───────────────────────────────────────────────────────────
+// Backend still expects a weekday name (e.g. "Monday") for legacy filtering,
+// plus now the actual date for accurate busy-slot / recurrence matching.
 
-export async function getRecommendations(studentId, day) {
-    const res = await apiGet(`/api/schedule/${studentId}/recommendations?day=${day}`);
+export async function getRecommendations(studentId, date) {
+    const dayOfWeek = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+    const res = await apiGet(`/api/schedule/${studentId}/recommendations?day=${dayOfWeek}&date=${date}`);
     return res.data;
 }
 

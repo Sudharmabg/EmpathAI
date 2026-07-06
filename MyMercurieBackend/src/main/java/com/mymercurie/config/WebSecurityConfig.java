@@ -76,7 +76,13 @@ public class WebSecurityConfig {
                                 new AntPathRequestMatcher("/api/questions/**", "POST"),
                                 new AntPathRequestMatcher("/api/questions/**", "PUT"),
                                 new AntPathRequestMatcher("/api/questions/**", "DELETE"),
-                                new AntPathRequestMatcher("/api/analytics/**", "POST")
+                                new AntPathRequestMatcher("/api/analytics/**", "POST"),
+                                // Schedule endpoints — same reasoning as above: already
+                                // protected by HttpOnly JWT cookie, CSRF was just missed
+                                // when this list was originally written, causing 403s.
+                                new AntPathRequestMatcher("/api/schedule/**", "POST"),
+                                new AntPathRequestMatcher("/api/schedule/**", "PUT"),
+                                new AntPathRequestMatcher("/api/schedule/**", "DELETE")
                         )
                 )
 
@@ -85,7 +91,7 @@ public class WebSecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                         .sessionAuthenticationStrategy(new org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy())
                 )
-                
+
                 // ── Preserve SecurityContext across async dispatches (e.g. Mono/Flux returns) ──
                 .securityContext(context -> context.securityContextRepository(
                         new org.springframework.security.web.context.RequestAttributeSecurityContextRepository()
@@ -179,9 +185,9 @@ public class WebSecurityConfig {
                                         jakarta.servlet.http.HttpServletResponse response,
                                         jakarta.servlet.FilterChain filterChain)
                 throws jakarta.servlet.ServletException, java.io.IOException {
-            org.springframework.security.web.csrf.CsrfToken csrfToken = 
+            org.springframework.security.web.csrf.CsrfToken csrfToken =
                     (org.springframework.security.web.csrf.CsrfToken) request.getAttribute(org.springframework.security.web.csrf.CsrfToken.class.getName());
-            
+
             if (csrfToken == null) {
                 csrfToken = csrfTokenRepository.loadToken(request);
                 if (csrfToken == null) {
@@ -192,7 +198,7 @@ public class WebSecurityConfig {
                 csrfToken.getToken(); // Forces token resolution and cookie generation
                 csrfTokenRepository.saveToken(csrfToken, request, response);
             }
-            
+
             filterChain.doFilter(request, response);
         }
     }

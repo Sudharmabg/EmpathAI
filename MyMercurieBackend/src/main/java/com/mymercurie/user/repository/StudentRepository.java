@@ -15,20 +15,16 @@ import java.util.Optional;
 @Repository
 public interface StudentRepository extends JpaRepository<Student, Long> {
 
-    // ── Original methods (used by SchoolService & UserService) ────────────
+    // ── Original methods ──────────────────────────────────────────────────
 
     Optional<Student> findByEmail(String email);
 
-    /** Used by SchoolService.getAllSchoolSummaries() — COUNT query, no rows fetched. */
     long countBySchoolId(Long schoolId);
 
-    /** Used by SchoolService.getClassesBySchool() — all students in a school. */
     List<Student> findBySchoolId(Long schoolId);
 
-    /** Used by SchoolService.getStudentsBySchoolAndClass() — students in a specific class. */
     List<Student> findBySchoolIdAndClassName(Long schoolId, String className);
 
-    /** Used by UserService.getStudentPage() for paginated student list. */
     @Query("""
             SELECT s FROM Student s
             WHERE (:schoolName IS NULL OR EXISTS (
@@ -42,21 +38,19 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
                                 @Param("search") String search,
                                 Pageable pageable);
 
-    // ── New methods added for login/intervention tracking ─────────────────
+    // ── Login / Intervention tracking ─────────────────────────────────────
 
-    /**
-     * Atomically increments the student's loginCount by 1.
-     * Called by AuthService on every successful student login.
-     */
     @Modifying
     @Query("UPDATE Student s SET s.loginCount = s.loginCount + 1 WHERE s.id = :id")
     void incrementLoginCount(@Param("id") Long id);
 
-    /**
-     * Atomically increments the student's interventionSessionCount by 1.
-     * Called by InterventionController when a session is completed.
-     */
     @Modifying
     @Query("UPDATE Student s SET s.interventionSessionCount = s.interventionSessionCount + 1 WHERE s.id = :id")
     void incrementInterventionSessionCount(@Param("id") Long id);
+
+    // ✅ XP tracking ───────────────────────────────────────────────────────
+
+    @Modifying
+    @Query("UPDATE Student s SET s.xp = s.xp + :xpAmount WHERE s.id = :id")
+    void addXP(@Param("id") Long id, @Param("xpAmount") int xpAmount);
 }

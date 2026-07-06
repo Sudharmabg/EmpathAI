@@ -1,15 +1,16 @@
 package com.mymercurie.schedule.dto;
 
 import lombok.Data;
+import java.time.LocalDate;
 
 @Data
 public class TaskRequest {
     private Long studentId;
-    private String dayOfWeek;   // "Monday", "Tuesday" ... "Sunday"
+    private LocalDate date;
     private String title;
-    private String startTime;   // "HH:MM" 24hr format
-    private String endTime;     // "HH:MM" 24hr format
+    private String startTime;
+    private String endTime;
     private String notes;
     private String detectedType;
-    private Long excludeTaskId; // used on edit — exclude this task from overlap/duplicate checks
+    private Long excludeTaskId;
 }

@@ -17,7 +17,7 @@ import BadgesModal from './dashboard/BadgesModal'
 import NotificationsModal from './dashboard/NotificationsModal'
 import AiTools from './studentdashboard/tools/AiTools'
 
-import { getWeekTasks, toggleTaskComplete as apiToggleTaskComplete } from '../api/scheduleApi.js'
+import { getMonthTasks, toggleTaskComplete as apiToggleTaskComplete } from '../api/scheduleApi.js'
 
 const VALID_TABS = ['overview', 'chatbuddy', 'schedule', 'questionnaire', 'curriculum', 'activities', 'tools']
 
@@ -30,10 +30,19 @@ const SUBJECT_KEYWORD_MAP = [
   { keywords: ['art', 'craft', 'art & craft', 'drawing', 'painting'], subject: 'Art & Craft' },
 ]
 
-function getScheduledSubjectsForDay(tasks, day) {
-  const dayTasks = tasks[day] || []
+// ── DATE HELPERS (mirrors Schedule.jsx so both components agree on format) ────
+function toISO(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+function todayISO() {
+  return toISO(new Date())
+}
+
+function getScheduledSubjectsForDay(tasksByDate, date) {
+  const dateTasks = tasksByDate[date] || []
   const matched = new Set()
-  dayTasks.forEach(task => {
+  dateTasks.forEach(task => {
     const type = (task.detectedType || '').toLowerCase()
     if (type !== 'study') return
     const title = (task.title || '').toLowerCase()
@@ -57,21 +66,35 @@ export default function Dashboard({ user, onLogout }) {
   const [showScheduleDropdown, setShowScheduleDropdown] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
 
-  // ✅ XP state
+  // XP state - initialized from user object
   const [xp, setXp] = useState(user?.xp || 0)
 
-  const [activeDay, setActiveDay] = useState(() => {
-    const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    return DAYS[new Date().getDay()]
-  })
+  // ✅ Fetch fresh XP from backend on every page load so refresh shows correct value
+  useEffect(() => {
+    const syncXP = async () => {
+      if (!user?.id) return
+      try {
+        const res = await fetch('/api/rewards/xp', {
+          credentials: 'include'
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setXp(data?.xp ?? 0)
+        }
+      } catch (err) {
+        console.error('Failed to sync XP:', err)
+      }
+    }
+    syncXP()
+  }, [user?.id])
 
-  const todayDayName = (() => {
-    const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    return DAYS[new Date().getDay()]
-  })()
+  // ── activeDay now holds an ISO date string ("2026-07-06"), not a weekday name ──
+  const [activeDay, setActiveDay] = useState(() => todayISO())
 
-  const emptyWeek = { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] }
-  const [tasks, setTasks] = useState(emptyWeek)
+  const todayDate = todayISO()
+
+  // ── tasks is now keyed by ISO date string, not weekday name ───────────────────
+  const [tasks, setTasks] = useState({})
   const [tasksLoading, setTasksLoading] = useState(false)
   const [tasksError, setTasksError] = useState('')
 
@@ -92,32 +115,26 @@ export default function Dashboard({ user, onLogout }) {
     { id: 3, title: 'Dr. Sarah replied to you', time: '2 hours ago', type: 'social', read: true },
   ])
 
+  // ── Fetch the current month's tasks on load ────────────────────────────────
   useEffect(() => {
     if (!user?.id) return
     setTasksLoading(true)
     setTasksError('')
-    getWeekTasks(user.id)
-      .then(data => setTasks({ ...emptyWeek, ...data }))
+    const now = new Date()
+    getMonthTasks(user.id, now.getFullYear(), now.getMonth() + 1)
+      .then(data => setTasks(prev => ({ ...prev, ...data })))
       .catch(err => { console.error(err); setTasksError('Could not load your schedule. Please refresh.') })
       .finally(() => setTasksLoading(false))
   }, [user?.id])
 
-  const toggleTaskComplete = async (day, taskId) => {
-    const task = tasks[day]?.find(t => String(t.id) === String(taskId))
+  const toggleTaskComplete = async (date, taskId) => {
+    const task = tasks[date]?.find(t => String(t.id) === String(taskId))
     if (!task) return
 
     const toMins = (t) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m }
 
-    const DAYS_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    const todayName = (() => {
-      const DAYS_JS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-      return DAYS_JS[new Date().getDay()]
-    })()
-
-    const taskDayIdx = DAYS_ORDER.indexOf(day)
-    const todayIdx = DAYS_ORDER.indexOf(todayName)
-    const isFutureDay = taskDayIdx > todayIdx
-    const isToday = taskDayIdx === todayIdx
+    const isFutureDay = date > todayDate
+    const isToday = date === todayDate
     const now = new Date()
     const currentMins = now.getHours() * 60 + now.getMinutes()
     const taskStartMins = toMins(task.startTime)
@@ -141,7 +158,7 @@ export default function Dashboard({ user, onLogout }) {
           const saved = await apiToggleTaskComplete(taskId)
           setTasks(prev => ({
             ...prev,
-            [day]: prev[day].map(t =>
+            [date]: (prev[date] || []).map(t =>
               String(t.id) === String(taskId) ? { ...t, completed: saved.completed } : t
             )
           }))
@@ -227,7 +244,7 @@ export default function Dashboard({ user, onLogout }) {
           {/* Right actions */}
           <div className="flex items-center space-x-5">
 
-            {/* ✅ XP — dynamic */}
+            {/* ✅ XP — always shows latest from backend */}
             <div className="flex items-center bg-yellow-400/10 border border-yellow-400/20 rounded-full px-4 py-1.5 shadow-sm">
               <BoltIcon className="w-4 h-4 text-yellow-500 mr-2" />
               <span className="text-yellow-700 font-bold text-sm">{xp} XP</span>
@@ -238,21 +255,21 @@ export default function Dashboard({ user, onLogout }) {
               <CalendarIcon
                 onClick={() => setShowScheduleDropdown(v => !v)}
                 className={'w-6 h-6 cursor-pointer transition-colors ' +
-                  (tasks[todayDayName]?.every(t => t.completed) && tasks[todayDayName]?.length > 0
+                  (tasks[todayDate]?.every(t => t.completed) && tasks[todayDate]?.length > 0
                     ? 'text-green-500' : 'text-gray-400 hover:text-purple-600')}
               />
               <div className={'absolute top-full right-0 mt-4 w-72 bg-white rounded-2xl shadow-xl border-2 border-purple-100 p-4 transition-all duration-300 transform origin-top-right z-50 ' +
                 (showScheduleDropdown ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none')}>
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="font-black text-black text-sm">Today's Focus</h3>
-                  <span className="text-xs font-bold text-gray-400">{tasks[todayDayName]?.filter(t => t.completed).length}/{tasks[todayDayName]?.length} done</span>
+                  <span className="text-xs font-bold text-gray-400">{tasks[todayDate]?.filter(t => t.completed).length}/{tasks[todayDate]?.length} done</span>
                 </div>
-                {!tasks[todayDayName]?.length ? (
+                {!tasks[todayDate]?.length ? (
                   <p className="text-xs text-center text-gray-400 py-4">No tasks for today</p>
                 ) : (
                   <div className="space-y-2">
-                    {tasks[todayDayName].map(task => (
-                      <div key={task.id} onClick={() => toggleTaskComplete(todayDayName, task.id)} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer">
+                    {tasks[todayDate].map(task => (
+                      <div key={task.id} onClick={() => toggleTaskComplete(todayDate, task.id)} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer">
                         <button className={'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ' + (task.completed ? 'bg-green-500 border-green-500' : 'border-gray-300')}>
                           {task.completed && <CheckCircleIcon className="w-3 h-3 text-white" />}
                         </button>
@@ -265,7 +282,7 @@ export default function Dashboard({ user, onLogout }) {
                   </div>
                 )}
                 <button
-                  onClick={() => { setActiveTab('schedule'); setActiveDay(todayDayName); setShowScheduleDropdown(false) }}
+                  onClick={() => { setActiveTab('schedule'); setActiveDay(todayDate); setShowScheduleDropdown(false) }}
                   className="w-full mt-3 bg-black text-white text-xs font-bold py-2 rounded-lg hover:bg-gray-800 transition-colors"
                 >
                   View Full Schedule
@@ -354,7 +371,12 @@ export default function Dashboard({ user, onLogout }) {
               activeDay={activeDay}
             />
           )}
-          {activeTab === 'activities' && <Activities user={user} />}
+          {activeTab === 'activities' && (
+            <Activities
+              user={user}
+              onXpEarned={(earned) => setXp(prev => prev + earned)}
+            />
+          )}
         </main>
 
         {/* Right sidebar — overview only */}
@@ -363,7 +385,7 @@ export default function Dashboard({ user, onLogout }) {
             <RightSidebarPanel
               user={user}
               tasks={tasks}
-              todayDayName={todayDayName}
+              todayDayName={todayDate}
               onToggleTask={toggleTaskComplete}
             />
           </aside>

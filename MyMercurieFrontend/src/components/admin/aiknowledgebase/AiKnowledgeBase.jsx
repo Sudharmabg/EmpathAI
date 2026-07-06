@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import ChapterUpload from './ChapterUpload'
 import PublishedChapters from './PublishedChapters'
 import ArchivedChapters from './ArchivedChapters'
+import ContentPipeline from './ContentPipeline'
 
 const TABS = [
   {
@@ -22,6 +23,13 @@ const TABS = [
     id: 'archived', label: 'Archived', icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+      </svg>
+    )
+  },
+  {
+    id: 'pipeline', label: 'Content Pipeline', icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
       </svg>
     )
   },
@@ -57,6 +65,7 @@ export default function AiKnowledgeBase() {
           {activeTab === 'upload'    && <ChapterUpload />}
           {activeTab === 'published' && <PublishedChapters />}
           {activeTab === 'archived'  && <ArchivedChapters />}
+          {activeTab === 'pipeline'  && <ContentPipeline />}
         </div>
       </div>
     </div>

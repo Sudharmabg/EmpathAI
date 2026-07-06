@@ -1,5 +1,60 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { uploadChapter, getChapterStatus, updateChapterMetadata, publishChapter, uploadChapterImage } from '../../../api/curriculumAiApi'
+
+// ── PDF.js helpers ─────────────────────────────────────────────────────────────
+
+// Dynamically load PDF.js from CDN (only once)
+const loadPdfJs = () => {
+  return new Promise((resolve, reject) => {
+    // Already loaded
+    if (window['pdfjs-dist/build/pdf']) {
+      resolve(window['pdfjs-dist/build/pdf'])
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js'
+    script.onload = () => {
+      const pdfjsLib = window['pdfjs-dist/build/pdf']
+      if (!pdfjsLib) {
+        reject(new Error('PDF.js loaded but library not found on window.'))
+        return
+      }
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js'
+      resolve(pdfjsLib)
+    }
+    script.onerror = () => reject(new Error('Failed to load PDF parsing library from CDN.'))
+    document.body.appendChild(script)
+  })
+}
+
+// Extract all text from a PDF File object, returns { text, numPages }
+const extractTextFromPdf = async (file) => {
+  const pdfjsLib = await loadPdfJs()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = async function () {
+      try {
+        const typedarray = new Uint8Array(this.result)
+        const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise
+        let fullText = ''
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const textContent = await page.getTextContent()
+          const pageText = textContent.items.map(item => item.str).join(' ')
+          fullText += pageText + '\n'
+        }
+        resolve({ text: fullText.trim(), numPages: pdf.numPages })
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = (err) => reject(err)
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const CLASSES = [
   'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6',
@@ -7,6 +62,8 @@ const CLASSES = [
 ]
 const SUBJECTS = ['Mathematics', 'Science', 'English', 'Hindi', 'Social Studies', 'Art & Craft']
 const BLOOMS = ['Remember', 'Understand', 'Apply', 'Analyze', 'Evaluate', 'Create']
+
+// ── Component ──────────────────────────────────────────────────────────────────
 
 export default function ChapterUpload() {
   const [stage, setStage] = useState('FORM')
@@ -17,11 +74,21 @@ export default function ChapterUpload() {
   const [subtopicInput, setSubtopicInput] = useState('')
   const [subtopics, setSubtopics] = useState([])
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [imageBank, setImageBank] = useState([]) // [{conceptName, imageUrl}]
+  const [imageBank, setImageBank] = useState([])
   const [imgInput, setImgInput] = useState({ conceptName: '', file: null })
   const [uploadingImg, setUploadingImg] = useState(false)
 
-  // Polling logic
+  // ── PDF-specific state ─────────────────────────────────────────────────────
+  const [inputMode, setInputMode] = useState('raw')       // 'raw' | 'pdf'
+  const [pdfFile, setPdfFile] = useState(null)             // selected File object
+  const [pdfInfo, setPdfInfo] = useState(null)             // { name, size, numPages, charCount }
+  const [pdfError, setPdfError] = useState(null)           // extraction error string
+  const [extractingPdf, setExtractingPdf] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)    // collapsible extracted text preview
+  const [isDragOver, setIsDragOver] = useState(false)
+  const pdfInputRef = useRef(null)
+
+  // ── Polling ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (stage !== 'PROCESSING' || !chapterId) return
     const interval = setInterval(async () => {
@@ -49,6 +116,8 @@ export default function ChapterUpload() {
     return () => clearInterval(interval)
   }, [stage, chapterId])
 
+  // ── Handlers ───────────────────────────────────────────────────────────────
+
   const addSubtopic = () => {
     const trimmed = subtopicInput.trim()
     if (trimmed && !subtopics.includes(trimmed)) {
@@ -59,14 +128,81 @@ export default function ChapterUpload() {
 
   const removeSubtopic = (name) => setSubtopics(subtopics.filter(s => s !== name))
 
+  const resetPdfState = () => {
+    setPdfFile(null)
+    setPdfInfo(null)
+    setPdfError(null)
+    setExtractingPdf(false)
+    setShowPreview(false)
+    if (pdfInputRef.current) pdfInputRef.current.value = ''
+  }
+
+  const handleModeSwitch = (mode) => {
+    setInputMode(mode)
+    // Clear content from other mode so they don't conflict
+    if (mode === 'raw') {
+      resetPdfState()
+    } else {
+      setFormData(prev => ({ ...prev, rawContent: '' }))
+    }
+  }
+
+  // Process a PDF file (from input or drag-drop)
+  const processPdfFile = async (file) => {
+    if (!file) return
+    if (file.type !== 'application/pdf') {
+      setPdfError('Please upload a valid PDF file (.pdf).')
+      return
+    }
+    setPdfFile(file)
+    setPdfError(null)
+    setPdfInfo(null)
+    setExtractingPdf(true)
+    setShowPreview(false)
+    try {
+      const { text, numPages } = await extractTextFromPdf(file)
+      if (!text || text.length < 50) {
+        setPdfError('The PDF appears to be a scanned image or contains no readable text. Please use Raw Content mode for scanned PDFs, or try a text-based PDF.')
+        setExtractingPdf(false)
+        return
+      }
+      setFormData(prev => ({ ...prev, rawContent: text }))
+      setPdfInfo({
+        name: file.name,
+        size: (file.size / 1024).toFixed(1),
+        numPages,
+        charCount: text.length,
+      })
+    } catch (err) {
+      setPdfError('Failed to extract text from PDF: ' + err.message)
+    } finally {
+      setExtractingPdf(false)
+    }
+  }
+
+  const handlePdfInputChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) processPdfFile(file)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) processPdfFile(file)
+  }
+
   const handleUpload = async (e) => {
     e.preventDefault()
+    if (inputMode === 'pdf' && (!formData.rawContent || formData.rawContent.length < 100)) {
+      alert('Please upload a PDF with readable text content (minimum 100 characters) before generating intelligence.')
+      return
+    }
     try {
       const payload = { ...formData }
       if (!payload.chapterNumber) payload.chapterNumber = null
       else payload.chapterNumber = parseInt(payload.chapterNumber)
       payload.subtopics = subtopics
-      // imageBank: [{conceptName, imageUrl}] — only include entries that have both fields
       payload.imageBank = imageBank.filter(img => img.conceptName.trim() && img.imageUrl.trim())
       const res = await uploadChapter(payload)
       setChapterId(res.chapterId)
@@ -80,6 +216,16 @@ export default function ChapterUpload() {
       await publishChapter(chapterId)
       setStage('PUBLISHED')
     } catch (err) { alert(err.message) }
+  }
+
+  const resetForm = () => {
+    setStage('FORM')
+    setFormData({ board: 'CBSE', grade: '', subject: '', title: '', chapterNumber: '', rawContent: '' })
+    setSubtopics([])
+    setImageBank([])
+    setImgInput({ conceptName: '', file: null })
+    setInputMode('raw')
+    resetPdfState()
   }
 
   const toggleBloom = (level) => {
@@ -103,12 +249,17 @@ export default function ChapterUpload() {
     setEditedMetadata({ ...editedMetadata, [field]: (editedMetadata[field] || []).filter(t => t !== value) })
   }
 
-  // ── FORM Stage ──────────────────────────────────────────────────────────────
+  // ── FORM Stage ───────────────────────────────────────────────────────────────
   if (stage === 'FORM') {
+    const contentReady = inputMode === 'raw'
+      ? formData.rawContent.trim().length >= 100
+      : (pdfInfo && formData.rawContent.length >= 100)
+
     return (
       <form onSubmit={handleUpload} className="space-y-5 max-w-2xl">
         <h3 className="text-lg font-black text-gray-900 mb-2">Upload New Chapter</h3>
 
+        {/* ── Board / Class / Subject / Title / Chapter Number grid ── */}
         <div className="grid grid-cols-2 gap-4">
           {/* Board */}
           <div>
@@ -143,7 +294,7 @@ export default function ChapterUpload() {
               className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-semibold focus:border-[#9333EA] focus:ring-4 focus:ring-purple-100 outline-none shadow-sm" required />
           </div>
           {/* Chapter Number */}
-          <div>
+          <div className="col-span-2">
             <label className="block text-sm font-bold text-gray-700 mb-1">Chapter Number <span className="text-gray-400 font-normal">(Optional)</span></label>
             <input type="number" value={formData.chapterNumber}
               onChange={e => setFormData({...formData, chapterNumber: e.target.value})}
@@ -152,7 +303,7 @@ export default function ChapterUpload() {
           </div>
         </div>
 
-        {/* Subtopics — Chip Input */}
+        {/* ── Subtopics Chip Input ── */}
         <div>
           <label className="block text-sm font-bold text-gray-700 mb-1">
             Subtopics <span className="text-gray-400 font-normal">(Optional — guides AI metadata extraction)</span>
@@ -186,16 +337,227 @@ export default function ChapterUpload() {
           )}
         </div>
 
-        {/* Raw Content */}
+        {/* ── Content Input — Mode Toggle ── */}
         <div>
-          <label className="block text-sm font-bold text-gray-700 mb-1">Raw Content <span className="text-gray-400 font-normal">(Markdown / Plain text)</span></label>
-          <textarea rows="10" value={formData.rawContent}
-            onChange={e => setFormData({...formData, rawContent: e.target.value})}
-            className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold focus:border-[#9333EA] focus:ring-4 focus:ring-purple-100 outline-none shadow-sm"
-            required />
+          <div className="flex items-center justify-between mb-3">
+            <label className="block text-sm font-bold text-gray-700">Chapter Content</label>
+            {/* Toggle pill */}
+            <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-1">
+              <button
+                type="button"
+                onClick={() => handleModeSwitch('raw')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 flex items-center gap-1.5 ${
+                  inputMode === 'raw'
+                    ? 'bg-white text-[#9333EA] shadow-sm border border-purple-100'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {/* text icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Raw Content
+              </button>
+              <button
+                type="button"
+                onClick={() => handleModeSwitch('pdf')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 flex items-center gap-1.5 ${
+                  inputMode === 'pdf'
+                    ? 'bg-white text-[#9333EA] shadow-sm border border-purple-100'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {/* pdf icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Upload PDF
+              </button>
+            </div>
+          </div>
+
+          {/* ── Raw Content textarea ── */}
+          {inputMode === 'raw' && (
+            <div>
+              <p className="text-xs text-gray-400 mb-2">Paste Markdown or plain text content below.</p>
+              <textarea
+                rows="10"
+                value={formData.rawContent}
+                onChange={e => setFormData({...formData, rawContent: e.target.value})}
+                placeholder="# Chapter Title&#10;&#10;Paste or type your chapter content here in Markdown or plain text..."
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold focus:border-[#9333EA] focus:ring-4 focus:ring-purple-100 outline-none shadow-sm resize-y"
+                required={inputMode === 'raw'}
+              />
+              {formData.rawContent.length > 0 && (
+                <p className="text-xs text-gray-400 mt-1 text-right">{formData.rawContent.length.toLocaleString()} characters</p>
+              )}
+            </div>
+          )}
+
+          {/* ── PDF Upload zone ── */}
+          {inputMode === 'pdf' && (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-400">Upload a text-based PDF. The text will be extracted automatically and sent to the AI pipeline.</p>
+
+              {/* Drag-and-drop dropzone */}
+              {!pdfInfo && !extractingPdf && (
+                <div
+                  onDragOver={e => { e.preventDefault(); setIsDragOver(true) }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={handleDrop}
+                  onClick={() => pdfInputRef.current?.click()}
+                  className={`relative cursor-pointer border-2 border-dashed rounded-2xl transition-all duration-200 ${
+                    isDragOver
+                      ? 'border-[#9333EA] bg-purple-50 scale-[1.01]'
+                      : 'border-gray-300 bg-gray-50 hover:border-purple-400 hover:bg-purple-50/40'
+                  }`}
+                  style={{ padding: '2.5rem 1.5rem' }}
+                >
+                  <div className="flex flex-col items-center gap-3 text-center pointer-events-none">
+                    {/* PDF icon */}
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${
+                      isDragOver ? 'bg-purple-100' : 'bg-white border border-gray-200 shadow-sm'
+                    }`}>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-700">
+                        {isDragOver ? 'Drop your PDF here!' : 'Drag & drop your PDF here'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">or click to browse files</p>
+                    </div>
+                    <span className="text-xs bg-red-50 text-red-600 border border-red-200 font-bold px-3 py-1 rounded-full">PDF only</span>
+                  </div>
+                  <input
+                    ref={pdfInputRef}
+                    type="file"
+                    accept="application/pdf"
+                    onChange={handlePdfInputChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                </div>
+              )}
+
+              {/* Extracting state */}
+              {extractingPdf && (
+                <div className="flex flex-col items-center justify-center gap-3 py-10 border-2 border-dashed border-purple-300 rounded-2xl bg-purple-50/50">
+                  <div className="w-10 h-10 border-3 border-[#9333EA] border-t-transparent rounded-full animate-spin" style={{ borderWidth: '3px' }} />
+                  <div className="text-center">
+                    <p className="text-sm font-bold text-purple-800">Extracting text from PDF...</p>
+                    <p className="text-xs text-purple-500 mt-0.5">{pdfFile?.name}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Error state */}
+              {pdfError && (
+                <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-red-700">Extraction Failed</p>
+                    <p className="text-xs text-red-600 mt-0.5">{pdfError}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setPdfError(null); setPdfFile(null); if (pdfInputRef.current) pdfInputRef.current.value = '' }}
+                    className="text-red-400 hover:text-red-600 font-bold text-lg leading-none"
+                  >×</button>
+                </div>
+              )}
+
+              {/* Success state — PDF info card */}
+              {pdfInfo && !extractingPdf && (
+                <div className="border border-green-200 bg-green-50 rounded-2xl overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center gap-3 px-4 py-3 border-b border-green-100">
+                    <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-800 truncate">{pdfInfo.name}</p>
+                      <p className="text-xs text-gray-500">{pdfInfo.size} KB · {pdfInfo.numPages} page{pdfInfo.numPages !== 1 ? 's' : ''}</p>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-100 border border-green-200 px-2.5 py-1 rounded-full flex-shrink-0">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Text Extracted
+                    </span>
+                  </div>
+
+                  {/* Stats row */}
+                  <div className="grid grid-cols-3 divide-x divide-green-100 bg-white/60">
+                    <div className="px-4 py-2.5 text-center">
+                      <p className="text-base font-black text-gray-800">{pdfInfo.numPages}</p>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Pages</p>
+                    </div>
+                    <div className="px-4 py-2.5 text-center">
+                      <p className="text-base font-black text-gray-800">{pdfInfo.charCount.toLocaleString()}</p>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Characters</p>
+                    </div>
+                    <div className="px-4 py-2.5 text-center">
+                      <p className="text-base font-black text-gray-800">~{Math.round(pdfInfo.charCount / 1500)}</p>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Est. Pages</p>
+                    </div>
+                  </div>
+
+                  {/* Actions row */}
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-t border-green-100 bg-white/40">
+                    <button
+                      type="button"
+                      onClick={() => setShowPreview(p => !p)}
+                      className="text-xs font-bold text-purple-600 hover:text-purple-800 flex items-center gap-1 transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className={`w-3.5 h-3.5 transition-transform ${showPreview ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      {showPreview ? 'Hide' : 'Show'} extracted text
+                    </button>
+                    <span className="flex-1" />
+                    <button
+                      type="button"
+                      onClick={() => { resetPdfState(); setFormData(prev => ({ ...prev, rawContent: '' })) }}
+                      className="text-xs font-bold text-red-400 hover:text-red-600 flex items-center gap-1 transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove &amp; re-upload
+                    </button>
+                  </div>
+
+                  {/* Collapsible preview */}
+                  {showPreview && (
+                    <div className="border-t border-green-100">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-4 pt-3 pb-1">Extracted Text Preview</p>
+                      <pre className="px-4 pb-4 text-xs text-gray-600 whitespace-pre-wrap font-mono leading-relaxed max-h-56 overflow-y-auto">
+                        {formData.rawContent.slice(0, 2000)}{formData.rawContent.length > 2000 ? '\n\n… (truncated for preview)' : ''}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Validation warning if content too short */}
+              {pdfInfo && formData.rawContent.length < 100 && (
+                <p className="text-xs text-amber-600 font-semibold flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Extracted text is too short (min. 100 characters required).
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Image Bank */}
+        {/* ── Chapter Image Bank ── */}
         <div className="bg-purple-50 border border-purple-200 rounded-xl p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -227,8 +589,7 @@ export default function ChapterUpload() {
                   const res = await uploadChapterImage(imgInput.conceptName.trim(), imgInput.file)
                   setImageBank([...imageBank, { conceptName: res.conceptName, imageUrl: res.imageUrl }])
                   setImgInput({ conceptName: '', file: null })
-                  // Reset the file input element manually
-                  const fileInput = document.querySelector('input[type="file"]')
+                  const fileInput = document.querySelector('input[accept="image/*"]')
                   if (fileInput) fileInput.value = ''
                 } catch (e) {
                   alert('Image upload failed: ' + e.message)
@@ -262,14 +623,19 @@ export default function ChapterUpload() {
           )}
         </div>
 
-        <button type="submit" className="w-full py-3 bg-[#9333EA] hover:bg-[#7e22ce] text-white font-black rounded-xl transition-colors shadow-md shadow-purple-200">
-          🤖 Generate Intelligence
+        {/* ── Submit ── */}
+        <button
+          type="submit"
+          disabled={inputMode === 'pdf' && (extractingPdf || (!pdfInfo && !formData.rawContent))}
+          className="w-full py-3 bg-[#9333EA] hover:bg-[#7e22ce] text-white font-black rounded-xl transition-colors shadow-md shadow-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {extractingPdf ? '⏳ Extracting PDF...' : '🤖 Generate Intelligence'}
         </button>
       </form>
     )
   }
 
-  // ── PROCESSING Stage ────────────────────────────────────────────────────────
+  // ── PROCESSING Stage ──────────────────────────────────────────────────────────
   if (stage === 'PROCESSING') {
     return (
       <div className="flex flex-col items-center justify-center py-16">
@@ -280,7 +646,7 @@ export default function ChapterUpload() {
     )
   }
 
-  // ── REVIEW Stage ────────────────────────────────────────────────────────────
+  // ── REVIEW Stage ──────────────────────────────────────────────────────────────
   if (stage === 'REVIEW') {
     const em = editedMetadata || {}
     return (
@@ -426,7 +792,7 @@ export default function ChapterUpload() {
     )
   }
 
-  // ── PUBLISHED Stage ─────────────────────────────────────────────────────────
+  // ── PUBLISHED Stage ───────────────────────────────────────────────────────────
   if (stage === 'PUBLISHED') {
     return (
       <div className="py-16 text-center">
@@ -436,7 +802,7 @@ export default function ChapterUpload() {
         <h3 className="text-xl font-black text-gray-900">Chapter Published!</h3>
         <p className="mt-2 text-sm text-gray-500">The chapter and its AI tools are now available to students.</p>
         <button
-          onClick={() => { setStage('FORM'); setFormData({board:'CBSE',grade:'',subject:'',title:'',chapterNumber:'',rawContent:''}); setSubtopics([]); setImageBank([]); setImgInput({conceptName:'',file:null}) }}
+          onClick={resetForm}
           className="mt-6 px-6 py-2.5 bg-purple-50 text-[#9333EA] font-bold rounded-xl hover:bg-purple-100 transition-colors">
           Upload Another Chapter
         </button>

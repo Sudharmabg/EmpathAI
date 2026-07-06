@@ -6,7 +6,6 @@ export async function getGoals(studentId) {
     const res = await apiRequest('/api/activities/goals/' + studentId)
     if (!res.ok) throw new Error('Failed to fetch goals (HTTP ' + res.status + ')')
     const json = await res.json()
-    // Unwrap ApiResponse wrapper
     return json.data || json
 }
 
@@ -22,7 +21,6 @@ export async function saveGoal(studentId, goalText, subjectTag, targetDate) {
     })
     if (!res.ok) throw new Error('Failed to save goal (HTTP ' + res.status + ')')
     const json = await res.json()
-    // Unwrap ApiResponse wrapper
     return json.data || json
 }
 
@@ -42,5 +40,15 @@ export async function completeIntervention(studentId, activityType) {
         body: JSON.stringify({ activityType: activityType })
     })
     if (!res.ok) throw new Error('Failed to record intervention (HTTP ' + res.status + ')')
+    return res.json()
+}
+
+// ✅ XP AWARD ──────────────────────────────────────────────────────────────────
+
+export async function awardActivityXP() {
+    const res = await apiRequest('/api/rewards/xp', {
+        method: 'POST'
+    })
+    if (!res.ok) throw new Error('Failed to award XP (HTTP ' + res.status + ')')
     return res.json()
 }

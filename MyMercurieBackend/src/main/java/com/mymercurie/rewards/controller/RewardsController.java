@@ -2,6 +2,7 @@ package com.mymercurie.rewards.controller;
 
 import com.mymercurie.rewards.dto.response.AchievementResponse;
 import com.mymercurie.rewards.dto.response.BadgeResponse;
+import com.mymercurie.rewards.dto.response.XpResponse;
 import com.mymercurie.rewards.service.RewardsService;
 import com.mymercurie.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -74,7 +75,8 @@ public class RewardsController {
             @RequestParam(value = "image", required = false) MultipartFile image) {
         logger.info("updateBadge started for id={}", id);
         try {
-            ResponseEntity<BadgeResponse> result = ResponseEntity.ok(rewardsService.updateBadge(id, title, triggerType, triggerTitle, triggerValue, image));
+            ResponseEntity<BadgeResponse> result = ResponseEntity.ok(
+                    rewardsService.updateBadge(id, title, triggerType, triggerTitle, triggerValue, image));
             logger.info("updateBadge completed successfully for id={}", id);
             return result;
         } catch (Exception e) {
@@ -102,9 +104,6 @@ public class RewardsController {
     // STUDENT BADGES
     // ══════════════════════════════════════════════════════════════════════
 
-    /**
-     * Student fetches their OWN badges — ID comes from JWT, never from URL.
-     */
     @GetMapping("/students/me/badges")
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<List<BadgeResponse>> getMyBadges() {
@@ -122,15 +121,13 @@ public class RewardsController {
         }
     }
 
-    /**
-     * Admin / staff fetch any student's badges by ID.
-     */
     @GetMapping("/students/{studentId}/badges")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PSYCHOLOGIST')")
     public ResponseEntity<List<BadgeResponse>> getStudentBadges(@PathVariable Long studentId) {
         logger.info("getStudentBadges started for studentId={}", studentId);
         try {
-            ResponseEntity<List<BadgeResponse>> result = ResponseEntity.ok(rewardsService.getStudentBadges(studentId));
+            ResponseEntity<List<BadgeResponse>> result = ResponseEntity.ok(
+                    rewardsService.getStudentBadges(studentId));
             logger.info("getStudentBadges completed successfully for studentId={}", studentId);
             return result;
         } catch (Exception e) {
@@ -148,7 +145,8 @@ public class RewardsController {
     public ResponseEntity<List<AchievementResponse>> getAllAchievements() {
         logger.info("getAllAchievements started");
         try {
-            ResponseEntity<List<AchievementResponse>> result = ResponseEntity.ok(rewardsService.getAllAchievements());
+            ResponseEntity<List<AchievementResponse>> result = ResponseEntity.ok(
+                    rewardsService.getAllAchievements());
             logger.info("getAllAchievements completed successfully");
             return result;
         } catch (Exception e) {
@@ -184,7 +182,8 @@ public class RewardsController {
             @RequestParam(value = "image", required = false) MultipartFile image) {
         logger.info("updateAchievement started for id={}", id);
         try {
-            ResponseEntity<AchievementResponse> result = ResponseEntity.ok(rewardsService.updateAchievement(id, title, description, image));
+            ResponseEntity<AchievementResponse> result = ResponseEntity.ok(
+                    rewardsService.updateAchievement(id, title, description, image));
             logger.info("updateAchievement completed successfully for id={}", id);
             return result;
         } catch (Exception e) {
@@ -205,6 +204,42 @@ public class RewardsController {
         } catch (Exception e) {
             logger.error("deleteAchievement failed for id={}: {}", id, e.getMessage(), e);
             throw e;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ✅ XP
+    // ══════════════════════════════════════════════════════════════════════
+
+    @GetMapping("/xp")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<XpResponse> getMyXP() {
+        logger.info("getMyXP started");
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            User user = (User) auth.getPrincipal();
+            XpResponse result = rewardsService.getStudentXP(user.getId());
+            logger.info("getMyXP completed for studentId={}, xp={}", user.getId(), result.getXp());
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("getMyXP failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/xp")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<XpResponse> awardXP() {
+        logger.info("awardXP started");
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            User user = (User) auth.getPrincipal();
+            XpResponse result = rewardsService.awardActivityXP(user.getId());
+            logger.info("awardXP completed for studentId={}, newXP={}", user.getId(), result.getXp());
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("awardXP failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }

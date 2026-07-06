@@ -66,8 +66,27 @@ export default function Dashboard({ user, onLogout }) {
   const [showScheduleDropdown, setShowScheduleDropdown] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
 
-  // ✅ XP state
+  // XP state - initialized from user object
   const [xp, setXp] = useState(user?.xp || 0)
+
+  // ✅ Fetch fresh XP from backend on every page load so refresh shows correct value
+  useEffect(() => {
+    const syncXP = async () => {
+      if (!user?.id) return
+      try {
+        const res = await fetch('/api/rewards/xp', {
+          credentials: 'include'
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setXp(data?.xp ?? 0)
+        }
+      } catch (err) {
+        console.error('Failed to sync XP:', err)
+      }
+    }
+    syncXP()
+  }, [user?.id])
 
   // ── activeDay now holds an ISO date string ("2026-07-06"), not a weekday name ──
   const [activeDay, setActiveDay] = useState(() => todayISO())
@@ -225,7 +244,7 @@ export default function Dashboard({ user, onLogout }) {
           {/* Right actions */}
           <div className="flex items-center space-x-5">
 
-            {/* ✅ XP — dynamic */}
+            {/* ✅ XP — always shows latest from backend */}
             <div className="flex items-center bg-yellow-400/10 border border-yellow-400/20 rounded-full px-4 py-1.5 shadow-sm">
               <BoltIcon className="w-4 h-4 text-yellow-500 mr-2" />
               <span className="text-yellow-700 font-bold text-sm">{xp} XP</span>
@@ -352,7 +371,12 @@ export default function Dashboard({ user, onLogout }) {
               activeDay={activeDay}
             />
           )}
-          {activeTab === 'activities' && <Activities user={user} />}
+          {activeTab === 'activities' && (
+            <Activities
+              user={user}
+              onXpEarned={(earned) => setXp(prev => prev + earned)}
+            />
+          )}
         </main>
 
         {/* Right sidebar — overview only */}

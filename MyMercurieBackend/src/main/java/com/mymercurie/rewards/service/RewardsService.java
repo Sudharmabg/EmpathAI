@@ -2,6 +2,7 @@ package com.mymercurie.rewards.service;
 
 import com.mymercurie.rewards.dto.response.AchievementResponse;
 import com.mymercurie.rewards.dto.response.BadgeResponse;
+import com.mymercurie.rewards.dto.response.XpResponse;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -11,7 +12,6 @@ public interface RewardsService {
     // ── Badges ────────────────────────────────────────────────────────────
     List<BadgeResponse> getAllBadges();
 
-    // FIX: triggerValue added — the numeric milestone string ("1","5","10") used for award matching
     BadgeResponse createBadge(String title, String triggerType, String triggerTitle,
                               String triggerValue, MultipartFile image);
 
@@ -32,4 +32,8 @@ public interface RewardsService {
     AchievementResponse createAchievement(String title, String description, MultipartFile image);
     AchievementResponse updateAchievement(Long id, String title, String description, MultipartFile image);
     void deleteAchievement(Long id);
+
+    // ✅ XP ────────────────────────────────────────────────────────────────
+    XpResponse awardActivityXP(Long studentId);
+    XpResponse getStudentXP(Long studentId);
 }

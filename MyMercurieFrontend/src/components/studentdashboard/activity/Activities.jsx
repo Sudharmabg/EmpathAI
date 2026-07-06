@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ClockIcon,
   ChartBarIcon,
@@ -10,8 +10,8 @@ import {
   TrophyIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
-import { fetchMyBadges } from '../../../api/rewardsApi'
-import { getGoals, saveGoal, deleteGoal, completeIntervention } from '../../../api/activitiesApi.js'
+import { fetchMyBadges, getStudentXP } from '../../../api/rewardsApi'
+import { getGoals, saveGoal, deleteGoal, completeIntervention, awardActivityXP } from '../../../api/activitiesApi.js'
 import {
   getMoodEntries, saveMoodEntry,
   getGratitudeEntries, saveGratitudeEntry, deleteGratitudeEntry,
@@ -20,11 +20,26 @@ import {
 
 const SUBJECTS = ['Mathematics', 'Science', 'SST', 'English', 'Hindi', 'Art & Craft', 'Physical Education', 'Computer Science', 'Other']
 
-export default function Activities({ user }) {
+export default function Activities({ user, onXpEarned }) {
   const [activeTool, setActiveTool] = useState(null)
   const [badges, setBadges] = useState([])
   const [badgesLoading, setBadgesLoading] = useState(false)
   const [badgesError, setBadgesError] = useState('')
+  const [studentXP, setStudentXP] = useState(0)
+
+  // ✅ Fetch XP from backend on load
+  useEffect(() => {
+    const loadXP = async () => {
+      if (!user?.id) return
+      try {
+        const data = await getStudentXP()
+        setStudentXP(data?.xp ?? 0)
+      } catch (err) {
+        console.error('Failed to load XP:', err)
+      }
+    }
+    loadXP()
+  }, [user?.id])
 
   useEffect(() => {
     const loadBadges = async () => {
@@ -43,6 +58,21 @@ export default function Activities({ user }) {
     loadBadges()
   }, [user?.id])
 
+  // ✅ Calls backend to save XP + updates both local and header XP
+  const handleXPEarned = async () => {
+    try {
+      const result = await awardActivityXP()
+      // Use backend value as source of truth
+      setStudentXP(result.xp)
+      onXpEarned?.(10)
+    } catch (err) {
+      console.error('Failed to award XP:', err)
+      // Still update UI even if backend fails
+      setStudentXP(prev => prev + 10)
+      onXpEarned?.(10)
+    }
+  }
+
   const tools = [
     { id: 'meditation', name: 'Meditation Timer',  description: 'Guided meditation sessions from 5-30 minutes',    icon: ClockIcon,         color: 'green',  bgColor: 'from-green-100 to-green-200',   btnLabel: 'Start Session'  },
     { id: 'mood',       name: 'Mood Tracker',       description: 'Track your daily mood and identify patterns',      icon: ChartBarIcon,      color: 'orange', bgColor: 'from-orange-100 to-orange-200', btnLabel: 'Log Mood'       },
@@ -58,6 +88,11 @@ export default function Activities({ user }) {
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Wellness Activities</h1>
         <p className="text-gray-600">Interactive tools to support your emotional well-being</p>
+
+        {/* ✅ XP Display */}
+        <div className="mt-3 inline-block bg-purple-100 text-purple-700 px-5 py-2 rounded-full font-semibold text-sm">
+          ⭐ XP: {studentXP}
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -99,11 +134,11 @@ export default function Activities({ user }) {
             >
               &times;
             </button>
-            {activeTool === 'meditation' && <MeditationTimer user={user} />}
-            {activeTool === 'mood'       && <MoodTracker      user={user} />}
-            {activeTool === 'gratitude'  && <GratitudeJournal user={user} />}
-            {activeTool === 'sleep'      && <SleepTracker     user={user} />}
-            {activeTool === 'goals'      && <GoalSetting      user={user} />}
+            {activeTool === 'meditation' && <MeditationTimer user={user} onXPEarned={handleXPEarned} />}
+            {activeTool === 'mood'       && <MoodTracker      user={user} onXPEarned={handleXPEarned} />}
+            {activeTool === 'gratitude'  && <GratitudeJournal user={user} onXPEarned={handleXPEarned} />}
+            {activeTool === 'sleep'      && <SleepTracker     user={user} onXPEarned={handleXPEarned} />}
+            {activeTool === 'goals'      && <GoalSetting      user={user} onXPEarned={handleXPEarned} />}
             {activeTool === 'rewards'    && <RewardsViewer badges={badges} loading={badgesLoading} error={badgesError} />}
             {activeTool === 'crisis'     && <CrisisResources />}
           </div>
@@ -113,7 +148,7 @@ export default function Activities({ user }) {
   )
 
   // ── Meditation Timer ───────────────────────────────────────────────────────
-  function MeditationTimer({ user }) {
+  function MeditationTimer({ user, onXPEarned }) {
     const [duration, setDuration] = useState(5)
     const [isActive, setIsActive] = useState(false)
     const [timeLeft, setTimeLeft] = useState(duration * 60)
@@ -136,10 +171,11 @@ export default function Activities({ user }) {
             setCompleted(true)
             setSaving(true)
 
-            // Record intervention
             completeIntervention(user?.id, 'meditation')
               .catch(err => console.error('Failed to record meditation intervention:', err))
-              .finally(() => setSaving(false))
+
+            // ✅ Award XP via backend
+            onXPEarned().finally(() => setSaving(false))
 
             return 0
           }
@@ -178,7 +214,7 @@ export default function Activities({ user }) {
         {completed && (
           <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4">
             <p className="text-green-700 font-semibold">
-              {saving ? 'Recording session...' : 'Session complete! Wellness activity recorded.'}
+              {saving ? 'Recording session...' : 'Session complete! +10 XP earned.'}
             </p>
           </div>
         )}
@@ -202,7 +238,7 @@ export default function Activities({ user }) {
   }
 
   // ── Mood Tracker ───────────────────────────────────────────────────────────
-  function MoodTracker({ user }) {
+  function MoodTracker({ user, onXPEarned }) {
     const [selectedMood, setSelectedMood] = useState('')
     const [note, setNote] = useState('')
     const [entries, setEntries] = useState([])
@@ -229,14 +265,15 @@ export default function Activities({ user }) {
     const logMood = async () => {
       if (!selectedMood) return
       setSaving(true)
-
       try {
         const saved = await saveMoodEntry(user?.id, selectedMood, note)
         setEntries(prev => [saved, ...prev])
 
-        // Record intervention
         completeIntervention(user?.id, 'mood')
           .catch(err => console.error('Failed to record mood intervention:', err))
+
+        // ✅ Award XP via backend
+        await onXPEarned()
 
         setLogged(true)
         setSelectedMood('')
@@ -283,7 +320,7 @@ export default function Activities({ user }) {
         {logged && (
           <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
             <p className="text-green-700 font-semibold text-sm">
-              {saving ? 'Saving...' : 'Mood logged and saved!'}
+              {saving ? 'Saving...' : 'Mood logged! +10 XP earned.'}
             </p>
           </div>
         )}
@@ -316,7 +353,7 @@ export default function Activities({ user }) {
   }
 
   // ── Gratitude Journal ──────────────────────────────────────────────────────
-  function GratitudeJournal({ user }) {
+  function GratitudeJournal({ user, onXPEarned }) {
     const [gratitude, setGratitude] = useState('')
     const [entries, setEntries] = useState([])
     const [saving, setSaving] = useState(false)
@@ -334,14 +371,15 @@ export default function Activities({ user }) {
     const addEntry = async () => {
       if (!gratitude.trim()) return
       setSaving(true)
-
       try {
         const saved = await saveGratitudeEntry(user?.id, gratitude)
         setEntries(prev => [saved, ...prev])
 
-        // Record intervention
         completeIntervention(user?.id, 'gratitude')
           .catch(err => console.error('Failed to record gratitude intervention:', err))
+
+        // ✅ Award XP via backend
+        await onXPEarned()
 
         setLogged(true)
         setGratitude('')
@@ -381,7 +419,7 @@ export default function Activities({ user }) {
         {logged && (
           <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
             <p className="text-green-700 font-semibold text-sm">
-              {saving ? 'Saving...' : 'Entry saved!'}
+              {saving ? 'Saving...' : 'Entry saved! +10 XP earned.'}
             </p>
           </div>
         )}
@@ -417,7 +455,7 @@ export default function Activities({ user }) {
   }
 
   // ── Sleep Tracker ──────────────────────────────────────────────────────────
-  function SleepTracker({ user }) {
+  function SleepTracker({ user, onXPEarned }) {
     const [bedtime, setBedtime] = useState('')
     const [wakeTime, setWakeTime] = useState('')
     const [quality, setQuality] = useState('')
@@ -437,14 +475,15 @@ export default function Activities({ user }) {
     const logSleep = async () => {
       if (!bedtime || !wakeTime || !quality) return
       setSaving(true)
-
       try {
         const saved = await saveSleepEntry(user?.id, bedtime, wakeTime, quality)
         setEntries(prev => [saved, ...prev])
 
-        // Record intervention
         completeIntervention(user?.id, 'sleep')
           .catch(err => console.error('Failed to record sleep intervention:', err))
+
+        // ✅ Award XP via backend
+        await onXPEarned()
 
         setLogged(true)
         setBedtime('')
@@ -497,7 +536,7 @@ export default function Activities({ user }) {
         {logged && (
           <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
             <p className="text-green-700 font-semibold text-sm">
-              {saving ? 'Saving...' : 'Sleep logged and saved!'}
+              {saving ? 'Saving...' : 'Sleep logged! +10 XP earned.'}
             </p>
           </div>
         )}
@@ -529,7 +568,7 @@ export default function Activities({ user }) {
   }
 
   // ── Goal Setting ───────────────────────────────────────────────────────────
-  function GoalSetting({ user }) {
+  function GoalSetting({ user, onXPEarned }) {
     const [goal, setGoal] = useState('')
     const [subjectTag, setSubjectTag] = useState('Mathematics')
     const [targetDate, setTargetDate] = useState('')
@@ -553,7 +592,6 @@ export default function Activities({ user }) {
       if (!goal.trim() || !targetDate) { setMsg('Please enter a goal and select a target date.'); return }
       setSaving(true)
       setMsg('')
-
       try {
         const newGoal = await saveGoal(studentId, goal, subjectTag, targetDate)
         setGoals(prev => [newGoal, ...(Array.isArray(prev) ? prev : [])])
@@ -561,11 +599,13 @@ export default function Activities({ user }) {
         setTargetDate('')
         setSubjectTag('Mathematics')
 
-        // Record intervention
         completeIntervention(studentId, 'goal')
           .catch(err => console.error('Failed to record goal intervention:', err))
 
-        setMsg('Goal saved! Wellness activity recorded.')
+        // ✅ Award XP via backend
+        await onXPEarned()
+
+        setMsg('Goal saved! +10 XP earned.')
       } catch {
         setMsg('Failed to save goal. Please try again.')
       } finally {

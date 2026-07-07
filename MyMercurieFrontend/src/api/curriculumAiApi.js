@@ -68,6 +68,14 @@ export async function regenerateContent(id) { return apiPost(`/api/ai/content/${
 
 // ── Student: AI Tools ─────────────────────────────────────────────────────────
 
+export async function getCachedAiContent(taskType, chapterId, topic = null) {
+  const params = new URLSearchParams()
+  if (topic) params.append('topic', topic)
+  const queryStr = params.toString()
+  const url = `/api/ai/content/${taskType}/${chapterId}${queryStr ? '?' + queryStr : ''}`
+  return apiGet(url)
+}
+
 export async function processAiRequest({ task, chapterId, topic, grade, subject, chapter }) {
   return apiPost('/api/ai/process', { task, chapterId, topic, grade, subject, chapter })
 }

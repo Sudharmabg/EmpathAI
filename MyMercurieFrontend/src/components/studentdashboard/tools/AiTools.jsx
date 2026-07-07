@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getPublishedChapters } from '../../../api/curriculumAiApi'
+import { getPublishedChapters, getCachedAiContent } from '../../../api/curriculumAiApi'
 import ToolWrapper from './ToolWrapper'
 import Summary from './Summary'
 import Flashcards from './Flashcards'
@@ -8,7 +8,6 @@ import MockTest from './MockTest'
 
 const TOOL_TABS = [
   { id: 'SUMMARY', label: 'Ready Reckoner', icon: '📋' },
-
   { id: 'FLASHCARDS', label: 'Flashcards', icon: '📇' },
   { id: 'MNEMONIC', label: 'Mnemonic', icon: '🧠' },
   { id: 'MOCK_TEST', label: 'Mock Test', icon: '📋' },
@@ -24,6 +23,44 @@ export default function AiTools({ user }) {
   const [selectedTopic, setSelectedTopic] = useState('')
   const [activeToolTab, setActiveToolTab] = useState('SUMMARY')
   const [loading, setLoading] = useState(true)
+  const [approvedTools, setApprovedTools] = useState([])
+  const [checkingApproval, setCheckingApproval] = useState(false)
+
+  useEffect(() => {
+    if (!selectedChapterId) {
+      setApprovedTools([])
+      return
+    }
+
+    async function checkApprovedTools() {
+      setCheckingApproval(true)
+      const approved = []
+      await Promise.all(
+        TOOL_TABS.map(async (tab) => {
+          try {
+            const res = await getCachedAiContent(tab.id, selectedChapterId, selectedTopic || null)
+            if (res && !res.pendingApproval) {
+              approved.push(tab.id)
+            }
+          } catch (e) {
+            // Not found/not approved
+          }
+        })
+      )
+      setApprovedTools(approved)
+      setCheckingApproval(false)
+
+      if (approved.length > 0) {
+        if (!approved.includes(activeToolTab)) {
+          setActiveToolTab(approved[0])
+        }
+      } else {
+        setActiveToolTab('')
+      }
+    }
+
+    checkApprovedTools()
+  }, [selectedChapterId, selectedTopic])
 
   useEffect(() => {
     async function loadData() {
@@ -125,9 +162,9 @@ export default function AiTools({ user }) {
       </div>
 
       {/* Tabs */}
-      {selectedChapter && (
+      {selectedChapter && approvedTools.length > 0 && (
         <div className="flex border-b border-gray-200 bg-white px-4 rounded-xl border-2 border-purple-50/50 shadow-sm overflow-x-auto">
-          {TOOL_TABS.map(tab => {
+          {TOOL_TABS.filter(tab => approvedTools.includes(tab.id)).map(tab => {
             return (
               <button
                 key={tab.id}
@@ -150,6 +187,15 @@ export default function AiTools({ user }) {
         {!selectedChapter ? (
           <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center text-gray-400">
             Select a subject and chapter to load learning aids.
+          </div>
+        ) : checkingApproval ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border-2 border-purple-50/50 shadow-sm">
+            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="mt-4 text-gray-500 font-medium animate-pulse">Checking approved study tools...</p>
+          </div>
+        ) : approvedTools.length === 0 ? (
+          <div className="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center text-gray-400">
+            No study tools have been approved for this chapter yet.
           </div>
         ) : (
           <ToolWrapper

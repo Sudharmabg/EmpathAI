@@ -1,9 +1,7 @@
 package com.mymercurie.wellness.controller;
 
-import com.mymercurie.wellness.entity.GratitudeEntry;
 import com.mymercurie.wellness.entity.MoodEntry;
 import com.mymercurie.wellness.entity.SleepEntry;
-import com.mymercurie.wellness.repository.GratitudeEntryRepository;
 import com.mymercurie.wellness.repository.MoodEntryRepository;
 import com.mymercurie.wellness.repository.SleepEntryRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +19,6 @@ import java.util.Map;
 public class WellnessController {
 
     private final MoodEntryRepository moodRepo;
-    private final GratitudeEntryRepository gratitudeRepo;
     private final SleepEntryRepository sleepRepo;
 
     // ── MOOD ─────────────────────────────────────────────────────────────────
@@ -54,32 +51,7 @@ public class WellnessController {
         return ResponseEntity.status(HttpStatus.CREATED).body(moodRepo.save(entry));
     }
 
-    // ── GRATITUDE ────────────────────────────────────────────────────────────
 
-    @GetMapping("/gratitude/{studentId}")
-    public ResponseEntity<List<GratitudeEntry>> getGratitudeEntries(@PathVariable Long studentId) {
-        return ResponseEntity.ok(gratitudeRepo.findByStudentIdOrderByLoggedAtDesc(studentId));
-    }
-
-    @PostMapping("/gratitude")
-    public ResponseEntity<GratitudeEntry> saveGratitude(@RequestBody Map<String, Object> body) {
-        Long studentId = Long.valueOf(body.get("studentId").toString());
-        String text = (String) body.get("entryText");
-
-        GratitudeEntry entry = GratitudeEntry.builder()
-                .studentId(studentId)
-                .entryText(text)
-                .loggedAt(LocalDateTime.now())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(gratitudeRepo.save(entry));
-    }
-
-    @DeleteMapping("/gratitude/{id}")
-    public ResponseEntity<Void> deleteGratitude(@PathVariable Long id) {
-        gratitudeRepo.deleteById(id);
-        return ResponseEntity.noContent().build();
-    }
 
     // ── SLEEP ────────────────────────────────────────────────────────────────
 

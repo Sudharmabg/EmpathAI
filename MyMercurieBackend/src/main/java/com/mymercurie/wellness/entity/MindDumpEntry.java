@@ -7,15 +7,15 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "gratitude_entries", indexes = {
-        @Index(name = "idx_gratitude_student", columnList = "student_id")
+@Table(name = "mind_dump_entries", indexes = {
+        @Index(name = "idx_minddump_student", columnList = "student_id")
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class GratitudeEntry extends BaseEntity {
+public class MindDumpEntry extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -23,6 +23,9 @@ public class GratitudeEntry extends BaseEntity {
 
     @Column(name = "student_id", nullable = false)
     private Long studentId;
+
+    @Column(name = "prompt_text", length = 500)
+    private String promptText;
 
     @Column(name = "entry_text", nullable = false, columnDefinition = "TEXT")
     private String entryText;

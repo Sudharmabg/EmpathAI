@@ -217,7 +217,7 @@ export default function Dashboard({ user, onLogout }) {
           {/* Logo */}
           <div className="flex items-center space-x-3 group cursor-pointer">
             <div className="w-9 h-9 bg-purple-200 rounded-xl flex items-center justify-center shadow-lg shadow-purple-200/50 group-hover:rotate-6 transition-transform">
-              <span className="text-dark-navy font-black text-lg">E</span>
+              <span className="text-dark-navy font-black text-lg">M</span>
             </div>
             <h1 className="text-xl font-black text-black tracking-tight">MyMercurie</h1>
           </div>

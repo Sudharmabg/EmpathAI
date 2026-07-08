@@ -167,7 +167,7 @@ async def get_status(chapter_id: int):
 async def delete_embeddings(chapter_id: int):
     """Delete all embeddings for a chapter."""
     try:
-        from curriculum.chroma_store import delete_by_chapter
+        from curriculum.vector_store import delete_by_chapter
         delete_by_chapter(chapter_id)
         return {"status": "success", "message": f"Deleted embeddings for chapter {chapter_id}"}
     except Exception as e:

@@ -31,13 +31,18 @@ public class AssessmentReportService {
 
     private final AssessmentReportRepository reportRepo;
     private final AnswerOptionService answerOptionService;
-    private final ChromaDBService chromaDBService;
     private final AssessmentReportHistoryRepository reportHistoryRepo;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${openai.api.key:}")
     private String openaiApiKey;
+
+    @Value("${chatbot.ai-service.url}")
+    private String aiServiceUrl;
+
+    @Value("${chatbot.ai-service.api-key}")
+    private String aiServiceApiKey;
 
     private static final String OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
     private static final String MODEL = "gpt-4o";
@@ -114,8 +119,8 @@ public class AssessmentReportService {
         AssessmentReport saved = reportRepo.save(report);
         log.info("Saved assessment report id={} for student={}", saved.getId(), saved.getStudentId());
 
-        // Async ChromaDB sync
-        syncToChromaAsync(saved);
+        // Async pgvector sync via Python AI service
+        syncToPgvectorAsync(saved);
 
         return toResponse(saved);
     }
@@ -356,10 +361,10 @@ public class AssessmentReportService {
         }
     }
 
-    // ── ChromaDB Sync (async) ─────────────────────────────────────────────────
+    // ── pgvector Sync via Python AI Service (async) ───────────────────────────
 
     @Async
-    public void syncToChromaAsync(AssessmentReport report) {
+    public void syncToPgvectorAsync(AssessmentReport report) {
         try {
             Map<String, String> metadata = new LinkedHashMap<>();
             metadata.put("studentId",   report.getStudentId());
@@ -383,15 +388,26 @@ public class AssessmentReportService {
             );
 
             String docId = "report_" + report.getId();
-            chromaDBService.upsertDocument(docId, document, metadata);
+
+            // Call Python AI service to embed and upsert into pgvector
+            String url = aiServiceUrl + "/internal/profiles/upsert";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Key", aiServiceApiKey);
+
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("doc_id",   docId);
+            body.put("document", document);
+            body.put("metadata", metadata);
+
+            restTemplate.postForEntity(url, new HttpEntity<>(body, headers), Map.class);
 
             report.setChromaSynced(true);
             report.setChromaDocId(docId);
             reportRepo.save(report);
-            log.info("ChromaDB sync done for report id={}", report.getId());
+            log.info("pgvector sync done for report id={}", report.getId());
         } catch (Exception e) {
-            log.error("ChromaDB sync failed for report id={}: {}", report.getId(), e.getMessage());
-
+            log.error("pgvector sync failed for report id={}: {}", report.getId(), e.getMessage());
         }
     }
 
@@ -482,7 +498,7 @@ public class AssessmentReportService {
         report.setEditedSummaryText(editedText);
         report.setEditedBy(editedBy);
         AssessmentReport saved = reportRepo.save(report);
-        syncToChromaAsync(saved);
+        syncToPgvectorAsync(saved);
         return toResponse(saved);
     }
 

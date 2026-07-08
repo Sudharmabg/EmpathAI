@@ -4,7 +4,6 @@ import com.mymercurie.analytics.dto.AnalysisRequest;
 import com.mymercurie.analytics.dto.AnalysisResult;
 import com.mymercurie.assessment.entity.AssessmentResponse;
 import com.mymercurie.assessment.repository.AssessmentResponseRepository;
-import com.mymercurie.assessment.service.ChromaDBService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,14 +21,19 @@ public class AIAnalysisService {
     @Value("${openai.api.key}")
     private String openAiApiKey;
 
-    private final ChromaDBService chromaDBService;
+    @Value("${chatbot.ai-service.url}")
+    private String aiServiceUrl;
+
+    @Value("${chatbot.ai-service.api-key}")
+    private String aiServiceApiKey;
+
     private final AssessmentResponseRepository assessmentResponseRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AnalysisResult analyzeStudentAnswers(AnalysisRequest request) {
 
-        // Step 1 — Fetch all answers for this student from MySQL
+        // Step 1 — Fetch all answers for this student from PostgreSQL
         List<AssessmentResponse> responses = assessmentResponseRepository
                 .findByStudentId(request.getStudentId());
 
@@ -41,7 +45,7 @@ public class AIAnalysisService {
             );
         }
 
-        // Step 2 — Build combined answers text for ChromaDB search
+        // Step 2 — Build combined answers text for vector search
         StringBuilder answersText = new StringBuilder();
         for (AssessmentResponse r : responses) {
             String qText = r.getQuestion() != null ? r.getQuestion().getQuestionText() : "";
@@ -50,9 +54,8 @@ public class AIAnalysisService {
                     .append("\n");
         }
 
-        // Step 3 — Get relevant overviews from ChromaDB
-        List<String> overviews = chromaDBService
-                .getRelevantOverviews(answersText.toString(), 5);
+        // Step 3 — Get relevant overviews from pgvector via the Python AI service
+        List<String> overviews = getRelevantOverviewsFromAiService(answersText.toString(), 5);
 
         // Step 4 — Build LLM prompt
         StringBuilder prompt = new StringBuilder();
@@ -117,4 +120,35 @@ public class AIAnalysisService {
             );
         }
     }
-}
+
+    // ── Private: call Python AI service for psychologist overviews ────────────
+
+    private List<String> getRelevantOverviewsFromAiService(String answersText, int topN) {
+        try {
+            String url = aiServiceUrl + "/internal/overviews/search";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Key", aiServiceApiKey);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("query", answersText);
+            body.put("top_n", topN);
+
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    url, new HttpEntity<>(body, headers), Map.class
+            );
+
+            if (response.getBody() != null) {
+                List<String> documents = (List<String>) response.getBody().get("documents");
+                if (documents != null) {
+                    log.info("pgvector overview search returned {} results", documents.size());
+                    return documents;
+                }
+            }
+        } catch (Exception e) {
+            log.error("pgvector overview search failed: {}", e.getMessage(), e);
+        }
+        return new ArrayList<>();
+    }
+}

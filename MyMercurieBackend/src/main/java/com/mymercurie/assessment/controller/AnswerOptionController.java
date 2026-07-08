@@ -9,8 +9,10 @@ import com.mymercurie.assessment.service.AssessmentReportService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Map;
@@ -28,7 +30,13 @@ public class AnswerOptionController {
 
     private final AnswerOptionService answerOptionService;
     private final AssessmentReportService reportService;
-    private final com.mymercurie.assessment.service.ChromaDBService chromaDBService;
+    private final RestTemplate restTemplate;
+
+    @Value("${chatbot.ai-service.url}")
+    private String aiServiceUrl;
+
+    @Value("${chatbot.ai-service.api-key}")
+    private String aiServiceApiKey;
 
     // ── Answer Options ─────────────────────────────────────────────────────────
 
@@ -145,9 +153,31 @@ public class AnswerOptionController {
         }
 
         log.info("searchProfiles query='{}' topN={} class={}", query, topN, className);
-        List<Map<String, Object>> results =
-                chromaDBService.searchStudentProfiles(query, topN, whereFilter);
-        return ResponseEntity.ok(results);
+
+        // Call Python AI service for pgvector semantic search
+        try {
+            String url = aiServiceUrl + "/internal/profiles/search";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Key", aiServiceApiKey);
+
+            Map<String, Object> reqBody = new java.util.LinkedHashMap<>();
+            reqBody.put("query", query);
+            reqBody.put("top_n", topN);
+            if (className != null && !className.isBlank()) {
+                reqBody.put("class_name", className);
+            }
+
+            ResponseEntity<List> response = restTemplate.postForEntity(
+                    url, new HttpEntity<>(reqBody, headers), List.class
+            );
+
+            List<Map<String, Object>> results = response.getBody() != null ? response.getBody() : List.of();
+            return ResponseEntity.ok(results);
+        } catch (Exception e) {
+            log.error("searchProfiles via pgvector failed: {}", e.getMessage(), e);
+            return ResponseEntity.ok(List.of());
+        }
     }
 
 

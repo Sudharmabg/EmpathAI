@@ -378,11 +378,23 @@ public class AssessmentReportService {
                     ? report.getEditedSummaryText()
                     : (report.getSummaryText() != null ? report.getSummaryText() : "");
 
+            String answersSummaryText = "";
+            try {
+                StringBuilder sb = new StringBuilder();
+                List<Map<String, String>> answers = objectMapper.readValue(report.getAnswersJson(), List.class);
+                for (Map<String, String> a : answers) {
+                    sb.append("Question: ").append(a.get("questionText"))
+                      .append(" | Student answered: ").append(a.get("answer")).append("\n");
+                }
+                answersSummaryText = sb.toString();
+            } catch (Exception ignored) {}
+
             String document = String.format(
-                    "Student: %s | Class: %s | Date: %s\n\n%s\n\n%s",
+                    "Student: %s | Class: %s | Date: %s\n\nStudent Answers:\n%s\nPsychologist Evaluation:\nSummary: %s\n%s",
                     report.getStudentName(),
                     report.getClassName(),
                     report.getSessionDate(),
+                    answersSummaryText,
                     summaryToSync,
                     report.getBulletPoints() != null ? report.getBulletPoints() : ""
             );

@@ -6,7 +6,7 @@ import com.mymercurie.assessment.dto.ResponseRequest;
 import com.mymercurie.assessment.dto.GroupResponse;
 import com.mymercurie.assessment.dto.QuestionResponse;
 import com.mymercurie.assessment.dto.ResponseDto;
-import com.mymercurie.assessment.service.AssessmentReportService;   // ← ADD THIS IMPORT
+import com.mymercurie.assessment.service.AssessmentReportService;
 import com.mymercurie.assessment.service.IAssessmentService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -15,6 +15,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,6 +34,13 @@ public class AssessmentController {
 
     private final IAssessmentService assessmentService;
     private final AssessmentReportService reportService;
+    private final RestTemplate restTemplate;
+
+    @Value("${chatbot.ai-service.url}")
+    private String aiServiceUrl;
+
+    @Value("${chatbot.ai-service.api-key}")
+    private String aiServiceApiKey;
 
     // ── Groups ────────────────────────────────────────────────────────────────
 
@@ -383,6 +393,88 @@ public class AssessmentController {
             }
         } catch (Exception ignored) {}
         return "unknown";
+    }
+
+    // ── Psychologist Overviews (Knowledge Base) ──────────────────────────────────
+
+    @GetMapping("/assessment/overviews")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','admin')")
+    public ResponseEntity<List<Map<String, Object>>> getOverviews() {
+        logger.info("getOverviews requested");
+        try {
+            String url = aiServiceUrl + "/internal/overviews";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Key", aiServiceApiKey);
+
+            ResponseEntity<List> response = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(headers), List.class
+            );
+            return ResponseEntity.ok((List<Map<String, Object>>) response.getBody());
+        } catch (Exception e) {
+            logger.error("Failed to get psychologist overviews from AI Service: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/assessment/overviews/batch-upsert")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','admin')")
+    public ResponseEntity<Map<String, Object>> batchUpsertOverviews(@RequestBody Map<String, Object> request) {
+        logger.info("batchUpsertOverviews requested");
+        try {
+            String url = aiServiceUrl + "/internal/overviews/batch-upsert";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Key", aiServiceApiKey);
+
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    url, new HttpEntity<>(request, headers), Map.class
+            );
+            return ResponseEntity.ok((Map<String, Object>) response.getBody());
+        } catch (Exception e) {
+            logger.error("Failed to batch upsert overviews: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @DeleteMapping("/assessment/overviews/clear")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','admin')")
+    public ResponseEntity<Map<String, Object>> clearOverviews() {
+        logger.info("clearOverviews requested");
+        try {
+            String url = aiServiceUrl + "/internal/overviews/clear";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Key", aiServiceApiKey);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    url, HttpMethod.DELETE, new HttpEntity<>(headers), Map.class
+            );
+            return ResponseEntity.ok((Map<String, Object>) response.getBody());
+        } catch (Exception e) {
+            logger.error("Failed to clear overviews: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @DeleteMapping("/assessment/overviews/{docId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','admin')")
+    public ResponseEntity<Map<String, Object>> deleteOverview(@PathVariable String docId) {
+        logger.info("deleteOverview requested for docId={}", docId);
+        try {
+            String url = aiServiceUrl + "/internal/overviews/" + docId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Key", aiServiceApiKey);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    url, HttpMethod.DELETE, new HttpEntity<>(headers), Map.class
+            );
+            return ResponseEntity.ok((Map<String, Object>) response.getBody());
+        } catch (Exception e) {
+            logger.error("Failed to delete overview docId={}: {}", docId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
 }

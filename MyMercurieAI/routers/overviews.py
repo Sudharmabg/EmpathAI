@@ -23,6 +23,10 @@ from curriculum.vector_store import (
     search_psychologist_overviews,
     upsert_assessment_profile,
     search_assessment_profiles,
+    get_all_psychologist_overviews,
+    clear_all_psychologist_overviews,
+    delete_psychologist_overview,
+    upsert_psychologist_overview,
 )
 
 logger = logging.getLogger("overviews_router")
@@ -67,6 +71,14 @@ class ProfileSearchResult(BaseModel):
     metadata: dict
     similarity: float
 
+class OverviewUpsertItem(BaseModel):
+    doc_id: str
+    document: str
+    metadata: dict
+
+
+class OverviewBatchUpsertRequest(BaseModel):
+    items: list[OverviewUpsertItem]
 
 # ── Helper: embed text with OpenAI ───────────────────────────────────────────
 
@@ -169,3 +181,70 @@ def search_profiles(req: ProfileSearchRequest):
     except Exception as e:
         logger.error("profile search failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Profile search failed: {str(e)}")
+
+
+@router.get(
+    "/overviews",
+    dependencies=[Depends(verify_internal_key)],
+)
+def list_overviews():
+    """Retrieve all psychologist overviews from pgvector."""
+    try:
+        results = get_all_psychologist_overviews()
+        return results
+    except Exception as e:
+        logger.error("Failed to list psychologist overviews: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/overviews/batch-upsert",
+    dependencies=[Depends(verify_internal_key)],
+)
+def batch_upsert_overviews(req: OverviewBatchUpsertRequest):
+    """Embed and upsert multiple psychologist overviews in batch."""
+    try:
+        logger.info("Batch upserting %d psychologist overviews...", len(req.items))
+        for item in req.items:
+            embedding = _embed(item.document)
+            upsert_psychologist_overview(
+                doc_id=item.doc_id,
+                document=item.document,
+                embedding=embedding,
+                metadata=item.metadata,
+            )
+        logger.info("Batch upsert complete.")
+        return {"status": "ok", "count": len(req.items)}
+    except Exception as e:
+        logger.error("Failed to batch upsert psychologist overviews: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete(
+    "/overviews/clear",
+    dependencies=[Depends(verify_internal_key)],
+)
+def clear_overviews():
+    """Delete all psychologist overviews from pgvector."""
+    try:
+        clear_all_psychologist_overviews()
+        logger.info("Cleared all psychologist overviews from database.")
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error("Failed to clear psychologist overviews: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete(
+    "/overviews/{doc_id}",
+    dependencies=[Depends(verify_internal_key)],
+)
+def delete_overview(doc_id: str):
+    """Delete a specific psychologist overview by doc_id."""
+    try:
+        delete_psychologist_overview(doc_id)
+        logger.info("Deleted psychologist overview doc_id=%s", doc_id)
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error("Failed to delete psychologist overview: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

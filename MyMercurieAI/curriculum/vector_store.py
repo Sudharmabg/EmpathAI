@@ -362,3 +362,52 @@ def search_assessment_profiles(
             ]
     finally:
         get_pool().putconn(conn)
+
+
+def get_all_psychologist_overviews() -> list[dict]:
+    """Retrieve all psychologist overviews from the database."""
+    conn = get_pool().getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT doc_id, document, metadata
+                FROM psychologist_overviews
+                ORDER BY doc_id
+            """)
+            rows = cur.fetchall()
+            return [
+                {
+                    "doc_id":   r[0],
+                    "document": r[1],
+                    "metadata": r[2] or {}
+                }
+                for r in rows
+            ]
+    finally:
+        get_pool().putconn(conn)
+
+
+def clear_all_psychologist_overviews() -> None:
+    """Delete all psychologist overviews from the database."""
+    conn = get_pool().getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM psychologist_overviews")
+        conn.commit()
+    finally:
+        get_pool().putconn(conn)
+
+
+def delete_psychologist_overview(doc_id: str) -> None:
+    """Delete a specific psychologist overview by doc_id."""
+    conn = get_pool().getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM psychologist_overviews WHERE doc_id = %s",
+                (doc_id,)
+            )
+        conn.commit()
+    finally:
+        get_pool().putconn(conn)
+

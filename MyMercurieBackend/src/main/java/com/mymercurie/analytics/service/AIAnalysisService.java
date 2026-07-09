@@ -57,8 +57,20 @@ public class AIAnalysisService {
         // Step 3 — Get relevant overviews from pgvector via the Python AI service
         List<String> overviews = getRelevantOverviewsFromAiService(answersText.toString(), 5);
 
+        // Step 3b — Get historically similar student profiles (few-shot RAG examples)
+        List<String> similarProfiles = getSimilarProfilesFromAiService(answersText.toString(), 1);
+
         // Step 4 — Build LLM prompt
         StringBuilder prompt = new StringBuilder();
+        if (!similarProfiles.isEmpty()) {
+            prompt.append("FEW-SHOT EXAMPLES OF PSYCHOLOGIST EVALUATIONS FOR REFERENCE:\n");
+            for (int i = 0; i < similarProfiles.size(); i++) {
+                prompt.append("--- EXAMPLE ").append(i + 1).append(" ---\n")
+                      .append(similarProfiles.get(i)).append("\n\n");
+            }
+            prompt.append("--------------------------------------------------\n\n");
+        }
+
         prompt.append("PSYCHOLOGIST OVERVIEWS:\n");
         for (int i = 0; i < overviews.size(); i++) {
             prompt.append("[").append(i + 1).append("] ")
@@ -151,4 +163,39 @@ public class AIAnalysisService {
         }
         return new ArrayList<>();
     }
+
+    private List<String> getSimilarProfilesFromAiService(String answersText, int topN) {
+        try {
+            String url = aiServiceUrl + "/internal/profiles/search";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-API-Key", aiServiceApiKey);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("query", answersText);
+            body.put("top_n", topN);
+
+            ResponseEntity<List> response = restTemplate.postForEntity(
+                    url, new HttpEntity<>(body, headers), List.class
+            );
+
+            if (response.getBody() != null) {
+                List<Map<String, Object>> results = (List<Map<String, Object>>) response.getBody();
+                List<String> documents = new ArrayList<>();
+                for (Map<String, Object> r : results) {
+                    String doc = (String) r.get("document");
+                    if (doc != null) {
+                        documents.add(doc);
+                    }
+                }
+                log.info("pgvector profiles search returned {} results", documents.size());
+                return documents;
+            }
+        } catch (Exception e) {
+            log.error("pgvector profiles search failed: {}", e.getMessage(), e);
+        }
+        return new ArrayList<>();
+    }
+
 }

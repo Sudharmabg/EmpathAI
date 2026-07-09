@@ -2,6 +2,7 @@ package com.mymercurie.schedule.service.impl;
 
 import com.mymercurie.schedule.dto.*;
 import com.mymercurie.schedule.entity.StudentSchedulePreference;
+import com.mymercurie.schedule.entity.StudyIntensity;
 import com.mymercurie.schedule.entity.ScheduleTask;
 import com.mymercurie.schedule.repository.StudentSchedulePreferenceRepository;
 import com.mymercurie.schedule.repository.ScheduleTaskRepository;
@@ -50,6 +51,11 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
             "NIGHT",     new int[]{21, 23}
     );
 
+    // NEW: Default study days if none provided
+    private static final Set<String> DEFAULT_STUDY_DAYS = Set.of(
+            "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"
+    );
+
     // ─────────────────────────────────────────────────────────────────────────
     // SAVE PREFERENCES
     // ─────────────────────────────────────────────────────────────────────────
@@ -78,11 +84,55 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
             preference.setLastRelaxActivity(request.getLastRelaxActivity());
         }
 
+        // ═════════════════════════════════════════════════════════════════════
+        // NEW: Save preferred study days (JSON string)
+        // ═════════════════════════════════════════════════════════════════════
+        try {
+            Set<String> days = (request.getPreferredStudyDays() != null
+                    && !request.getPreferredStudyDays().isEmpty())
+                    ? normalizeDays(request.getPreferredStudyDays())
+                    : DEFAULT_STUDY_DAYS;
+            preference.setPreferredStudyDays(objectMapper.writeValueAsString(days));
+        } catch (Exception e) {
+            log.error("Failed to serialize preferred study days", e);
+            preference.setPreferredStudyDays(
+                    "[\"MONDAY\",\"TUESDAY\",\"WEDNESDAY\",\"THURSDAY\",\"FRIDAY\"]");
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        // NEW: Save daily study target hours (clamped 1–12)
+        // ═════════════════════════════════════════════════════════════════════
+        Integer hours = request.getDailyStudyTargetHours();
+        if (hours == null) hours = 4;
+        if (hours < 1) hours = 1;
+        if (hours > 12) hours = 12;
+        preference.setDailyStudyTargetHours(hours);
+
+        // ═════════════════════════════════════════════════════════════════════
+        // NEW: Save study intensity
+        // ═════════════════════════════════════════════════════════════════════
+        try {
+            String intensity = request.getStudyIntensity();
+            preference.setStudyIntensity(
+                    (intensity != null && !intensity.isBlank())
+                            ? StudyIntensity.valueOf(intensity.toUpperCase())
+                            : StudyIntensity.MODERATE
+            );
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid study intensity '{}', defaulting to MODERATE",
+                    request.getStudyIntensity());
+            preference.setStudyIntensity(StudyIntensity.MODERATE);
+        }
+
         StudentSchedulePreference saved = preferenceRepository.save(preference);
 
-        log.info("Preferences saved for studentId={} preferredTime={} busySlots={}",
-                request.getStudentId(), request.getPreferredStudyTime(),
-                request.getBusySlots() != null ? request.getBusySlots().size() : 0);
+        log.info("Preferences saved for studentId={} preferredTime={} busySlots={} intensity={} hours={} days={}",
+                request.getStudentId(),
+                request.getPreferredStudyTime(),
+                request.getBusySlots() != null ? request.getBusySlots().size() : 0,
+                saved.getStudyIntensity(),
+                saved.getDailyStudyTargetHours(),
+                request.getPreferredStudyDays() != null ? request.getPreferredStudyDays().size() : 0);
 
         return toResponse(saved);
     }
@@ -102,6 +152,9 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
                     .studentId(studentId)
                     .onboardingComplete(false)
                     .busySlots(Collections.emptyList())
+                    .preferredStudyDays(DEFAULT_STUDY_DAYS)          // NEW
+                    .dailyStudyTargetHours(4)                        // NEW
+                    .studyIntensity(StudyIntensity.MODERATE.name())  // NEW
                     .build();
         }
 
@@ -404,11 +457,48 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
         }
     }
 
+    // ═════════════════════════════════════════════════════════════════════════
+    // NEW: Deserialize preferred study days
+    // ═════════════════════════════════════════════════════════════════════════
+    private Set<String> deserializeStudyDays(String json) {
+        if (json == null || json.isBlank() || json.equals("[]")) {
+            return new HashSet<>(DEFAULT_STUDY_DAYS);
+        }
+        try {
+            return objectMapper.readValue(json,
+                    new TypeReference<Set<String>>() {});
+        } catch (Exception e) {
+            log.error("Failed to deserialize preferred study days", e);
+            return new HashSet<>(DEFAULT_STUDY_DAYS);
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // NEW: Normalize day strings against DayOfWeek enum
+    // ═════════════════════════════════════════════════════════════════════════
+    private Set<String> normalizeDays(Set<String> days) {
+        Set<String> normalized = new HashSet<>();
+        for (String day : days) {
+            if (day != null && !day.isBlank()) {
+                try {
+                    normalized.add(DayOfWeek.valueOf(day.toUpperCase()).name());
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid day skipped: {}", day);
+                }
+            }
+        }
+        return normalized.isEmpty() ? new HashSet<>(DEFAULT_STUDY_DAYS) : normalized;
+    }
+
     private String minsToTime(int totalMins) {
         int h = totalMins / 60;
         int m = totalMins % 60;
         return String.format("%02d:%02d", h, m);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ENTITY → RESPONSE  (updated to include new fields)
+    // ─────────────────────────────────────────────────────────────────────────
 
     private StudentSchedulePreferenceResponse toResponse(StudentSchedulePreference pref) {
         return StudentSchedulePreferenceResponse.builder()
@@ -418,6 +508,16 @@ public class WeekScheduleServiceImpl implements IWeekScheduleService {
                 .busySlots(deserializeBusySlots(pref.getBusySlots()))
                 .onboardingComplete(pref.getOnboardingComplete())
                 .lastRelaxActivity(pref.getLastRelaxActivity())
+
+                // ═════════════════════════════════════════════════════════════
+                // NEW: Include Study Goals fields
+                // ═════════════════════════════════════════════════════════════
+                .preferredStudyDays(deserializeStudyDays(pref.getPreferredStudyDays()))
+                .dailyStudyTargetHours(pref.getDailyStudyTargetHours() != null
+                        ? pref.getDailyStudyTargetHours() : 4)
+                .studyIntensity(pref.getStudyIntensity() != null
+                        ? pref.getStudyIntensity().name()
+                        : StudyIntensity.MODERATE.name())
                 .build();
     }
 

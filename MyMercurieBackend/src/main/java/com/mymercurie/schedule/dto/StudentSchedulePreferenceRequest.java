@@ -3,6 +3,7 @@ package com.mymercurie.schedule.dto;
 import lombok.*;
 
 import java.util.List;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -12,12 +13,12 @@ import java.util.List;
 public class StudentSchedulePreferenceRequest {
 
     private Long studentId;
-
-    // "MORNING" | "AFTERNOON" | "EVENING" | "NIGHT"
     private String preferredStudyTime;
-
-    // List of busy slots the student has marked
     private List<BusySlotDTO> busySlots;
-
     private String lastRelaxActivity;
+
+    // NEW fields — Study Goals
+    private Set<String> preferredStudyDays;
+    private Integer dailyStudyTargetHours;
+    private String studyIntensity;
 }

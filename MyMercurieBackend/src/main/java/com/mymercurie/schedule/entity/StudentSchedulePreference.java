@@ -25,7 +25,6 @@ public class StudentSchedulePreference extends BaseEntity {
     private String preferredStudyTime;
 
     // JSON array string — busy slots per day
-    // e.g. [{"day":"Monday","startTime":"16:00","endTime":"18:00","reason":"Football practice"}]
     @Column(name = "busy_slots", columnDefinition = "TEXT")
     private String busySlots;
 
@@ -35,4 +34,21 @@ public class StudentSchedulePreference extends BaseEntity {
     @Builder.Default
     @Column(name = "onboarding_complete", nullable = false)
     private Boolean onboardingComplete = false;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // NEW FIELDS — Study Goals
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // JSON array string — e.g. ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY"]
+    @Column(name = "preferred_study_days", columnDefinition = "TEXT")
+    private String preferredStudyDays;
+
+    @Builder.Default
+    @Column(name = "daily_study_target_hours", nullable = false)
+    private Integer dailyStudyTargetHours = 4;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "study_intensity", nullable = false, length = 20)
+    private StudyIntensity studyIntensity = StudyIntensity.MODERATE;
 }

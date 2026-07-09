@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
     addTask, editTask, deleteTask, toggleTaskComplete, getRecommendations,
     savePreferences, getPreferences, getMonthTasks
@@ -16,7 +16,9 @@ import {
     XMarkIcon, ArrowPathIcon, PaperAirplaneIcon,
     PencilSquareIcon, ChatBubbleLeftIcon, Cog6ToothIcon,
     MicrophoneIcon, CheckIcon, MagnifyingGlassIcon,
+    BookOpenIcon, HeartIcon, ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline'
+import { BookOpenIcon as BookOpenSolid } from '@heroicons/react/24/solid'
 import chatService from '../../../services/chatService'
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -60,7 +62,7 @@ function firstOfMonth(d) {
 }
 function monthGridDates(viewMonth) {
     const first = firstOfMonth(viewMonth)
-    const startWeekday = (first.getDay() + 6) % 7 // 0 = Monday
+    const startWeekday = (first.getDay() + 6) % 7
     const gridStart = addDays(first, -startWeekday)
     return Array.from({ length: 42 }, (_, i) => {
         const d = addDays(gridStart, i)
@@ -85,26 +87,23 @@ function TimeSelect({ value, onChange, label, is24h }) {
         const toM = (v) => { if (!v) return '00'; return v.split(':')[1] }
         const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
         const minutes = ['00','05','10','15','20','25','30','35','40','45','50','55']
-        const emit = (h, m) => {
-            onChange(`${h}:${m}`)
-        }
-        const sel = "flex-1 px-2 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm font-bold text-gray-700 bg-white appearance-none text-center cursor-pointer"
+        const emit = (h, m) => onChange(`${h}:${m}`)
+        const sel = "flex-1 px-2 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none text-sm font-bold text-gray-700 bg-white appearance-none text-center cursor-pointer"
         return (
             <div>
                 {label && <label className="block text-sm font-bold text-gray-700 mb-1">{label}</label>}
                 <div className="flex gap-1.5 items-center">
-                    <select value={toH(value)}  onChange={e => emit(e.target.value, toM(value))} className={sel}>{hours.map(h => <option key={h}>{h}</option>)}</select>
+                    <select value={toH(value)} onChange={e => emit(e.target.value, toM(value))} className={sel}>{hours.map(h => <option key={h}>{h}</option>)}</select>
                     <span className="text-gray-400 font-black text-sm">:</span>
-                    <select value={toM(value)}  onChange={e => emit(toH(value), e.target.value)} className={sel}>{minutes.map(m => <option key={m}>{m}</option>)}</select>
+                    <select value={toM(value)} onChange={e => emit(toH(value), e.target.value)} className={sel}>{minutes.map(m => <option key={m}>{m}</option>)}</select>
                 </div>
             </div>
         )
     }
-
-    const toH  = (v) => { if (!v) return '12'; const [h] = v.split(':').map(Number); return h % 12 === 0 ? '12' : String(h % 12) }
-    const toM  = (v) => { if (!v) return '00'; return v.split(':')[1] }
+    const toH = (v) => { if (!v) return '12'; const [h] = v.split(':').map(Number); return h % 12 === 0 ? '12' : String(h % 12) }
+    const toM = (v) => { if (!v) return '00'; return v.split(':')[1] }
     const toAP = (v) => { if (!v) return 'AM'; const [h] = v.split(':').map(Number); return h >= 12 ? 'PM' : 'AM' }
-    const hours   = ['12','1','2','3','4','5','6','7','8','9','10','11']
+    const hours = ['12','1','2','3','4','5','6','7','8','9','10','11']
     const minutes = ['00','05','10','15','20','25','30','35','40','45','50','55']
     const emit = (h, m, ap) => {
         let hour = parseInt(h)
@@ -112,14 +111,14 @@ function TimeSelect({ value, onChange, label, is24h }) {
         if (ap === 'AM' && hour === 12) hour = 0
         onChange(`${String(hour).padStart(2,'0')}:${m}`)
     }
-    const sel = "flex-1 px-2 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm font-bold text-gray-700 bg-white appearance-none text-center cursor-pointer"
+    const sel = "flex-1 px-2 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none text-sm font-bold text-gray-700 bg-white appearance-none text-center cursor-pointer"
     return (
         <div>
             {label && <label className="block text-sm font-bold text-gray-700 mb-1">{label}</label>}
             <div className="flex gap-1.5 items-center">
-                <select value={toH(value)}  onChange={e => emit(e.target.value, toM(value), toAP(value))} className={sel}>{hours.map(h => <option key={h}>{h}</option>)}</select>
+                <select value={toH(value)} onChange={e => emit(e.target.value, toM(value), toAP(value))} className={sel}>{hours.map(h => <option key={h}>{h}</option>)}</select>
                 <span className="text-gray-400 font-black text-sm">:</span>
-                <select value={toM(value)}  onChange={e => emit(toH(value), e.target.value, toAP(value))} className={sel}>{minutes.map(m => <option key={m}>{m}</option>)}</select>
+                <select value={toM(value)} onChange={e => emit(toH(value), e.target.value, toAP(value))} className={sel}>{minutes.map(m => <option key={m}>{m}</option>)}</select>
                 <select value={toAP(value)} onChange={e => emit(toH(value), toM(value), e.target.value)} className={sel}><option>AM</option><option>PM</option></select>
             </div>
         </div>
@@ -127,7 +126,7 @@ function TimeSelect({ value, onChange, label, is24h }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CONSTANTS  (DAYS / getTodayName retained — used only by weekday-based Preferences)
+// CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const STUDY_TIME_OPTIONS = [
@@ -155,65 +154,143 @@ function getTodayName() {
 }
 
 const WELLNESS_ACTIVITY_OPTIONS = [
-    'Listening to music',
-    'Painting / Drawing',
-    'Playing an instrument',
-    'Reading a book',
-    'Going for a walk',
-    'Meditation',
-    'Yoga / Stretching',
-    'Watching a show',
-    'Journaling',
-    'Hanging out with friends',
-    'Other (Custom Activity)',
+    'Listening to music','Painting / Drawing','Playing an instrument','Reading a book',
+    'Going for a walk','Meditation','Yoga / Stretching','Watching a show',
+    'Journaling','Hanging out with friends','Other (Custom Activity)',
 ]
 
 const OTHER_ACTIVITY_OPTIONS = [
-    'Assigned Intervention',
-    'Counsellor Check-in',
-    'Peer Support Session',
-    'Skill-Building Exercise',
-    'Guided Reflection',
-    'Other (Custom Activity)',
+    'Assigned Intervention','Counsellor Check-in','Peer Support Session',
+    'Skill-Building Exercise','Guided Reflection','Other (Custom Activity)',
 ]
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PREFERENCES MODAL  (unchanged — busy slots remain weekday-based by design)
+// NEW: TASK TYPE STYLING (matches design)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip }) {
-    const [loading, setLoading]                       = useState(!initialPrefs)
-    const [preferredStudyTime, setPreferredStudyTime] = useState(initialPrefs?.preferredStudyTime || null)
-    const [busySlots, setBusySlots]                   = useState(initialPrefs?.busySlots || [])
-    const [saving, setSaving]                         = useState(false)
-    const [error, setError]                           = useState('')
-    const [step, setStep]                             = useState(0)
-    const [busyForm, setBusyForm]                     = useState({ recurring: true, day: getTodayName(), date: todayISO(), startTime: '16:00', endTime: '18:00' })
-    const [busyFormError, setBusyFormError]           = useState('')
-    const [reasons, setReasons]                       = useState({})
+const TASK_TYPE_CONFIG = {
+    Study: {
+        bg: 'bg-violet-50',
+        border: 'border-violet-100',
+        iconBg: 'bg-violet-500',
+        icon: BookOpenIcon,
+        text: 'text-violet-900',
+        subtext: 'text-violet-600',
+    },
+    Wellness: {
+        bg: 'bg-emerald-50',
+        border: 'border-emerald-100',
+        iconBg: 'bg-emerald-500',
+        icon: HeartIcon,
+        text: 'text-emerald-900',
+        subtext: 'text-emerald-600',
+    },
+    Other: {
+        bg: 'bg-blue-50',
+        border: 'border-blue-100',
+        iconBg: 'bg-blue-500',
+        icon: ClipboardDocumentListIcon,
+        text: 'text-blue-900',
+        subtext: 'text-blue-600',
+    },
+    Intervention: {
+        bg: 'bg-purple-50',
+        border: 'border-purple-100',
+        iconBg: 'bg-purple-500',
+        icon: ClipboardDocumentListIcon,
+        text: 'text-purple-900',
+        subtext: 'text-purple-600',
+    },
+}
 
-    const toM = (t) => { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+m }
-    const fmt = (t) => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}` }
+// ═══════════════════════════════════════════════════════════════════════════════
+// PREFERENCES MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PREFERENCES MODAL (Side-drawer with tabs)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PREF_TABS = [
+    { id: 'study-goals',    label: 'Study Goals',    sublabel: 'Focus & targets',       icon: '🎯' },
+    { id: 'availability',   label: 'Availability',   sublabel: 'Set your time',         icon: '🕐' },
+    { id: 'study-sessions', label: 'Study Sessions', sublabel: 'Duration & breaks',     icon: '📚' },
+    { id: 'ai-suggestions', label: 'AI Suggestions', sublabel: 'Smart recommendations', icon: '✨' },
+    { id: 'notifications',  label: 'Notifications',  sublabel: 'Reminders & alerts',    icon: '🔔' },
+]
+
+const WEEKDAYS_SHORT = [
+    { full: 'MONDAY',    short: 'Mon' },
+    { full: 'TUESDAY',   short: 'Tue' },
+    { full: 'WEDNESDAY', short: 'Wed' },
+    { full: 'THURSDAY',  short: 'Thu' },
+    { full: 'FRIDAY',    short: 'Fri' },
+    { full: 'SATURDAY',  short: 'Sat' },
+    { full: 'SUNDAY',    short: 'Sun' },
+]
+
+const INTENSITY_OPTIONS = [
+    { value: 'LIGHT',     label: 'Light',     range: '1-3 hrs/day', icon: '🌱' },
+    { value: 'MODERATE',  label: 'Moderate',  range: '4-6 hrs/day', icon: '📊' },
+    { value: 'INTENSIVE', label: 'Intensive', range: '7+ hrs/day',  icon: '🚀' },
+]
+
+function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip }) {
+    const [loading, setLoading] = useState(!initialPrefs)
+    const [saving, setSaving]   = useState(false)
+    const [error, setError]     = useState('')
+    const [activeTab, setActiveTab] = useState('study-goals')
+
+    // Existing fields
+    const [preferredStudyTime, setPreferredStudyTime] = useState(initialPrefs?.preferredStudyTime || null)
+    const [busySlots, setBusySlots] = useState(initialPrefs?.busySlots || [])
+
+    // NEW fields
+    const [preferredStudyDays, setPreferredStudyDays] = useState(
+        initialPrefs?.preferredStudyDays || ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']
+    )
+    const [dailyStudyTargetHours, setDailyStudyTargetHours] = useState(
+        initialPrefs?.dailyStudyTargetHours ?? 4
+    )
+    const [studyIntensity, setStudyIntensity] = useState(
+        initialPrefs?.studyIntensity || 'MODERATE'
+    )
+
+    // Busy slot form state
+    const [busyForm, setBusyForm] = useState({
+        recurring: true, day: getTodayName(), date: todayISO(),
+        startTime: '16:00', endTime: '18:00', reason: ''
+    })
+    const [busyFormError, setBusyFormError] = useState('')
+
+    const toM = (t) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m }
+    const fmt = (t) => { if (!t) return ''; const [h, m] = t.split(':').map(Number); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` }
 
     useEffect(() => {
-        if (initialPrefs) {
-            const r = {}
-            ;(initialPrefs.busySlots || []).forEach((s, i) => { r[i] = s.reason || '' })
-            setReasons(r)
-            setLoading(false)
-            return
-        }
+        if (initialPrefs) { setLoading(false); return }
         getPreferences(user.id)
             .then(data => {
                 setPreferredStudyTime(data.preferredStudyTime || null)
                 setBusySlots(data.busySlots || [])
-                const r = {}
-                ;(data.busySlots || []).forEach((s, i) => { r[i] = s.reason || '' })
-                setReasons(r)
+                setPreferredStudyDays(data.preferredStudyDays || ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'])
+                setDailyStudyTargetHours(data.dailyStudyTargetHours ?? 4)
+                setStudyIntensity(data.studyIntensity || 'MODERATE')
             })
             .catch(() => {})
             .finally(() => setLoading(false))
     }, [user.id, initialPrefs])
+
+    const toggleStudyDay = (dayFull) => {
+        setPreferredStudyDays(prev =>
+            prev.includes(dayFull)
+                ? prev.filter(d => d !== dayFull)
+                : [...prev, dayFull]
+        )
+    }
+
+    const adjustHours = (delta) => {
+        setDailyStudyTargetHours(prev => Math.max(1, Math.min(12, prev + delta)))
+    }
 
     const addBusySlot = () => {
         setBusyFormError('')
@@ -225,59 +302,74 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
             ? busyForm.day
             : new Date(busyForm.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })
 
-        const sameDay = busySlots.filter(s =>
-            s.recurring === busyForm.recurring
-                ? busyForm.recurring
-                    ? s.day === busyForm.day
-                    : s.date === busyForm.date
-                : false
-        )
+        const sameDay = busySlots.filter(s => {
+            if (s.recurring !== busyForm.recurring) return false
+            return busyForm.recurring ? s.day === busyForm.day : s.date === busyForm.date
+        })
         if (sameDay.some(s => toM(busyForm.startTime) < toM(s.endTime) && toM(busyForm.endTime) > toM(s.startTime))) {
             setBusyFormError('Overlaps with existing slot.'); return
         }
         const newSlot = {
-            day: effectiveDay,
-            startTime: busyForm.startTime,
-            endTime: busyForm.endTime,
-            reason: '',
-            recurring: busyForm.recurring,
-            date: busyForm.recurring ? null : busyForm.date
+            day: effectiveDay, startTime: busyForm.startTime, endTime: busyForm.endTime,
+            reason: busyForm.reason || 'Busy',
+            recurring: busyForm.recurring, date: busyForm.recurring ? null : busyForm.date
         }
-        const newSlots = [...busySlots, newSlot]
-        setBusySlots(newSlots)
-        setReasons(prev => ({ ...prev, [newSlots.length - 1]: '' }))
-        setBusyForm({ recurring: true, day: getTodayName(), date: todayISO(), startTime: '16:00', endTime: '18:00' })
+        setBusySlots([...busySlots, newSlot])
+        setBusyForm({ recurring: true, day: getTodayName(), date: todayISO(), startTime: '16:00', endTime: '18:00', reason: '' })
     }
 
     const removeBusySlot = (index) => {
-        const newSlots = busySlots.filter((_, i) => i !== index)
-        setBusySlots(newSlots)
-        const newReasons = {}
-        newSlots.forEach((s, i) => { newReasons[i] = s.reason || reasons[i > index ? i + 1 : i] || '' })
-        setReasons(newReasons)
+        setBusySlots(busySlots.filter((_, i) => i !== index))
+    }
+
+    const handleReset = () => {
+        setPreferredStudyTime(null)
+        setBusySlots([])
+        setPreferredStudyDays(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'])
+        setDailyStudyTargetHours(4)
+        setStudyIntensity('MODERATE')
+        setError('')
     }
 
     const handleSave = async () => {
-        if (!preferredStudyTime) { setError('Please select a preferred study time.'); return }
+        if (!preferredStudyTime && activeTab === 'study-sessions') {
+            setError('Please select a preferred study time.')
+            setActiveTab('study-sessions')
+            return
+        }
+        if (preferredStudyDays.length === 0) {
+            setError('Please select at least one study day.')
+            setActiveTab('study-goals')
+            return
+        }
         setSaving(true); setError('')
         try {
-            const slotsWithReasons = busySlots.map((slot, i) => ({
-                ...slot, reason: reasons[i] || slot.reason || 'Busy'
-            }))
-            await savePreferences(user.id, preferredStudyTime, slotsWithReasons)
-            onComplete({ preferredStudyTime, busySlots: slotsWithReasons })
+            await savePreferences(
+                user.id,
+                preferredStudyTime || 'AFTERNOON',
+                busySlots,
+                preferredStudyDays,
+                dailyStudyTargetHours,
+                studyIntensity
+            )
+            onComplete({
+                preferredStudyTime: preferredStudyTime || 'AFTERNOON',
+                busySlots,
+                preferredStudyDays,
+                dailyStudyTargetHours,
+                studyIntensity
+            })
         } catch (err) {
             setError(err.message || 'Failed to save.')
             setSaving(false)
         }
     }
 
-    const STEPS = ['Study Time', 'Busy Hours', 'Reasons']
     const inputClass = "border-2 border-gray-100 rounded-xl px-3 py-2.5 text-sm font-medium focus:border-violet-300 outline-none bg-white w-full transition-colors"
 
     if (loading) return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center font-lora">
-            <div className="bg-white rounded-2xl p-10 border-2 border-violet-200 shadow-2xl flex flex-col items-center gap-4">
+            <div className="bg-white rounded-2xl p-10 border border-violet-100 shadow-2xl flex flex-col items-center gap-4">
                 <div className="relative w-12 h-12">
                     <div className="absolute inset-0 border-4 border-violet-100 rounded-full" />
                     <div className="absolute inset-0 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
@@ -293,119 +385,207 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
     return (
         <div
             onClick={() => onSkip && onSkip()}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-lora"
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-end sm:pr-6 font-lora"
         >
             <div
                 onClick={e => e.stopPropagation()}
-                className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border-2 border-violet-100 max-h-[92vh] overflow-hidden flex flex-col"
+                className="bg-white w-full sm:max-w-4xl h-full sm:h-[92vh] sm:rounded-3xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
             >
-
-                <div className="relative bg-gradient-to-br from-violet-600 via-violet-600 to-indigo-600 px-6 pt-6 pb-8 rounded-t-3xl overflow-hidden flex-shrink-0">
-                    <div className="absolute -top-6 -right-6 w-32 h-32 bg-white/5 rounded-full" />
-                    <div className="absolute -bottom-4 -left-4 w-20 h-20 bg-white/5 rounded-full" />
-                    <div className="absolute top-4 right-16 w-8 h-8 bg-white/10 rounded-full" />
-
-                    <div className="relative flex items-start justify-between mb-5">
-                        <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20">
-                                {isFirstTime ? <SparklesIcon className="w-6 h-6 text-white" /> : <Cog6ToothIcon className="w-6 h-6 text-white" />}
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-black text-violet-300 uppercase tracking-widest mb-0.5">MyMercurie</p>
-                                <h3 className="text-xl font-black text-white leading-tight">
-                                    {isFirstTime ? 'Setup Your Preferences' : 'Edit Preferences'}
-                                </h3>
-                            </div>
-                        </div>
-                        {onSkip && (
-                            <button onClick={onSkip} className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors border border-white/10">
-                                <XMarkIcon className="w-4 h-4 text-white/70" />
-                            </button>
+                {/* ── Header ── */}
+                <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-2xl font-black text-black">Preferences</h2>
+                        {isFirstTime && (
+                            <span className="text-[10px] font-black text-violet-600 bg-violet-100 border border-violet-200 px-2 py-1 rounded-full">
+                                FIRST-TIME SETUP
+                            </span>
                         )}
                     </div>
-
-                    {isFirstTime && (
-                        <div className="relative mb-5 bg-white/10 rounded-2xl px-4 py-3 border border-white/20">
-                            <p className="text-white/90 text-xs font-bold leading-relaxed">
-                                👋 Welcome! This is a <span className="text-white font-black">one-time setup</span> — we'll use these preferences to personalise your study plan every day.
-                            </p>
-                        </div>
-                    )}
-
-                    <div className="relative flex items-center justify-between">
-                        <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-white/20 mx-6" />
-                        <div
-                            className="absolute left-6 top-1/2 -translate-y-1/2 h-0.5 bg-white/60 transition-all duration-500"
-                            style={{ width: step === 0 ? '0%' : step === 1 ? '50%' : '100%', right: 'auto' }}
-                        />
-                        {STEPS.map((label, i) => {
-                            const done    = i < step
-                            const current = i === step
-                            return (
-                                <button key={i}
-                                    onClick={() => { if (i === 0 || (i >= 1 && preferredStudyTime)) setStep(i) }}
-                                    className="relative flex flex-col items-center gap-1.5 z-10"
-                                >
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs transition-all duration-300 border-2 ${
-                                        done    ? 'bg-white border-white text-violet-600 shadow-lg shadow-violet-900/30' :
-                                        current ? 'bg-violet-700 border-white text-white shadow-lg shadow-violet-900/30 scale-110' :
-                                                  'bg-white/10 border-white/30 text-white/50'
-                                    }`}>{done ? '✓' : i + 1}</div>
-                                    <span className={`text-[10px] font-black whitespace-nowrap transition-colors ${
-                                        current ? 'text-white' : done ? 'text-violet-200' : 'text-white/40'
-                                    }`}>{label}</span>
-                                </button>
-                            )
-                        })}
-                    </div>
+                    <button
+                        onClick={onSkip}
+                        className="w-9 h-9 rounded-xl hover:bg-gray-100 flex items-center justify-center transition-colors text-gray-400 hover:text-gray-600"
+                    >
+                        <XMarkIcon className="w-5 h-5" />
+                    </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto">
-                    <div className="p-6">
+                {/* ── Body: Sidebar + Content ── */}
+                <div className="flex-1 flex overflow-hidden">
 
-                        {step === 0 && (
+                    {/* ── Left Sidebar Tabs ── */}
+                    <div className="w-64 border-r border-gray-100 bg-gray-50/50 py-4 px-3 overflow-y-auto flex-shrink-0">
+                        <div className="space-y-1">
+                            {PREF_TABS.map(tab => {
+                                const isActive = activeTab === tab.id
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl transition-all text-left ${
+                                            isActive
+                                                ? 'bg-white shadow-sm border border-violet-100'
+                                                : 'hover:bg-white/60'
+                                        }`}
+                                    >
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${
+                                            isActive ? 'bg-violet-100' : 'bg-gray-100'
+                                        }`}>
+                                            {tab.icon}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`text-sm font-black ${isActive ? 'text-violet-700' : 'text-gray-700'}`}>
+                                                {tab.label}
+                                            </p>
+                                            <p className="text-[11px] text-gray-400 font-medium mt-0.5">{tab.sublabel}</p>
+                                        </div>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    {/* ── Right Content Area ── */}
+                    <div className="flex-1 overflow-y-auto p-8">
+
+                        {/* ═══ STUDY GOALS TAB ═══ */}
+                        {activeTab === 'study-goals' && (
                             <div>
-                                <div className="mb-5">
-                                    <h4 className="text-base font-black text-black mb-1">When do you study best?</h4>
-                                    <p className="text-sm text-gray-500 font-medium">We'll prioritise suggestions within this window</p>
+                                <h3 className="text-xl font-black text-black mb-1">Study Goals</h3>
+                                <p className="text-sm text-gray-500 font-medium mb-8">Customize your goals and study preferences.</p>
+
+                                {/* Preferred Study Days */}
+                                <div className="mb-8">
+                                    <p className="text-sm font-black text-gray-800 mb-3">Preferred study days</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {WEEKDAYS_SHORT.map(day => {
+                                            const isSelected = preferredStudyDays.includes(day.full)
+                                            return (
+                                                <button
+                                                    key={day.full}
+                                                    onClick={() => toggleStudyDay(day.full)}
+                                                    className={`px-4 py-2 rounded-full text-sm font-bold border-2 transition-all ${
+                                                        isSelected
+                                                            ? 'bg-violet-600 text-white border-violet-600 shadow-sm shadow-violet-200'
+                                                            : 'bg-white text-gray-500 border-gray-200 hover:border-violet-300'
+                                                    }`}
+                                                >
+                                                    {day.short}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3 mb-6">
-                                    {STUDY_TIME_OPTIONS.map(opt => {
-                                        const isSelected = preferredStudyTime === opt.value
-                                        return (
-                                            <button key={opt.value} onClick={() => setPreferredStudyTime(opt.value)}
-                                                className={`relative flex flex-col items-start p-4 rounded-2xl border-2 transition-all duration-200 text-left overflow-hidden ${
-                                                    isSelected ? opt.activeColor + ' shadow-sm' : opt.color + ' hover:opacity-90 hover:shadow-sm'
-                                                }`}>
-                                                {isSelected && (
-                                                    <div className="absolute top-2.5 right-2.5 w-5 h-5 bg-violet-600 rounded-full flex items-center justify-center">
-                                                        <span className="text-white text-[9px] font-black">✓</span>
-                                                    </div>
-                                                )}
-                                                <span className="text-2xl mb-2">{opt.emoji}</span>
-                                                <span className="font-black text-sm text-black block">{opt.label}</span>
-                                                <span className="text-[11px] font-medium text-gray-500 mt-0.5">{opt.time}</span>
+
+                                {/* Daily Study Target */}
+                                <div className="mb-8">
+                                    <p className="text-sm font-black text-gray-800 mb-3">Daily study target</p>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center bg-white border-2 border-gray-100 rounded-xl overflow-hidden">
+                                            <button
+                                                onClick={() => adjustHours(-1)}
+                                                className="w-10 h-10 flex items-center justify-center text-violet-600 hover:bg-violet-50 font-black text-lg transition-colors"
+                                            >
+                                                −
                                             </button>
-                                        )
-                                    })}
+                                            <div className="w-14 text-center">
+                                                <span className="text-lg font-black text-black">{dailyStudyTargetHours}</span>
+                                            </div>
+                                            <button
+                                                onClick={() => adjustHours(1)}
+                                                className="w-10 h-10 flex items-center justify-center text-violet-600 hover:bg-violet-50 font-black text-lg transition-colors"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                        <span className="text-sm font-bold text-gray-600">hours per day</span>
+                                    </div>
+                                    <p className="text-xs text-gray-400 font-medium mt-2">Recommended: 4-8 hours</p>
                                 </div>
-                                <button onClick={() => { if (preferredStudyTime) setStep(1) }} disabled={!preferredStudyTime}
-                                    className="w-full bg-black text-white py-3 rounded-xl font-black text-sm hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
-                                    Continue <ArrowRightIcon className="w-4 h-4" />
-                                </button>
+
+                                {/* Study Intensity */}
+                                <div className="mb-8">
+                                    <p className="text-sm font-black text-gray-800 mb-3">Study intensity</p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {INTENSITY_OPTIONS.map(opt => {
+                                            const isSelected = studyIntensity === opt.value
+                                            return (
+                                                <button
+                                                    key={opt.value}
+                                                    onClick={() => setStudyIntensity(opt.value)}
+                                                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
+                                                        isSelected
+                                                            ? 'bg-violet-50 border-violet-300 ring-2 ring-violet-200'
+                                                            : 'bg-white border-gray-100 hover:border-violet-200'
+                                                    }`}
+                                                >
+                                                    <span className="text-2xl">{opt.icon}</span>
+                                                    <span className={`text-sm font-black ${isSelected ? 'text-violet-700' : 'text-gray-700'}`}>
+                                                        {opt.label}
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-gray-400">{opt.range}</span>
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Preview */}
+                                <div className="bg-violet-50 border border-violet-100 rounded-2xl p-5">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="w-6 h-6 bg-violet-200 rounded-lg flex items-center justify-center">
+                                            <CalendarIcon className="w-3.5 h-3.5 text-violet-700" />
+                                        </div>
+                                        <p className="text-sm font-black text-violet-900">Preview: Your schedule will adapt like this</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {/* Mock bar chart */}
+                                        <div className="flex items-end justify-around gap-2 h-24">
+                                            {WEEKDAYS_SHORT.map(day => {
+                                                const isActive = preferredStudyDays.includes(day.full)
+                                                const height = isActive
+                                                    ? Math.min(90, 40 + dailyStudyTargetHours * 6)
+                                                    : 15
+                                                return (
+                                                    <div key={day.full} className="flex flex-col items-center gap-1 flex-1">
+                                                        <div
+                                                            className={`w-full rounded-t-md transition-all duration-300 ${
+                                                                isActive ? 'bg-violet-500' : 'bg-violet-200'
+                                                            }`}
+                                                            style={{ height: `${height}%` }}
+                                                        />
+                                                        <span className="text-[9px] font-bold text-violet-700">{day.short.slice(0, 3)}</span>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                        {/* Checklist */}
+                                        <div className="space-y-2">
+                                            {[
+                                                'Balanced study blocks',
+                                                'Smart break reminders',
+                                                'Wellness time included',
+                                                'Personalized suggestions',
+                                            ].map(item => (
+                                                <div key={item} className="flex items-center gap-2">
+                                                    <CheckCircleIcon className="w-4 h-4 text-violet-600 flex-shrink-0" />
+                                                    <span className="text-xs font-bold text-gray-700">{item}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
-                        {step === 1 && (
+                        {/* ═══ AVAILABILITY TAB ═══ */}
+                        {activeTab === 'availability' && (
                             <div>
-                                <div className="mb-5">
-                                    <h4 className="text-base font-black text-black mb-1">Any busy hours this week?</h4>
-                                    <p className="text-sm text-gray-500 font-medium">We'll skip these slots when suggesting tasks</p>
-                                </div>
-                                <div className="bg-violet-50 border-2 border-violet-100 rounded-2xl p-4 mb-4">
-                                    <p className="text-[10px] font-black text-violet-500 uppercase tracking-widest mb-3">Add a busy slot</p>
+                                <h3 className="text-xl font-black text-black mb-1">Availability</h3>
+                                <p className="text-sm text-gray-500 font-medium mb-6">Set your busy hours — we'll skip these when planning tasks.</p>
 
-                                    {/* ── Recurring vs One-time toggle ── */}
+                                <div className="bg-violet-50 border border-violet-100 rounded-2xl p-4 mb-5">
+                                    <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest mb-3">Add a busy slot</p>
+
                                     <div className="flex gap-2 mb-3">
                                         <button
                                             onClick={() => { setBusyForm(p => ({ ...p, recurring: true })); setBusyFormError('') }}
@@ -413,7 +593,7 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
                                                 busyForm.recurring ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200'
                                             }`}
                                         >
-                                            🔁 Repeats weekly
+                                            🔁 Weekly
                                         </button>
                                         <button
                                             onClick={() => { setBusyForm(p => ({ ...p, recurring: false })); setBusyFormError('') }}
@@ -421,125 +601,183 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
                                                 !busyForm.recurring ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200'
                                             }`}
                                         >
-                                            📅 Just this once
+                                            📅 One-time
                                         </button>
                                     </div>
 
                                     <div className="grid grid-cols-3 gap-2.5 mb-3">
-                                        <div className="col-span-3 sm:col-span-1">
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1.5">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">
                                                 {busyForm.recurring ? 'Day' : 'Date'}
                                             </label>
                                             {busyForm.recurring ? (
-                                                <select value={busyForm.day} onChange={e => { setBusyForm(p => ({ ...p, day: e.target.value })); setBusyFormError('') }} className={inputClass}>
+                                                <select value={busyForm.day} onChange={e => setBusyForm(p => ({ ...p, day: e.target.value }))} className={inputClass}>
                                                     {DAYS.map(d => <option key={d}>{d}</option>)}
                                                 </select>
                                             ) : (
-                                                <input type="date" value={busyForm.date} onChange={e => { setBusyForm(p => ({ ...p, date: e.target.value })); setBusyFormError('') }} className={inputClass} />
+                                                <input type="date" value={busyForm.date} onChange={e => setBusyForm(p => ({ ...p, date: e.target.value }))} className={inputClass} />
                                             )}
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1.5">From</label>
-                                            <input type="time" value={busyForm.startTime} onChange={e => { setBusyForm(p => ({ ...p, startTime: e.target.value })); setBusyFormError('') }} className={inputClass} />
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">From</label>
+                                            <input type="time" value={busyForm.startTime} onChange={e => setBusyForm(p => ({ ...p, startTime: e.target.value }))} className={inputClass} />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1.5">To</label>
-                                            <input type="time" value={busyForm.endTime} onChange={e => { setBusyForm(p => ({ ...p, endTime: e.target.value })); setBusyFormError('') }} className={inputClass} />
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">To</label>
+                                            <input type="time" value={busyForm.endTime} onChange={e => setBusyForm(p => ({ ...p, endTime: e.target.value }))} className={inputClass} />
                                         </div>
                                     </div>
+
+                                    <div className="mb-3">
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-1.5">Reason (optional)</label>
+                                        <input
+                                            type="text"
+                                            value={busyForm.reason}
+                                            onChange={e => setBusyForm(p => ({ ...p, reason: e.target.value }))}
+                                            placeholder="e.g. Football practice"
+                                            className={inputClass}
+                                        />
+                                        <div className="flex flex-wrap gap-1.5 mt-2">
+                                            {REASON_SUGGESTIONS.slice(0, 6).map(r => (
+                                                <button
+                                                    key={r}
+                                                    onClick={() => setBusyForm(p => ({ ...p, reason: r }))}
+                                                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all ${
+                                                        busyForm.reason === r ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200 hover:border-violet-300'
+                                                    }`}
+                                                >
+                                                    {r}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
                                     {busyFormError && (
                                         <p className="text-[11px] text-red-500 font-bold mb-2.5 flex items-center gap-1">
                                             <ExclamationTriangleIcon className="w-3 h-3" /> {busyFormError}
                                         </p>
                                     )}
-                                    <button onClick={addBusySlot} className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-xs font-black transition-colors shadow-sm shadow-violet-200">
+
+                                    <button onClick={addBusySlot} className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-xs font-black transition-colors">
                                         <PlusIcon className="w-3.5 h-3.5" /> Add Slot
                                     </button>
                                 </div>
 
                                 {busySlots.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed border-gray-200 rounded-2xl mb-4 text-center">
-                                        <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center mb-2">
-                                            <ClockIcon className="w-5 h-5 text-gray-300" />
+                                    <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-gray-200 rounded-2xl text-center">
+                                        <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
+                                            <ClockIcon className="w-6 h-6 text-gray-300" />
                                         </div>
-                                        <p className="text-sm font-bold text-gray-400">No busy slots added</p>
-                                        <p className="text-[11px] text-gray-300 font-medium mt-0.5">Your schedule is wide open!</p>
+                                        <p className="text-sm font-bold text-gray-500">No busy slots added</p>
+                                        <p className="text-xs text-gray-400 font-medium mt-1">Your schedule is wide open!</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-1">
+                                    <div className="space-y-2">
                                         {busySlots.map((slot, i) => (
-                                            <div key={i} className="flex items-center gap-3 bg-white border-2 border-red-100 rounded-xl px-3.5 py-2.5">
-                                                <div className="w-1.5 h-8 bg-red-400 rounded-full flex-shrink-0" />
+                                            <div key={i} className="flex items-center gap-3 bg-white border border-red-100 rounded-xl px-4 py-3">
+                                                <div className="w-1.5 h-10 bg-red-400 rounded-full flex-shrink-0" />
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <p className="font-black text-xs text-red-700">{slot.day}</p>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <p className="font-black text-sm text-red-700">{slot.day}</p>
                                                         <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${slot.recurring === false ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-500'}`}>
                                                             {slot.recurring === false ? 'ONE-TIME' : 'WEEKLY'}
                                                         </span>
                                                     </div>
-                                                    <p className="text-[10px] text-red-400 font-medium">{fmt(slot.startTime)} – {fmt(slot.endTime)}{slot.recurring === false && slot.date ? ` · ${slot.date}` : ''}</p>
+                                                    <p className="text-xs text-red-500 font-medium mt-0.5">
+                                                        {fmt(slot.startTime)} – {fmt(slot.endTime)}
+                                                        {slot.reason && ` · ${slot.reason}`}
+                                                    </p>
                                                 </div>
-                                                {slot.reason && <span className="text-[9px] font-bold text-gray-400 italic hidden sm:block">{slot.reason}</span>}
-                                                <button onClick={() => removeBusySlot(i)} className="text-gray-300 hover:text-red-400 transition-colors p-1 flex-shrink-0">
-                                                    <TrashIcon className="w-3.5 h-3.5" />
+                                                <button onClick={() => removeBusySlot(i)} className="text-gray-300 hover:text-red-500 transition-colors p-1.5">
+                                                    <TrashIcon className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         ))}
                                     </div>
                                 )}
+                            </div>
+                        )}
 
-                                <div className="flex gap-2.5">
-                                    <button onClick={() => setStep(0)} className="flex-1 py-3 rounded-xl font-black text-sm text-gray-500 hover:bg-gray-100 border-2 border-gray-100 transition-colors">← Back</button>
-                                    <button onClick={() => {
-                                        if (busySlots.length === 0) { handleSave(); return }
-                                        const r = {}; busySlots.forEach((s, i) => { r[i] = reasons[i] || s.reason || '' }); setReasons(r); setStep(2)
-                                    }} className="flex-1 bg-black text-white py-3 rounded-xl font-black text-sm hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
-                                        {busySlots.length === 0 ? '✨ Save & Go' : <>Continue <ArrowRightIcon className="w-4 h-4" /></>}
-                                    </button>
+                        {/* ═══ STUDY SESSIONS TAB ═══ */}
+                        {activeTab === 'study-sessions' && (
+                            <div>
+                                <h3 className="text-xl font-black text-black mb-1">Study Sessions</h3>
+                                <p className="text-sm text-gray-500 font-medium mb-8">When do you study best? We'll prioritize this window.</p>
+
+                                <div className="grid grid-cols-2 gap-4 mb-6">
+                                    {STUDY_TIME_OPTIONS.map(opt => {
+                                        const isSelected = preferredStudyTime === opt.value
+                                        return (
+                                            <button
+                                                key={opt.value}
+                                                onClick={() => setPreferredStudyTime(opt.value)}
+                                                className={`relative flex flex-col items-start p-5 rounded-2xl border-2 transition-all text-left ${
+                                                    isSelected ? opt.activeColor : opt.color + ' hover:opacity-90'
+                                                }`}
+                                            >
+                                                {isSelected && (
+                                                    <div className="absolute top-3 right-3 w-6 h-6 bg-violet-600 rounded-full flex items-center justify-center">
+                                                        <CheckIcon className="w-3.5 h-3.5 text-white" />
+                                                    </div>
+                                                )}
+                                                <span className="text-3xl mb-2">{opt.emoji}</span>
+                                                <span className="font-black text-base text-black block">{opt.label}</span>
+                                                <span className="text-xs font-medium text-gray-500 mt-1">{opt.time}</span>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+
+                                <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 flex items-start gap-3">
+                                    <SparklesIcon className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-sm font-black text-blue-900 mb-0.5">Smart scheduling</p>
+                                        <p className="text-xs text-blue-700 font-medium">
+                                            AI suggestions will prioritise this window when planning your study sessions.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         )}
 
-                        {step === 2 && (
+                        {/* ═══ AI SUGGESTIONS TAB ═══ */}
+                        {activeTab === 'ai-suggestions' && (
                             <div>
-                                <div className="mb-5">
-                                    <h4 className="text-base font-black text-black mb-1">What keeps you busy?</h4>
-                                    <p className="text-sm text-gray-500 font-medium">Helps us understand your weekly rhythm</p>
+                                <h3 className="text-xl font-black text-black mb-1">AI Suggestions</h3>
+                                <p className="text-sm text-gray-500 font-medium mb-8">Control how the AI plans your day.</p>
+
+                                <div className="flex flex-col items-center justify-center py-16 text-center bg-gradient-to-br from-violet-50 to-indigo-50 rounded-2xl border border-violet-100">
+                                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-sm">
+                                        <SparklesIcon className="w-8 h-8 text-violet-500" />
+                                    </div>
+                                    <p className="text-lg font-black text-gray-800 mb-1">Coming Soon</p>
+                                    <p className="text-sm text-gray-500 font-medium max-w-sm">
+                                        Advanced AI controls — set suggestion frequency, focus areas, and personalisation preferences.
+                                    </p>
                                 </div>
-                                <div className="space-y-3 mb-5 max-h-64 overflow-y-auto pr-1">
-                                    {busySlots.map((slot, i) => (
-                                        <div key={i} className="border-2 border-gray-100 rounded-2xl p-4 bg-gray-50/50">
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <div className="w-1.5 h-6 bg-red-400 rounded-full" />
-                                                <span className="text-[10px] font-black text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">{slot.day}</span>
-                                                <span className="text-[10px] text-gray-400 font-medium">{fmt(slot.startTime)} – {fmt(slot.endTime)}</span>
-                                            </div>
-                                            <input type="text" value={reasons[i] || ''} onChange={e => setReasons(p => ({ ...p, [i]: e.target.value }))}
-                                                placeholder="e.g. Football practice"
-                                                className="w-full border-2 border-gray-100 focus:border-violet-200 rounded-xl px-3 py-2 text-sm font-medium outline-none bg-white mb-3 transition-colors" />
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {REASON_SUGGESTIONS.map(r => (
-                                                    <button key={r} onClick={() => setReasons(p => ({ ...p, [i]: r }))}
-                                                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full border-2 transition-all ${
-                                                            reasons[i] === r ? 'bg-violet-600 text-white border-violet-600 shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:border-violet-300 hover:text-violet-600'
-                                                        }`}>{r}</button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="flex gap-2.5">
-                                    <button onClick={() => setStep(1)} disabled={saving} className="flex-1 py-3 rounded-xl font-black text-sm text-gray-500 hover:bg-gray-100 border-2 border-gray-100 disabled:opacity-40 transition-colors">← Back</button>
-                                    <button onClick={handleSave} disabled={saving}
-                                        className="flex-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white py-3 rounded-xl font-black text-sm hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-md shadow-violet-200">
-                                        {saving ? (<><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Saving…</>) : '✨ Save & Continue'}
-                                    </button>
+                            </div>
+                        )}
+
+                        {/* ═══ NOTIFICATIONS TAB ═══ */}
+                        {activeTab === 'notifications' && (
+                            <div>
+                                <h3 className="text-xl font-black text-black mb-1">Notifications</h3>
+                                <p className="text-sm text-gray-500 font-medium mb-8">Configure reminders and alerts.</p>
+
+                                <div className="flex flex-col items-center justify-center py-16 text-center bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-100">
+                                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-sm">
+                                        <span className="text-3xl">🔔</span>
+                                    </div>
+                                    <p className="text-lg font-black text-gray-800 mb-1">Coming Soon</p>
+                                    <p className="text-sm text-gray-500 font-medium max-w-sm">
+                                        Push notifications, email reminders, and daily digest settings will be available here.
+                                    </p>
                                 </div>
                             </div>
                         )}
 
                         {error && (
-                            <div className="mt-4 flex items-center gap-2.5 bg-red-50 border-2 border-red-200 rounded-xl px-4 py-3">
+                            <div className="mt-6 flex items-center gap-2.5 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
                                 <ExclamationTriangleIcon className="w-4 h-4 text-red-500 flex-shrink-0" />
                                 <p className="text-red-600 text-sm font-bold">{error}</p>
                             </div>
@@ -547,20 +785,45 @@ function PreferencesModal({ user, initialPrefs, isFirstTime, onComplete, onSkip 
                     </div>
                 </div>
 
-                {isFirstTime && (
-                    <div className="px-6 pb-5 pt-1 flex-shrink-0 border-t border-gray-50">
-                        <button onClick={onSkip} className="w-full text-center text-xs text-gray-400 hover:text-violet-500 font-bold py-2.5 transition-colors">
-                            Skip for now — I'll set this up later →
+                {/* ── Footer ── */}
+                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 flex-shrink-0 bg-white">
+                    <button
+                        onClick={handleReset}
+                        className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-violet-600 transition-colors"
+                    >
+                        <ArrowPathIcon className="w-4 h-4" />
+                        Reset to defaults
+                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={onSkip}
+                            disabled={saving}
+                            className="px-5 py-2.5 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-100 border border-gray-200 transition-colors disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="px-5 py-2.5 rounded-xl font-bold text-sm bg-violet-600 hover:bg-violet-700 text-white shadow-sm shadow-violet-200 transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {saving ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                    Saving…
+                                </>
+                            ) : (
+                                'Save Preferences'
+                            )}
                         </button>
                     </div>
-                )}
+                </div>
             </div>
         </div>
     )
 }
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// AGENT TOOL DEFINITIONS  (date-based now)
+// AGENT TOOL DEFINITIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const AGENT_TOOLS = [
@@ -634,7 +897,7 @@ const AGENT_TOOLS = [
 ]
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VOICE INPUT BUTTON  (unchanged)
+// VOICE INPUT BUTTON
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function VoiceInputButton({ onTranscript, disabled }) {
@@ -686,18 +949,10 @@ function VoiceInputButton({ onTranscript, disabled }) {
                         />
                     ))}
                 </div>
-                <button
-                    onClick={handleCancel}
-                    className="w-5 h-5 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors"
-                    title="Cancel"
-                >
+                <button onClick={handleCancel} className="w-5 h-5 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors" title="Cancel">
                     <XMarkIcon className="w-3 h-3" />
                 </button>
-                <button
-                    onClick={handleConfirm}
-                    className="w-5 h-5 rounded-full bg-green-100 hover:bg-green-200 text-green-600 flex items-center justify-center transition-colors"
-                    title="Use this text"
-                >
+                <button onClick={handleConfirm} className="w-5 h-5 rounded-full bg-green-100 hover:bg-green-200 text-green-600 flex items-center justify-center transition-colors" title="Use this text">
                     <CheckIcon className="w-3 h-3" />
                 </button>
             </div>
@@ -705,28 +960,23 @@ function VoiceInputButton({ onTranscript, disabled }) {
     }
 
     return (
-        <button
-            onClick={startListening}
-            disabled={disabled}
-            className="text-gray-400 hover:text-violet-600 transition-colors disabled:opacity-40 flex-shrink-0"
-            title="Voice input"
-        >
+        <button onClick={startListening} disabled={disabled} className="text-gray-400 hover:text-violet-600 transition-colors disabled:opacity-40 flex-shrink-0" title="Voice input">
             <MicrophoneIcon className="w-4 h-4" />
         </button>
     )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MINI CHATBUDDY  (date-based now)
+// MINI CHATBUDDY
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function MiniChatBuddy({ user, tasksByDate, setTasksByDate, upcomingExams, activeDate, weekDates, onClose, onTaskChanged, onOpenChatBuddy }) {
     const CRISIS_KEYWORDS = [
-    'suicide', 'kill myself', 'end my life', 'want to die',
-    'self harm', 'self-harm', 'hurt myself', 'no reason to live',
-    'want to disappear', 'better off dead', 'cant go on', "can't go on",
-    'give up on life', 'not worth living', 'ending it all',
-]
+        'suicide', 'kill myself', 'end my life', 'want to die',
+        'self harm', 'self-harm', 'hurt myself', 'no reason to live',
+        'want to disappear', 'better off dead', 'cant go on', "can't go on",
+        'give up on life', 'not worth living', 'ending it all',
+    ]
     const [messages, setMessages]         = useState([])
     const [inputMessage, setInputMessage] = useState('')
     const [isLoading, setIsLoading]       = useState(false)
@@ -735,7 +985,6 @@ function MiniChatBuddy({ user, tasksByDate, setTasksByDate, upcomingExams, activ
     const messagesEndRef  = useRef(null)
     const inputRef        = useRef(null)
 
-    // ── Build system prompt ────────────────────────────────────────────────────
     const buildSystemPrompt = () => {
         const weekTasksSummary = weekDates
             .map(date => {
@@ -789,7 +1038,6 @@ YOUR BEHAVIOUR:
 17. CRITICAL: Once you have title + date + startTime + endTime, call the tool. Period. No more questions.`
     }
 
-    // ── Build welcome message ──────────────────────────────────────────────────
     const buildWelcomeMessage = () => {
         const activeTasks    = tasksByDate[activeDate] || []
         const completedCount = activeTasks.filter(t => t.completed).length
@@ -818,19 +1066,16 @@ YOUR BEHAVIOUR:
         return msg
     }
 
-    // ── Init ───────────────────────────────────────────────────────────────────
     useEffect(() => {
         agentHistoryRef.current = [{ role: 'system', content: buildSystemPrompt() }]
         setMessages([{ id: 'welcome', role: 'assistant', content: buildWelcomeMessage() }])
         inputRef.current?.focus()
     }, [])
 
-    // ── Auto-scroll ────────────────────────────────────────────────────────────
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages, isLoading])
 
-    // ── Log a turn to backend (fire-and-forget) ───────────────────────────────
     const logTurnToBackend = useCallback(async (userText, assistantText) => {
         try {
             await chatService.logScheduleMessage(userText, assistantText)
@@ -839,43 +1084,20 @@ YOUR BEHAVIOUR:
         }
     }, [])
 
-    // ── Execute tool call ──────────────────────────────────────────────────────
     const executeTool = async (toolName, toolInput) => {
         try {
             switch (toolName) {
                 case 'add_task': {
-                    const result = await addTask(
-                        user.id,
-                        toolInput.date,
-                        toolInput.title,
-                        toolInput.startTime,
-                        toolInput.endTime,
-                        toolInput.notes || ''
-                    )
+                    const result = await addTask(user.id, toolInput.date, toolInput.title, toolInput.startTime, toolInput.endTime, toolInput.notes || '')
                     setTasksByDate(prev => ({
                         ...prev,
-                        [toolInput.date]: [
-                            ...(prev[toolInput.date] || []),
-                            { ...result, completed: false }
-                        ]
+                        [toolInput.date]: [...(prev[toolInput.date] || []), { ...result, completed: false }]
                     }))
                     onTaskChanged?.()
-                    return {
-                        success: true,
-                        message: `Task "${toolInput.title}" added on ${toolInput.date} from ${toolInput.startTime} to ${toolInput.endTime}.`,
-                        task: result
-                    }
+                    return { success: true, message: `Task "${toolInput.title}" added on ${toolInput.date} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
                 }
                 case 'edit_task': {
-                    const result = await editTask(
-                        toolInput.taskId,
-                        user.id,
-                        toolInput.date,
-                        toolInput.title,
-                        toolInput.startTime,
-                        toolInput.endTime,
-                        toolInput.notes || ''
-                    )
+                    const result = await editTask(toolInput.taskId, user.id, toolInput.date, toolInput.title, toolInput.startTime, toolInput.endTime, toolInput.notes || '')
                     setTasksByDate(prev => ({
                         ...prev,
                         [toolInput.date]: (prev[toolInput.date] || []).map(t =>
@@ -883,11 +1105,7 @@ YOUR BEHAVIOUR:
                         )
                     }))
                     onTaskChanged?.()
-                    return {
-                        success: true,
-                        message: `Task updated to "${toolInput.title}" on ${toolInput.date} from ${toolInput.startTime} to ${toolInput.endTime}.`,
-                        task: result
-                    }
+                    return { success: true, message: `Task updated to "${toolInput.title}" on ${toolInput.date} from ${toolInput.startTime} to ${toolInput.endTime}.`, task: result }
                 }
                 case 'delete_task': {
                     await deleteTask(toolInput.taskId)
@@ -899,10 +1117,7 @@ YOUR BEHAVIOUR:
                         return updated
                     })
                     onTaskChanged?.()
-                    return {
-                        success: true,
-                        message: `Task "${toolInput.taskTitle}" has been deleted.`
-                    }
+                    return { success: true, message: `Task "${toolInput.taskTitle}" has been deleted.` }
                 }
                 case 'mark_task_complete': {
                     const result = await toggleTaskComplete(toolInput.taskId)
@@ -918,11 +1133,7 @@ YOUR BEHAVIOUR:
                         return updated
                     })
                     onTaskChanged?.()
-                    return {
-                        success: true,
-                        message: `Task "${toolInput.taskTitle}" completion status toggled.`,
-                        task: result
-                    }
+                    return { success: true, message: `Task "${toolInput.taskTitle}" completion status toggled.`, task: result }
                 }
                 default:
                     return { success: false, error: `Unknown tool: ${toolName}` }
@@ -932,7 +1143,6 @@ YOUR BEHAVIOUR:
         }
     }
 
-    // ── Agentic loop ───────────────────────────────────────────────────────────
     const runAgentLoop = async (history, userText) => {
         let currentHistory    = history
         const MAX_ITERATIONS  = 6
@@ -1010,42 +1220,41 @@ YOUR BEHAVIOUR:
         }
     }
 
-    // ── Send handler ───────────────────────────────────────────────────────────
     const handleSend = async () => {
-    const text = inputMessage.trim()
-    if (!text || isLoading) return
+        const text = inputMessage.trim()
+        if (!text || isLoading) return
 
-    const lower = text.toLowerCase()
-    const isCrisis = CRISIS_KEYWORDS.some(kw => lower.includes(kw))
-    if (isCrisis) {
-    setInputMessage('')
-    onClose()
-    onOpenChatBuddy?.(text)
-    return
-}
+        const lower = text.toLowerCase()
+        const isCrisis = CRISIS_KEYWORDS.some(kw => lower.includes(kw))
+        if (isCrisis) {
+            setInputMessage('')
+            onClose()
+            onOpenChatBuddy?.(text)
+            return
+        }
 
-    const userMsg = { id: `u-${Date.now()}`, role: 'user', content: text }
-    setMessages(prev => [...prev, userMsg])
-    setInputMessage('')
-    setIsLoading(true)
+        const userMsg = { id: `u-${Date.now()}`, role: 'user', content: text }
+        setMessages(prev => [...prev, userMsg])
+        setInputMessage('')
+        setIsLoading(true)
 
-    const newHistory = [
-        ...agentHistoryRef.current,
-        { role: 'user', content: text },
-    ]
+        const newHistory = [
+            ...agentHistoryRef.current,
+            { role: 'user', content: text },
+        ]
 
-    try {
-        await runAgentLoop(newHistory, text)
-    } catch (err) {
-        setMessages(prev => [...prev, {
-            id:      `err-${Date.now()}`,
-            role:    'assistant',
-            content: `Sorry, something went wrong: ${err.message || 'Please try again.'}`,
-        }])
-    } finally {
-        setIsLoading(false)
+        try {
+            await runAgentLoop(newHistory, text)
+        } catch (err) {
+            setMessages(prev => [...prev, {
+                id:      `err-${Date.now()}`,
+                role:    'assistant',
+                content: `Sorry, something went wrong: ${err.message || 'Please try again.'}`,
+            }])
+        } finally {
+            setIsLoading(false)
+        }
     }
-}
 
     const handleKeyDown = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -1068,8 +1277,8 @@ YOUR BEHAVIOUR:
 
     return (
         <div
-            className="fixed bottom-20 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl border-2 border-violet-200 shadow-2xl flex flex-col overflow-hidden"
-            style={{ height: '480px', maxHeight: 'calc(100vh - 100px)' }}
+            className="fixed bottom-24 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl border border-violet-100 shadow-2xl flex flex-col overflow-hidden"
+            style={{ height: '480px', maxHeight: 'calc(100vh - 120px)' }}
         >
             <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-2.5">
@@ -1084,20 +1293,14 @@ YOUR BEHAVIOUR:
                         </div>
                     </div>
                 </div>
-                <button
-                    onClick={onClose}
-                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-                >
+                <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
                     <XMarkIcon className="w-4 h-4 text-white" />
                 </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50/40">
                 {messages.map(msg => (
-                    <div
-                        key={msg.id}
-                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
+                    <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         {msg.role === 'assistant' && (
                             <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mr-2 mt-0.5">
                                 <SparklesIcon className="w-3.5 h-3.5 text-violet-600" />
@@ -1134,11 +1337,7 @@ YOUR BEHAVIOUR:
                         </div>
                         <div className="bg-white border border-gray-200 px-3 py-2 rounded-2xl rounded-bl-sm flex items-center gap-1 shadow-sm">
                             {[0, 1, 2].map(i => (
-                                <span
-                                    key={i}
-                                    className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce"
-                                    style={{ animationDelay: `${i * 0.15}s` }}
-                                />
+                                <span key={i} className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
                             ))}
                         </div>
                     </div>
@@ -1175,10 +1374,7 @@ YOUR BEHAVIOUR:
                             className="flex-1 resize-none focus:outline-none bg-transparent text-xs text-gray-800 placeholder-gray-400 max-h-20 disabled:opacity-60"
                             style={{ fieldSizing: 'content' }}
                         />
-                        <VoiceInputButton
-                            onTranscript={handleVoiceTranscript}
-                            disabled={isLoading}
-                        />
+                        <VoiceInputButton onTranscript={handleVoiceTranscript} disabled={isLoading} />
                     </div>
                     <button
                         onClick={handleSend}
@@ -1195,27 +1391,26 @@ YOUR BEHAVIOUR:
         </div>
     )
 }
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN SCHEDULE COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// NOTE ON PROPS: `tasks` is now keyed by ISO date string ("2026-07-06") instead
-// of weekday name. `activeDay` now holds an ISO date string instead of "Monday".
-// Rename these upstream at your convenience — kept as-is here to minimize prop
-// signature churn with the parent component.
 export default function Schedule({ tasks, setTasks, activeDay, setActiveDay, user, onOpenChatBuddy, onXpEarned }) {
 
-    // Internal aliases for clarity — same underlying state as the props above.
     const tasksByDate    = tasks
     const setTasksByDate = setTasks
     const activeDate     = activeDay || todayISO()
     const setActiveDate  = setActiveDay
 
     const [viewMonth, setViewMonth] = useState(() => firstOfMonth(new Date()))
-const calendarCells = monthGridDates(viewMonth)
-// Monday–Sunday range around activeDate — used only for MiniChatBuddy's context, not display
-const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00')))
+    const [scheduleView, setScheduleView] = useState('day')
+    const [showEarlyMorning, setShowEarlyMorning] = useState(false)
+    const [showLateNight, setShowLateNight] = useState(false)
+    const calendarCells = useMemo(() => monthGridDates(viewMonth), [viewMonth])
+    const contextWeekDates = useMemo(
+        () => weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00'))),
+        [activeDate]
+    )
 
     const [showAddTask, setShowAddTask]               = useState(false)
     const [newTask, setNewTask]                       = useState({ startTime: '09:00', endTime: '10:00', title: '', notes: '' })
@@ -1257,11 +1452,7 @@ const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00
     const [successMessage, setSuccessMessage]         = useState('')
     const [showConfirmModal, setShowConfirmModal]     = useState(false)
     const [confirmModalConfig, setConfirmModalConfig] = useState({
-        title: '',
-        message: '',
-        confirmText: '',
-        confirmBg: '',
-        onConfirm: () => {}
+        title: '', message: '', confirmText: '', confirmBg: '', onConfirm: () => {}
     })
     const [showWarningModal, setShowWarningModal]     = useState(false)
     const [warningModalMessage, setWarningModalMessage] = useState('')
@@ -1276,6 +1467,7 @@ const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00
     const [currentTimeMins, setCurrentTimeMins] = useState(() => {
         const now = new Date(); return roundUpTo15(now.getHours() * 60 + now.getMinutes())
     })
+
     useEffect(() => {
         const interval = setInterval(() => {
             const now = new Date(); setCurrentTimeMins(roundUpTo15(now.getHours() * 60 + now.getMinutes()))
@@ -1326,22 +1518,21 @@ const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00
     const isPastDay   = (iso) => iso < todayISO()
     const isTodayDay  = (iso) => iso === todayISO()
 
-    // ── Fetch month(s) of tasks covering the current week ─────────────────────
     useEffect(() => {
-    if (!user?.id || prefStatus !== 'ready') return
-
-    // Fetches every month touched by the visible grid (handles leading/trailing days too)
-    const monthsNeeded = new Set(calendarCells.map(c => c.iso.slice(0, 7)))
-    const fetches = Array.from(monthsNeeded).map(ym => {
-        const [y, m] = ym.split('-').map(Number)
-        return getMonthTasks(user.id, y, m).catch(() => ({}))
-    })
-
-    Promise.all(fetches).then(results => {
-        const merged = Object.assign({}, ...results)
-        setTasksByDate(prev => ({ ...prev, ...merged }))
-    })
-}, [user?.id, viewMonth, prefStatus])
+        if (!user?.id || prefStatus !== 'ready') return
+        let cancelled = false
+        const monthsNeeded = new Set(calendarCells.map(c => c.iso.slice(0, 7)))
+        const fetches = Array.from(monthsNeeded).map(ym => {
+            const [y, m] = ym.split('-').map(Number)
+            return getMonthTasks(user.id, y, m).catch(() => ({}))
+        })
+        Promise.all(fetches).then(results => {
+            if (cancelled) return
+            const merged = Object.assign({}, ...results)
+            setTasksByDate(prev => ({ ...prev, ...merged }))
+        })
+        return () => { cancelled = true }
+    }, [user?.id, viewMonth, prefStatus])
 
     useEffect(() => {
         if (!user?.id || prefStatus !== 'ready') return
@@ -1369,18 +1560,24 @@ const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00
     }
 
     const toMins  = (t) => { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+m }
-    const fmtTime = (t) => { if (!t) return ''; const [h,m] = t.split(':').map(Number); return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}` }
+    const fmtTime = (t) => {
+        if (!t) return ''
+        const [h,m] = t.split(':').map(Number)
+        const period = h >= 12 ? 'PM' : 'AM'
+        const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h
+        return `${displayH}:${String(m).padStart(2,'0')} ${period}`
+    }
     const getDur  = (s,e) => { const d = toMins(e)-toMins(s); if(d<=0) return ''; const h=Math.floor(d/60),m=d%60; return h&&m?`${h}h ${m}m`:h?`${h}h`:`${m}m` }
-    const totalMins = () => normTasks.reduce((a,t) => { const d = toMins(t.endTime)-toMins(t.startTime); return a+(d>0?d:0) }, 0)
 
-    const hasOverlap = (date,s,e,excl=null) =>
-        (tasksByDate[date] || []).some(r => { const t = normaliseTask(r); if(t.id===excl) return false; return toMins(s)<toMins(t.endTime)&&toMins(e)>toMins(t.startTime) })
+    const hasOverlap = useCallback((date,s,e,excl=null) =>
+        (tasksByDate[date] || []).some(r => { const t = normaliseTask(r); if(t.id===excl) return false; return toMins(s)<toMins(t.endTime)&&toMins(e)>toMins(t.startTime) }),
+    [tasksByDate])
 
-    const isBlockedBySchool = (s,e) => {
+    const isBlockedBySchool = useCallback((s,e) => {
         const schoolBlocked = blockedWindows.some(w => toMins(s)<toMins(w.endTime)&&toMins(e)>toMins(w.startTime))
         const busyBlocked   = busySlotBlocks.some(b => toMins(s)<toMins(b.endTime)&&toMins(e)>toMins(b.startTime))
         return schoolBlocked || busyBlocked
-    }
+    }, [blockedWindows, busySlotBlocks])
 
     const isOverdue = (t) => {
         if (t.completed) return false
@@ -1397,24 +1594,54 @@ const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00
     }
 
     const activeDayIsLocked = isPastDay(activeDate)
-    const normTasks  = (tasksByDate[activeDate] || []).map(normaliseTask)
+    const normTasks  = useMemo(
+        () => (tasksByDate[activeDate] || []).map(normaliseTask),
+        [tasksByDate, activeDate]
+    )
     const totalT     = normTasks.length
     const doneT      = normTasks.filter(t => t.completed).length
     const pct        = totalT > 0 ? Math.round((doneT/totalT)*100) : 0
     const incomplete = (tasksByDate[activeDate] || []).filter(t => !t.completed).length
-    const sorted     = [...normTasks].sort((a,b) => a.startTime.localeCompare(b.startTime))
-    const tMins      = totalMins()
+    const sorted     = useMemo(
+        () => [...normTasks].sort((a,b) => a.startTime.localeCompare(b.startTime)),
+        [normTasks]
+    )
+    const tMins      = normTasks.reduce((a,t) => { const d = toMins(t.endTime)-toMins(t.startTime); return a+(d>0?d:0) }, 0)
     const tHrs       = Math.floor(tMins/60)
     const tMin       = tMins % 60
     const nextDate   = toISO(addDays(new Date(activeDate + 'T00:00:00'), 1))
     const maxDailyStudyMins = getMaxDailyStudyMins(user?.className, isWeekendISO(activeDate))
 
-    const typeColors = {
-        Study:   { bg:'bg-blue-500',    light:'bg-blue-100',   text:'text-blue-700',   border:'border-blue-200' },
-        Wellness:{ bg:'bg-emerald-500',  light:'bg-emerald-100',text:'text-emerald-700',border:'border-emerald-200' },
-        Intervention: { bg:'bg-purple-500', light:'bg-purple-100', text:'text-purple-700', border:'border-purple-200' },
-        Other:   { bg:'bg-violet-400',   light:'bg-violet-100', text:'text-violet-600', border:'border-violet-200' },
-    }
+    // Aggregate stats for progress donut
+    const progressStats = useMemo(() => {
+        const studyMins = normTasks.filter(t => t.detectedType?.toLowerCase() === 'study')
+            .reduce((a, t) => a + Math.max(0, toMins(t.endTime) - toMins(t.startTime)), 0)
+        const wellnessMins = normTasks.filter(t => t.detectedType?.toLowerCase() === 'wellness')
+            .reduce((a, t) => a + Math.max(0, toMins(t.endTime) - toMins(t.startTime)), 0)
+        const otherMins = normTasks.filter(t => {
+            const type = t.detectedType?.toLowerCase()
+            return type !== 'study' && type !== 'wellness'
+        }).reduce((a, t) => a + Math.max(0, toMins(t.endTime) - toMins(t.startTime)), 0)
+
+        const fmt = (m) => {
+            const h = Math.floor(m / 60), mm = m % 60
+            if (h && mm) return `${h}h ${mm}m`
+            if (h) return `${h}h`
+            return `${mm}m`
+        }
+        return {
+            studyLabel: fmt(studyMins) || '0m',
+            wellnessLabel: fmt(wellnessMins) || '0m',
+            otherLabel: fmt(otherMins) || '0m',
+            studyCount: normTasks.filter(t => t.detectedType?.toLowerCase() === 'study').length,
+            wellnessCount: normTasks.filter(t => t.detectedType?.toLowerCase() === 'wellness').length,
+            otherCount: normTasks.filter(t => {
+                const type = t.detectedType?.toLowerCase()
+                return type !== 'study' && type !== 'wellness'
+            }).length,
+        }
+    }, [normTasks])
+
     const urgencyColors = {
         URGENT:  'bg-red-100 text-red-700 border-red-200',
         UPCOMING:'bg-yellow-100 text-yellow-700 border-yellow-200',
@@ -1460,7 +1687,7 @@ const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00
         }
         if (prefWindow) { const slot = tryFindSlot(prefWindow[0]*60, prefWindow[1]*60); if (slot) return slot }
         return tryFindSlot(dayStartMins, 22*60)
-    }, [normTasks, blockedWindows, busySlotBlocks, activeDate, currentTimeMins, preferredStudyTime])
+    }, [normTasks, blockedWindows, busySlotBlocks, activeDate, currentTimeMins, preferredStudyTime, hasOverlap, isBlockedBySchool])
 
     const handleRecommendationClick = (suggestion) => {
         if (activeDayIsLocked) return
@@ -1570,6 +1797,7 @@ const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00
         if (!newTask.title||!newTask.startTime||!newTask.endTime) return
         if (toMins(newTask.endTime)<=toMins(newTask.startTime)) { setOverlapError('End time must be after start time.'); return }
         if (isBlockedBySchool(newTask.startTime,newTask.endTime)) { setOverlapError('This time slot is blocked.'); return }
+        if (hasOverlap(activeDate, newTask.startTime, newTask.endTime)) { setOverlapError('This slot overlaps with another task.'); return }
         setIsSaving(true)
         try {
             const saved = await addTask(user.id, activeDate, newTask.title, newTask.startTime, newTask.endTime, newTask.notes)
@@ -1724,13 +1952,47 @@ const contextWeekDates = weekDatesFrom(mondayOf(new Date(activeDate + 'T00:00:00
 
     const closePush = () => { setShowPushModal(false); setPushNonConflicts([]); setPushConflicts([]); setConflictTimes({}); setPushError('') }
 
+    // Get task type key for styling
+    const getTaskTypeKey = (task) => {
+        const raw = task.detectedType?.toLowerCase() || 'other'
+        if (raw === 'study') return 'Study'
+        if (raw === 'wellness') return 'Wellness'
+        if (raw === 'intervention') return 'Intervention'
+        return 'Other'
+    }
+
+    // Build timeline hours (6 AM - 10 PM)
+    const timelineHours = useMemo(() => {
+        return Array.from({ length: 17 }, (_, i) => {
+            const h = 6 + i
+            const period = h >= 12 ? 'PM' : 'AM'
+            const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h
+            return {
+                hour: h,
+                label: `${displayH} ${period}`,
+                mins: h * 60,
+            }
+        })
+    }, [])
+
+    // Motivational banner message
+    const bannerMessage = useMemo(() => {
+        if (totalT === 0) return `Ready to plan your ${dayLabel(activeDate).toLowerCase()}? Add your first activity! ✨`
+        if (pct === 100) return `Amazing! You've completed all ${totalT} tasks today! 🎉`
+        if (isTodayDay(activeDate)) return `✨ Stay consistent! You have ${incomplete} task${incomplete !== 1 ? 's' : ''} planned for today.`
+        return `${totalT} task${totalT !== 1 ? 's' : ''} scheduled for ${dayLabel(activeDate)}`
+    }, [totalT, pct, incomplete, activeDate])
+
     const schoolBlocks = blockedWindows.map((w,i) => ({id:`school-${i}`,title:'School Hours',startTime:w.startTime,endTime:w.endTime,isSchoolBlock:true,isBusyBlock:false,completed:false}))
     const busyBlocks   = busySlotBlocks.map((b,i) => ({id:`busy-${i}`,title:b.reason||'Busy',startTime:b.startTime,endTime:b.endTime,isSchoolBlock:false,isBusyBlock:true,completed:false}))
-    const allItems     = [...sorted,...schoolBlocks,...busyBlocks].sort((a,b) => a.startTime.localeCompare(b.startTime))
+    const allItems     = useMemo(
+        () => [...sorted,...schoolBlocks,...busyBlocks].sort((a,b) => a.startTime.localeCompare(b.startTime)),
+        [sorted, blockedWindows, busySlotBlocks]
+    )
 
     const goPrevMonth = () => setViewMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
-const goNextMonth = () => setViewMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
-const goThisMonth = () => { setViewMonth(firstOfMonth(new Date())); setActiveDate(todayISO()) }
+    const goNextMonth = () => setViewMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+    const goThisMonth = () => { setViewMonth(firstOfMonth(new Date())); setActiveDate(todayISO()) }
 
     if (prefStatus === 'checking') {
         return (
@@ -1766,10 +2028,10 @@ const goThisMonth = () => { setViewMonth(firstOfMonth(new Date())); setActiveDat
             </div>
         )
     }
+        return (
+        <div className="font-lora relative bg-gray-50/30 min-h-screen -mx-4 -my-4 px-4 py-4 sm:-mx-6 sm:-my-6 sm:px-6 sm:py-6">
 
-    return (
-        <div className="font-lora relative">
-
+            {/* ── Success Toast ── */}
             {successMessage && (
                 <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-emerald-500 text-white font-bold px-6 py-3 rounded-full shadow-2xl transition-all duration-300">
                     <CheckCircleIcon className="w-5 h-5 text-white" />
@@ -1777,6 +2039,7 @@ const goThisMonth = () => { setViewMonth(firstOfMonth(new Date())); setActiveDat
                 </div>
             )}
 
+            {/* ── Preferences Modal ── */}
             {showEditPrefs && (
                 <PreferencesModal
                     user={user}
@@ -1789,419 +2052,1000 @@ const goThisMonth = () => { setViewMonth(firstOfMonth(new Date())); setActiveDat
 
             {/* ── Page Header ── */}
             <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-black text-black mb-2">My Schedule 📅</h1>
-                    <p className="text-gray-600 font-medium">Plan your week for success and balance</p>
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-violet-600 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-200">
+                        <CalendarIcon className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-black text-black mb-1 flex items-center gap-2">
+                            My Schedule 
+                        </h1>
+                        <p className="text-gray-500 font-medium text-sm">Plan your week for success and balance</p>
+                    </div>
                 </div>
                 <button
                     onClick={() => setShowEditPrefs(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border-2 border-violet-200 hover:border-violet-400 hover:bg-violet-50 transition-all flex-shrink-0 shadow-sm"
-                    title="Edit Preferences"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-gray-200 hover:border-violet-300 hover:bg-violet-50 transition-all flex-shrink-0 shadow-sm"
+                    title="Preferences"
                 >
-                    <Cog6ToothIcon className="w-4 h-4 text-violet-600" />
-                    <span className="text-sm font-bold text-violet-700 hidden sm:inline">Preferences</span>
-                    {preferredStudyTime && (
-                        <span className="hidden sm:inline-flex items-center gap-1 text-xs font-bold bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full">
-                            {STUDY_TIME_OPTIONS.find(o => o.value === preferredStudyTime)?.emoji}
-                            {STUDY_TIME_OPTIONS.find(o => o.value === preferredStudyTime)?.label}
-                        </span>
-                    )}
+                    <Cog6ToothIcon className="w-4 h-4 text-gray-600" />
+                    <span className="text-sm font-bold text-gray-700 hidden sm:inline">Preferences</span>
                 </button>
             </div>
 
+            {/* ── Upcoming Exams ── */}
             {upcomingExams.length > 0 && (
                 <div className="mb-4 flex flex-wrap gap-2">
-                    {upcomingExams.slice(0,3).map(exam => (
-                        <div key={exam.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold ${urgencyColors[exam.urgency]||urgencyColors.NORMAL}`}>
-                            <AcademicCapIcon className="w-3.5 h-3.5" />{exam.subjectName} exam in {exam.daysRemaining} day{exam.daysRemaining===1?'':'s'}
+                    {upcomingExams.slice(0, 3).map(exam => (
+                        <div key={exam.id} className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold ${urgencyColors[exam.urgency] || urgencyColors.NORMAL}`}>
+                            <AcademicCapIcon className="w-3.5 h-3.5" />
+                            {exam.subjectName} exam in {exam.daysRemaining} day{exam.daysRemaining === 1 ? '' : 's'}
                         </div>
                     ))}
                 </div>
             )}
 
-            {totalT > 0 && (
-                <div className="mb-6 bg-white border-2 border-violet-200 rounded-2xl p-4">
-                    <div className="flex justify-between items-center mb-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-black text-black text-sm">{dayLabel(activeDate)}'s Progress</span>
-                            {pct===100 && <span className="text-xs bg-green-100 text-green-700 font-black px-2 py-0.5 rounded-full border border-green-200">✓ All done!</span>}
-                            {tMins>0 && <span className="text-xs bg-violet-50 text-violet-500 font-black px-2 py-0.5 rounded-full border border-violet-100">⏱ {tHrs>0?`${tHrs}h `:''}{tMin>0?`${tMin}m`:''} scheduled</span>}
-                        </div>
-                        <span className="text-sm font-bold text-black">{doneT}/{totalT} tasks</span>
-                    </div>
-                    <div className="relative h-3 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full transition-all duration-700 ease-out bg-gradient-to-r from-green-400 to-emerald-500" style={{width:`${pct}%`}} />
-                    </div>
-                    <div className="relative h-1.5 mt-2">
-                        {[25,50,75,100].map(m => (
-                            <span key={m} className={`absolute text-[10px] font-bold -translate-x-1/2 ${pct>=m?'text-green-500':'text-gray-300'}`} style={{left:`${m}%`}}>{m}%</span>
-                        ))}
-                    </div>
-                </div>
-            )}
+            {/* ── Main Grid: Sidebar + Timeline ── */}
+            <div className="grid lg:grid-cols-[320px_1fr] gap-6">
 
-            <div className="grid lg:grid-cols-4 gap-6">
-                <div className="lg:col-span-1 bg-white border-2 border-violet-200 rounded-2xl p-4 h-fit">
-                    {/* ── Month navigation ── */}
-                    <div className="flex items-center justify-between mb-4">
-                        <button onClick={goPrevMonth} className="p-1.5 rounded-lg hover:bg-violet-50 text-violet-500 transition-colors">
-                            <ChevronLeftIcon className="w-4 h-4" />
-                        </button>
-                        <button onClick={goThisMonth} className="text-sm font-black text-gray-700 hover:text-violet-600 transition-colors text-center px-1">
-                            {monthLabel(viewMonth)}
-                        </button>
-                        <button onClick={goNextMonth} className="p-1.5 rounded-lg hover:bg-violet-50 text-violet-500 transition-colors">
+                {/* ═══════════════════════════════════════════════════════════ */}
+                {/* LEFT SIDEBAR                                                 */}
+                {/* ═══════════════════════════════════════════════════════════ */}
+                <div className="space-y-4">
+
+                    {/* ── Month Calendar Card ── */}
+                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                        {/* Month nav */}
+                        <div className="flex items-center justify-between mb-4">
+                            <button onClick={goPrevMonth} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                                <ChevronLeftIcon className="w-4 h-4" />
+                            </button>
+                            <button onClick={goThisMonth} className="text-base font-black text-gray-800 hover:text-violet-600 transition-colors">
+                                {monthLabel(viewMonth)}
+                            </button>
+                            <button onClick={goNextMonth} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                                <ArrowRightIcon className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Weekday header */}
+                        <div className="grid grid-cols-7 gap-1 mb-2">
+                            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                                <div key={i} className="text-center text-[11px] font-black text-gray-400 py-1">{d}</div>
+                            ))}
+                        </div>
+
+                        {/* Calendar grid */}
+                        <div className="grid grid-cols-7 gap-1">
+                            {calendarCells.map(cell => {
+                                const dt = tasksByDate[cell.iso] || []
+                                const isActive = activeDate === cell.iso
+                                const isPast = isPastDay(cell.iso)
+                                const isToday = isTodayDay(cell.iso)
+                                const dayNum = parseInt(cell.iso.slice(8, 10), 10)
+                                return (
+                                    <button
+                                        key={cell.iso}
+                                        onClick={() => setActiveDate(cell.iso)}
+                                        className={`relative aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-bold transition-all ${
+                                            !cell.inMonth ? 'text-gray-300' :
+                                            isActive ? 'bg-violet-600 text-white shadow-md shadow-violet-200' :
+                                            isToday ? 'bg-violet-50 text-violet-700 ring-2 ring-violet-300' :
+                                            isPast ? 'text-gray-400 hover:bg-gray-50' :
+                                            'text-gray-700 hover:bg-violet-50'
+                                        }`}
+                                    >
+                                        <span>{dayNum}</span>
+                                        {dt.length > 0 && cell.inMonth && (
+                                            <span className={`w-1 h-1 rounded-full mt-0.5 ${isActive ? 'bg-white' : 'bg-violet-500'}`} />
+                                        )}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    {/* ── Day Summary Card ── */}
+                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <p className="text-base font-black text-gray-800">
+                                {dayLabel(activeDate)}, {shortDateLabel(activeDate)}
+                            </p>
+                            {isTodayDay(activeDate) && (
+                                <span className="flex items-center gap-1 text-[10px] font-black bg-violet-100 text-violet-700 px-2 py-1 rounded-full">
+                                    <CalendarIcon className="w-3 h-3" />
+                                    Today
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Summary rows */}
+                        <div className="space-y-2.5 mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 bg-violet-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <BookOpenIcon className="w-4 h-4 text-violet-600" />
+                                </div>
+                                <p className="text-sm font-bold text-gray-700">
+                                    {progressStats.studyCount} Study session{progressStats.studyCount !== 1 ? 's' : ''}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <HeartIcon className="w-4 h-4 text-emerald-600" />
+                                </div>
+                                <p className="text-sm font-bold text-gray-700">
+                                    {progressStats.wellnessCount} Relax time
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="w-7 h-7 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <ClipboardDocumentListIcon className="w-4 h-4 text-blue-600" />
+                                </div>
+                                <p className="text-sm font-bold text-gray-700">
+                                    {progressStats.otherCount} Activit{progressStats.otherCount !== 1 ? 'ies' : 'y'}
+                                </p>
+                            </div>
+                        </div>
+
+                                                                        {/* View Day Plan button — switches to Day view + scrolls */}
+                        <button
+                            onClick={() => {
+                                setScheduleView('day')
+                                // Small delay to let Day view render first, then scroll
+                                setTimeout(() => {
+                                    const timelineEl = document.getElementById('day-timeline')
+                                    if (timelineEl) {
+                                        timelineEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                    }
+                                }, 100)
+                            }}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-violet-200 text-violet-700 font-bold text-sm hover:bg-violet-50 transition-colors"
+                        >
+                            View Day Plan
                             <ArrowRightIcon className="w-4 h-4" />
                         </button>
                     </div>
 
-                    {/* ── Weekday header ── */}
-                    <div className="grid grid-cols-7 gap-1 mb-1.5">
-                        {['M','T','W','T','F','S','S'].map((d, i) => (
-                            <div key={i} className="text-center text-[10px] font-black text-gray-400 uppercase">{d}</div>
-                        ))}
-                    </div>
+                    {/* ── Progress This Week (Donut) ── */}
+                    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                        <p className="text-base font-black text-gray-800 mb-4">Progress This Week</p>
 
-                    {/* ── Calendar grid ── */}
-                    <div className="grid grid-cols-7 gap-1">
-                        {calendarCells.map(cell => {
-                            const dt = tasksByDate[cell.iso] || []
-                            const isActive = activeDate === cell.iso
-                            const isPast = isPastDay(cell.iso)
-                            const isToday = isTodayDay(cell.iso)
-                            const dayNum = parseInt(cell.iso.slice(8, 10), 10)
-                            return (
-                                <button
-                                    key={cell.iso}
-                                    onClick={() => setActiveDate(cell.iso)}
-                                    className={`relative aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-bold transition-all ${
-                                        !cell.inMonth ? 'text-gray-300' :
-                                        isActive ? 'bg-violet-600 text-white shadow-md' :
-                                        isToday ? 'bg-violet-100 text-violet-700 border-2 border-violet-300' :
-                                        isPast ? 'text-gray-400 hover:bg-gray-50' :
-                                        'text-gray-700 hover:bg-violet-50'
-                                    }`}
-                                >
-                                    <span>{dayNum}</span>
-                                    {dt.length > 0 && (
-                                        <span className={`w-1 h-1 rounded-full mt-0.5 ${isActive ? 'bg-white' : 'bg-violet-500'}`} />
-                                    )}
-                                </button>
-                            )
-                        })}
-                    </div>
+                        <div className="flex items-center gap-5">
+                            {/* Donut chart */}
+                            <div className="relative flex-shrink-0">
+                                <svg width="90" height="90" viewBox="0 0 90 90">
+                                    <circle cx="45" cy="45" r="35" fill="none" stroke="#f3f4f6" strokeWidth="10" />
+                                    <circle
+                                        cx="45"
+                                        cy="45"
+                                        r="35"
+                                        fill="none"
+                                        stroke="url(#progressGrad)"
+                                        strokeWidth="10"
+                                        strokeLinecap="round"
+                                        strokeDasharray={`${(pct / 100) * 219.9} 219.9`}
+                                        transform="rotate(-90 45 45)"
+                                        className="transition-all duration-700"
+                                    />
+                                    <defs>
+                                        <linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                            <stop offset="0%" stopColor="#8b5cf6" />
+                                            <stop offset="100%" stopColor="#ec4899" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-xl font-black text-violet-700 leading-none">{pct}%</span>
+                                    <span className="text-[9px] font-bold text-gray-400 uppercase mt-0.5">Done</span>
+                                </div>
+                            </div>
 
-                    {/* ── Selected day summary ── */}
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                        <p className="text-xs font-black text-gray-700">{dayLabel(activeDate)}, {shortDateLabel(activeDate)}</p>
-                        <p className="text-[11px] text-gray-400 font-medium mt-0.5">
-                            {(tasksByDate[activeDate] || []).length} task{(tasksByDate[activeDate] || []).length !== 1 ? 's' : ''} scheduled
-                        </p>
+                            {/* Legend */}
+                            <div className="flex-1 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-violet-500" />
+                                        <span className="text-xs font-bold text-gray-700">Study</span>
+                                    </div>
+                                    <span className="text-xs font-black text-gray-500">{progressStats.studyLabel}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                        <span className="text-xs font-bold text-gray-700">Wellness</span>
+                                    </div>
+                                    <span className="text-xs font-black text-gray-500">{progressStats.wellnessLabel}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                                        <span className="text-xs font-bold text-gray-700">Activities</span>
+                                    </div>
+                                    <span className="text-xs font-black text-gray-500">{progressStats.otherLabel}</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div className="lg:col-span-3 space-y-4">
-                    <div className="bg-white border-2 border-violet-200 rounded-2xl p-6 min-h-[600px]">
+                {/* ═══════════════════════════════════════════════════════════ */}
+                {/* RIGHT: TIMELINE VIEW                                         */}
+                {/* ═══════════════════════════════════════════════════════════ */}
+                <div id="day-timeline" className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden scroll-mt-6">
 
-                        <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
+                    {/* Timeline header */}
+                    <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+                        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
                             <div className="flex items-center gap-3 flex-wrap">
-                                <h2 className="text-2xl font-black text-black">{dayLabel(activeDate)}'s Plan</h2>
-                                <span className="text-sm font-medium text-gray-400">{shortDateLabel(activeDate)}</span>
-                                {isTodayDay(activeDate) && <span className="text-xs font-black bg-violet-100 text-violet-600 border border-violet-200 px-3 py-1.5 rounded-full">📅 Today</span>}
+                                <h2 className="text-2xl font-black text-black">
+                                    {dayLabel(activeDate)}, <span className="text-gray-500 font-bold">{shortDateLabel(activeDate)}</span>
+                                </h2>
+                                {isTodayDay(activeDate) && (
+                                    <span className="flex items-center gap-1 text-xs font-black bg-violet-100 text-violet-700 px-3 py-1 rounded-full">
+                                        <CalendarIcon className="w-3.5 h-3.5" />
+                                        Today
+                                    </span>
+                                )}
                             </div>
                             {!activeDayIsLocked && (
                                 <div className="flex items-center gap-2 flex-wrap">
                                     {incomplete > 0 && (
-                                        <button onClick={initPush} className="flex items-center gap-2 bg-purple-50 text-purple-600 border-2 border-purple-200 px-4 py-2 rounded-xl font-bold text-sm hover:bg-purple-100 transition-all">
-                                            <ArrowRightIcon className="w-4 h-4" />Push {incomplete} to {shortDateLabel(nextDate)}
+                                        <button onClick={initPush} className="flex items-center gap-2 bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-xl font-bold text-sm hover:bg-amber-100 transition-all">
+                                            <ArrowRightIcon className="w-4 h-4" />
+                                            Push {incomplete} to {shortDateLabel(nextDate)}
                                         </button>
                                     )}
-                                    <button onClick={() => { setShowAddTask(true); setOverlapError(''); setAddWarnings([]) }}
-                                        className="bg-black text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-gray-800 transition-all flex items-center gap-2">
-                                        <PlusIcon className="w-4 h-4" />Add Activity
+                                    <button
+                                        onClick={() => { setShowAddTask(true); setOverlapError(''); setAddWarnings([]) }}
+                                        className="bg-violet-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-violet-700 transition-all flex items-center gap-2 shadow-sm shadow-violet-200"
+                                    >
+                                        <PlusIcon className="w-4 h-4" />
+                                        Add Activity
                                     </button>
                                 </div>
                             )}
                         </div>
 
-                        {allItems.length===0 && suggestions.length===0 && !recsLoading && (
-                            <div className="flex flex-col items-center justify-center h-64 text-center">
-                                <div className="w-16 h-16 bg-violet-50 rounded-full flex items-center justify-center mb-4"><CalendarIcon className="w-8 h-8 text-violet-300" /></div>
-                                <p className="text-gray-500 font-medium">No plans for {dayLabel(activeDate)}</p>
-                                {activeDayIsLocked
-                                    ? <p className="text-sm text-gray-400 mt-1">Nothing was recorded for this day.</p>
-                                    : <>
-                                        <p className="text-sm text-violet-400 mb-4">Add your first activity to get started!</p>
-                                        <button onClick={() => { setShowAddTask(true); setOverlapError(''); setAddWarnings([]) }}
-                                            className="flex items-center gap-2 text-sm text-violet-500 font-bold bg-violet-50 px-4 py-2 rounded-xl border border-violet-200 hover:bg-violet-100 transition-colors cursor-pointer">
-                                            <PlusIcon className="w-4 h-4" />Add your first activity
-                                        </button>
-                                      </>
-                                }
+                                                                       {/* Day / Week / Month toggle */}
+                        <div className="inline-flex bg-gray-100 rounded-xl p-1">
+                            <button
+                                onClick={() => setScheduleView('day')}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                    scheduleView === 'day'
+                                        ? 'bg-violet-600 text-white shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                Day
+                            </button>
+                            <button
+                                onClick={() => setScheduleView('week')}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                    scheduleView === 'week'
+                                        ? 'bg-violet-600 text-white shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                Week
+                            </button>
+                            <button
+                                onClick={() => setScheduleView('month')}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                    scheduleView === 'month'
+                                        ? 'bg-violet-600 text-white shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                Month
+                            </button>
+                        </div>
+                    </div>
+                                        {/* ═══ DAY VIEW ═══ */}
+                    {scheduleView === 'day' && (
+                        <>
+                            {/* All-Day Banner */}
+                            <div className="px-6 py-3 border-b border-gray-100">
+                                <div className="flex items-center gap-4">
+                                    <span className="text-xs font-black text-gray-400 uppercase w-14 flex-shrink-0">All Day</span>
+                                    <div className="flex-1 bg-violet-50 border border-violet-100 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                                        <SparklesIcon className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                                        <p className="text-sm font-bold text-violet-700">{bannerMessage}</p>
+                                    </div>
+                                </div>
                             </div>
-                        )}
 
-                        {allItems.length > 0 && (
-                            <div className="space-y-3 mb-6">
-                                {allItems.map(task => {
-                                    if (task.isSchoolBlock) {
-                                        const dur = getDur(task.startTime,task.endTime)
-                                        return (
-                                            <div key={task.id} className={`border-2 rounded-xl bg-white ${activeDayIsLocked?'border-orange-100 opacity-80':'border-orange-200'}`}>
-                                                <div className="flex items-center gap-3 p-4">
-                                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center ${activeDayIsLocked?'border-orange-200':'border-orange-300'}`}>
-                                                        <ClockIcon className="w-4 h-4 text-orange-400" />
-                                                    </div>
-                                                    <div className="w-1 h-10 rounded-full flex-shrink-0 bg-orange-400" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex justify-between items-start gap-2">
-                                                            <h3 className="font-bold text-lg text-black">School Hours</h3>
-                                                            <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                                {dur && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{dur}</span>}
-                                                                <span className="text-xs px-2 py-1 rounded-full font-bold uppercase tracking-wide bg-orange-100 text-orange-600">School</span>
+                            {/* ── Day Warnings ── */}
+                            {dayWarnings.length > 0 && (
+                                <div className="px-6 py-3 border-b border-gray-100 space-y-2">
+                                    {dayWarnings.map((w, i) => (
+                                        <div key={i} className="flex items-start gap-3 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                                            <span className="text-amber-500 text-base flex-shrink-0 mt-0.5">⚠️</span>
+                                            <p className="text-sm font-medium text-amber-700 leading-snug">{w.replace(/^⚠\s*/, '')}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Timeline hour rows */}
+                            <div className="px-6 py-2">
+                                {allItems.length === 0 && suggestions.length === 0 && !recsLoading && activeDayIsLocked ? (
+                                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                                        <div className="w-16 h-16 bg-violet-50 rounded-2xl flex items-center justify-center mb-4">
+                                            <CalendarIcon className="w-8 h-8 text-violet-300" />
+                                        </div>
+                                        <p className="text-gray-600 font-bold mb-1">No plans for {dayLabel(activeDate)}</p>
+                                        <p className="text-sm text-gray-400">Nothing was recorded for this day.</p>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                                                                {(() => {
+                                            // Constants for day segments
+                                            const EARLY_MORNING_END = 8   // Before 8 AM = early morning
+                                            const LATE_NIGHT_START = 23   // 11 PM and after = late night
+                                            const DEFAULT_START = 8       // 8 AM
+                                            const DEFAULT_END = 22        // 10 PM (inclusive)
+
+                                            // Check if any tasks fall into early/late zones
+                                            const taskHours = allItems.map(item => Math.floor(toMins(item.startTime) / 60))
+                                            const hasEarlyTask = taskHours.some(h => h < EARLY_MORNING_END)
+                                            const hasLateTask  = taskHours.some(h => h >= LATE_NIGHT_START)
+
+                                            // Determine visible range
+                                            const showEarly = showEarlyMorning || hasEarlyTask
+                                            const showLate  = showLateNight || hasLateTask
+
+                                            const START_HOUR = showEarly ? 0 : DEFAULT_START
+                                            const END_HOUR   = showLate ? 23 : DEFAULT_END
+
+                                            const visibleHours = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => {
+                                                const h = START_HOUR + i
+                                                const period = h >= 12 ? 'PM' : 'AM'
+                                                const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h
+                                                return { hour: h, label: `${displayH} ${period}`, mins: h * 60 }
+                                            })
+
+                                            return (
+                                                <>
+                                                    {/* ── Show Early Morning toggle ── */}
+                                                    {!showEarly && (
+                                                        <button
+                                                            onClick={() => setShowEarlyMorning(true)}
+                                                            className="w-full flex items-center justify-center gap-2 py-2.5 mb-2 rounded-xl text-xs font-bold text-gray-500 hover:text-violet-600 hover:bg-violet-50 transition-all border border-dashed border-gray-200 hover:border-violet-200"
+                                                        >
+                                                            <ChevronUpIcon className="w-3.5 h-3.5" />
+                                                            Show early morning (12 AM – 7 AM)
+                                                        </button>
+                                                    )}
+                                                    {showEarly && !hasEarlyTask && (
+                                                        <button
+                                                            onClick={() => setShowEarlyMorning(false)}
+                                                            className="w-full flex items-center justify-center gap-2 py-2 mb-2 rounded-xl text-xs font-bold text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-all"
+                                                        >
+                                                            <ChevronDownIcon className="w-3.5 h-3.5" />
+                                                            Hide early morning
+                                                        </button>
+                                                    )}
+
+                                                    {visibleHours.map(({ hour, label, mins }) => {
+                                                        const itemsInHour = allItems.filter(item => {
+                                                            const start = toMins(item.startTime)
+                                                            return start >= mins && start < mins + 60
+                                                        })
+
+                                                        const isLastRow = hour === END_HOUR
+                                                        const hasItems = itemsInHour.length > 0
+
+                                                        return (
+                                                            <div key={hour} className="flex items-center gap-4">
+                                                                <div className="w-14 flex-shrink-0">
+                                                                    <span className="text-xs font-bold text-gray-400">{label}</span>
+                                                                </div>
+
+                                                                <div className={`flex-1 ${hasItems ? 'py-1' : 'h-11'}`}>
+                                                                    {isLastRow && !hasItems && !activeDayIsLocked ? (
+                                                                        <button
+                                                                            onClick={() => { setShowAddTask(true); setOverlapError(''); setAddWarnings([]) }}
+                                                                            className="w-full py-3 rounded-xl border-2 border-dashed border-gray-200 hover:border-violet-300 hover:bg-violet-50/50 transition-all flex items-center justify-center gap-2 text-sm font-bold text-gray-500 hover:text-violet-600"
+                                                                        >
+                                                                            <PlusIcon className="w-4 h-4" />
+                                                                            Add Time Block
+                                                                        </button>
+                                                                    ) : hasItems ? (
+                                                                        <div className="space-y-1.5">
+                                                                            {itemsInHour.map(item => {
+                                                                                if (item.isSchoolBlock) {
+                                                                                    return (
+                                                                                        <div key={item.id} className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2.5 flex items-center gap-3">
+                                                                                            <div className="w-9 h-9 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                                                                <ClockIcon className="w-4 h-4 text-white" />
+                                                                                            </div>
+                                                                                            <div className="flex-1">
+                                                                                                <p className="font-bold text-orange-900 text-sm">School Hours</p>
+                                                                                                <p className="text-xs text-orange-700 font-medium mt-0.5">{fmtTime(item.startTime)} – {fmtTime(item.endTime)}</p>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )
+                                                                                }
+
+                                                                                if (item.isBusyBlock) {
+                                                                                    return (
+                                                                                        <div key={item.id} className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 flex items-center gap-3">
+                                                                                            <div className="w-9 h-9 bg-red-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                                                                <ExclamationTriangleIcon className="w-4 h-4 text-white" />
+                                                                                            </div>
+                                                                                            <div className="flex-1">
+                                                                                                <p className="font-bold text-red-900 text-sm">{item.title}</p>
+                                                                                                <p className="text-xs text-red-700 font-medium mt-0.5">{fmtTime(item.startTime)} – {fmtTime(item.endTime)}</p>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )
+                                                                                }
+
+                                                                                const typeKey = getTaskTypeKey(item)
+                                                                                const config = TASK_TYPE_CONFIG[typeKey] || TASK_TYPE_CONFIG.Other
+                                                                                const IconEl = config.icon
+                                                                                const overdue = isOverdue(item)
+                                                                                const isExp = expandedTask === item.id
+                                                                                const hasNote = item.notes?.trim().length > 0
+
+                                                                                return (
+                                                                                    <div key={item.id} className={`${config.bg} border ${config.border} rounded-xl transition-all ${item.completed ? 'opacity-60' : ''}`}>
+                                                                                        <div className="px-4 py-2.5 flex items-center gap-3">
+                                                                                            <button
+                                                                                                onClick={e => { e.stopPropagation(); if (!activeDayIsLocked) toggleDone(item.id) }}
+                                                                                                disabled={activeDayIsLocked}
+                                                                                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${
+                                                                                                    item.completed
+                                                                                                        ? 'bg-green-500 border-green-500 shadow-sm'
+                                                                                                        : activeDayIsLocked
+                                                                                                            ? 'border-gray-200 bg-white cursor-not-allowed'
+                                                                                                            : 'border-gray-300 bg-white hover:border-violet-400 hover:bg-violet-50'
+                                                                                                }`}
+                                                                                                title={item.completed ? 'Mark as incomplete' : 'Mark as complete'}
+                                                                                            >
+                                                                                                {item.completed && <CheckIcon className="w-3.5 h-3.5 text-white stroke-[3]" />}
+                                                                                            </button>
+
+                                                                                            <div className={`w-9 h-9 ${config.iconBg} rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                                                                                                <IconEl className="w-5 h-5 text-white" />
+                                                                                            </div>
+
+                                                                                            <div className="flex-1 min-w-0">
+                                                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                                                    <p className={`font-bold text-sm ${item.completed ? 'text-gray-500' : config.text}`}>
+                                                                                                        {item.title}
+                                                                                                    </p>
+                                                                                                    {item.completed && (
+                                                                                                        <span className="text-[10px] bg-green-100 text-green-700 font-black px-2 py-0.5 rounded-full border border-green-200">
+                                                                                                            ✓ Done
+                                                                                                        </span>
+                                                                                                    )}
+                                                                                                    {overdue && !item.completed && (
+                                                                                                        <span className="text-[10px] bg-red-100 text-red-600 font-black px-2 py-0.5 rounded-full border border-red-200">
+                                                                                                            ⏰ Overdue
+                                                                                                        </span>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                                <p className={`text-xs font-medium mt-0.5 ${item.completed ? 'text-gray-400' : config.subtext}`}>
+                                                                                                    {fmtTime(item.startTime)} – {fmtTime(item.endTime)}
+                                                                                                    {getDur(item.startTime, item.endTime) && (
+                                                                                                        <span className="text-gray-400"> · {getDur(item.startTime, item.endTime)}</span>
+                                                                                                    )}
+                                                                                                </p>
+                                                                                            </div>
+
+                                                                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                                                                                <button
+                                                                                                    onClick={e => { e.stopPropagation(); setExpandedTask(isExp ? null : item.id) }}
+                                                                                                    className={`p-1.5 rounded-lg transition-all ${isExp ? 'bg-white/70' : 'text-gray-500 hover:bg-white/70'}`}
+                                                                                                    title="Show notes"
+                                                                                                >
+                                                                                                    {isExp ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
+                                                                                                </button>
+                                                                                                {!activeDayIsLocked && (
+                                                                                                    <>
+                                                                                                        <button
+                                                                                                            onClick={e => openEdit(e, item)}
+                                                                                                            className="p-1.5 rounded-lg text-gray-500 hover:bg-white/70 transition-all"
+                                                                                                            title="Edit"
+                                                                                                        >
+                                                                                                            <PencilIcon className="w-3.5 h-3.5" />
+                                                                                                        </button>
+                                                                                                        <button
+                                                                                                            onClick={e => handleDelete(e, item.id)}
+                                                                                                            className="p-1.5 rounded-lg text-gray-500 hover:text-red-500 hover:bg-white/70 transition-all"
+                                                                                                            title="Delete"
+                                                                                                        >
+                                                                                                            <TrashIcon className="w-3.5 h-3.5" />
+                                                                                                        </button>
+                                                                                                    </>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+
+                                                                                        {isExp && (
+                                                                                            <div className="px-4 pb-3">
+                                                                                                <div className="pt-2 border-t border-white/60">
+                                                                                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5">📝 Notes</p>
+                                                                                                    {hasNote ? (
+                                                                                                        <p className="text-sm text-gray-700 font-medium leading-relaxed whitespace-pre-wrap">{item.notes}</p>
+                                                                                                    ) : (
+                                                                                                        <p className="text-sm text-gray-400 italic">No notes recorded.</p>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )
+                                                                            })}
+                                                                        </div>
+                                                                    ) : null}
+                                                                </div>
                                                             </div>
+                                                        )
+                                                    })}
+
+                                                                                                        {/* ── Add Time Block if last row has content ── */}
+                                                    {!activeDayIsLocked && allItems.some(item => {
+                                                        const start = toMins(item.startTime)
+                                                        return start >= END_HOUR * 60 && start < (END_HOUR + 1) * 60
+                                                    }) && (
+                                                        <div className="flex items-start gap-4 mt-2">
+                                                            <div className="w-14 flex-shrink-0" />
+                                                            <button
+                                                                onClick={() => { setShowAddTask(true); setOverlapError(''); setAddWarnings([]) }}
+                                                                className="flex-1 py-3 rounded-xl border-2 border-dashed border-gray-200 hover:border-violet-300 hover:bg-violet-50/50 transition-all flex items-center justify-center gap-2 text-sm font-bold text-gray-500 hover:text-violet-600"
+                                                            >
+                                                                <PlusIcon className="w-4 h-4" />
+                                                                Add Time Block
+                                                            </button>
                                                         </div>
-                                                        <p className="text-sm font-medium mt-0.5 text-gray-500">{fmtTime(task.startTime)} → {fmtTime(task.endTime)}</p>
+                                                    )}
+
+                                                    {/* ── Show Late Night toggle ── */}
+                                                    {!showLate && (
+                                                        <button
+                                                            onClick={() => setShowLateNight(true)}
+                                                            className="w-full flex items-center justify-center gap-2 py-2.5 mt-3 rounded-xl text-xs font-bold text-gray-500 hover:text-violet-600 hover:bg-violet-50 transition-all border border-dashed border-gray-200 hover:border-violet-200"
+                                                        >
+                                                            <ChevronDownIcon className="w-3.5 h-3.5" />
+                                                            Show late night (11 PM)
+                                                        </button>
+                                                    )}
+                                                    {showLate && !hasLateTask && (
+                                                        <button
+                                                            onClick={() => setShowLateNight(false)}
+                                                            className="w-full flex items-center justify-center gap-2 py-2 mt-2 rounded-xl text-xs font-bold text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition-all"
+                                                        >
+                                                            <ChevronUpIcon className="w-3.5 h-3.5" />
+                                                            Hide late night
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                                        {/* ═══ WEEK VIEW (7-column grid) ═══ */}
+                    {scheduleView === 'week' && (
+                        <div className="p-6">
+                            {(() => {
+                                const weekStart = mondayOf(new Date(activeDate + 'T00:00:00'))
+                                const weekDates = weekDatesFrom(weekStart)
+                                const weekEndDate = addDays(weekStart, 6)
+                                const weekLabel = `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+
+                                const goPrevWeek = () => {
+                                    const prev = addDays(weekStart, -7)
+                                    setActiveDate(toISO(prev))
+                                }
+                                const goNextWeek = () => {
+                                    const next = addDays(weekStart, 7)
+                                    setActiveDate(toISO(next))
+                                }
+                                const goThisWeek = () => setActiveDate(todayISO())
+
+                                return (
+                                    <>
+                                        {/* Week nav */}
+                                        <div className="flex items-center justify-between mb-5">
+                                            <button onClick={goPrevWeek} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                                                <ChevronLeftIcon className="w-5 h-5" />
+                                            </button>
+                                            <button onClick={goThisWeek} className="text-base font-black text-gray-800 hover:text-violet-600 transition-colors">
+                                                {weekLabel}
+                                            </button>
+                                            <button onClick={goNextWeek} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                                                <ArrowRightIcon className="w-5 h-5" />
+                                            </button>
+                                        </div>
+
+                                        {/* 7-day column headers */}
+                                        <div className="grid grid-cols-7 gap-2 mb-3">
+                                            {weekDates.map(dateIso => {
+                                                const d = new Date(dateIso + 'T00:00:00')
+                                                const isActive = activeDate === dateIso
+                                                const isToday = isTodayDay(dateIso)
+                                                return (
+                                                    <button
+                                                        key={dateIso}
+                                                        onClick={() => {
+                                                            setActiveDate(dateIso)
+                                                            setScheduleView('day')
+                                                        }}
+                                                        className={`flex flex-col items-center py-2 rounded-xl transition-all ${
+                                                            isActive
+                                                                ? 'bg-violet-600 text-white shadow-sm'
+                                                                : isToday
+                                                                    ? 'bg-violet-50 text-violet-700 ring-2 ring-violet-200'
+                                                                    : 'hover:bg-gray-50 text-gray-700'
+                                                        }`}
+                                                    >
+                                                        <span className={`text-[10px] font-black uppercase ${isActive ? 'text-violet-200' : 'text-gray-400'}`}>
+                                                            {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                                                        </span>
+                                                        <span className="text-lg font-black mt-0.5">
+                                                            {d.getDate()}
+                                                        </span>
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+
+                                        {/* 7-day task columns */}
+                                        <div className="grid grid-cols-7 gap-2">
+                                            {weekDates.map(dateIso => {
+                                                const dayTasks = (tasksByDate[dateIso] || [])
+                                                    .map(normaliseTask)
+                                                    .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                                                const isActive = activeDate === dateIso
+                                                const isPast = isPastDay(dateIso)
+
+                                                return (
+                                                    <div
+                                                        key={dateIso}
+                                                        className={`min-h-[400px] rounded-xl border-2 p-2 space-y-1.5 transition-all ${
+                                                            isActive
+                                                                ? 'border-violet-300 bg-violet-50/30'
+                                                                : 'border-gray-100 bg-gray-50/30 hover:bg-white'
+                                                        }`}
+                                                    >
+                                                        {dayTasks.length === 0 ? (
+                                                            <div className="flex items-center justify-center h-full text-center py-8">
+                                                                <p className="text-[10px] text-gray-300 font-medium">No tasks</p>
+                                                            </div>
+                                                        ) : (
+                                                            dayTasks.map(task => {
+                                                                const typeKey = getTaskTypeKey(task)
+                                                                const config = TASK_TYPE_CONFIG[typeKey] || TASK_TYPE_CONFIG.Other
+                                                                const IconEl = config.icon
+
+                                                                return (
+                                                                    <button
+                                                                        key={task.id}
+                                                                        onClick={() => {
+                                                                            setActiveDate(dateIso)
+                                                                            setScheduleView('day')
+                                                                        }}
+                                                                        className={`w-full ${config.bg} border ${config.border} rounded-lg p-2 text-left hover:shadow-sm transition-all ${
+                                                                            task.completed ? 'opacity-60' : ''
+                                                                        }`}
+                                                                    >
+                                                                        <div className="flex items-start gap-1.5">
+                                                                            <div className={`w-5 h-5 ${config.iconBg} rounded flex items-center justify-center flex-shrink-0`}>
+                                                                                {task.completed
+                                                                                    ? <CheckIcon className="w-3 h-3 text-white stroke-[3]" />
+                                                                                    : <IconEl className="w-3 h-3 text-white" />
+                                                                                }
+                                                                            </div>
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <p className={`text-[10px] font-black leading-tight truncate ${task.completed ? 'text-gray-500' : config.text}`}>
+                                                                                    {task.title}
+                                                                                </p>
+                                                                                <p className={`text-[9px] font-medium mt-0.5 ${config.subtext}`}>
+                                                                                    {fmtTime(task.startTime)}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </button>
+                                                                )
+                                                            })
+                                                        )}
                                                     </div>
+                                                )
+                                            })}
+                                        </div>
+
+                                        {/* Legend + summary */}
+                                        <div className="mt-6 flex items-center justify-between flex-wrap gap-3">
+                                            <div className="flex items-center gap-4 flex-wrap">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-violet-500" />
+                                                    <span className="text-xs font-bold text-gray-600">Study</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                                    <span className="text-xs font-bold text-gray-600">Wellness</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                                                    <span className="text-xs font-bold text-gray-600">Activities</span>
                                                 </div>
                                             </div>
-                                        )
-                                    }
+                                            <p className="text-xs text-gray-500 font-medium">
+                                                Click any day to view its full schedule
+                                            </p>
+                                        </div>
+                                    </>
+                                )
+                            })()}
+                        </div>
+                    )}
 
-                                    if (task.isBusyBlock) {
-                                        const dur = getDur(task.startTime,task.endTime)
-                                        return (
-                                            <div key={task.id} className={`border-2 rounded-xl bg-white ${activeDayIsLocked?'border-red-100 opacity-80':'border-red-200'}`}>
-                                                <div className="flex items-center gap-3 p-4">
-                                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center ${activeDayIsLocked?'border-red-200':'border-red-300'}`}>
-                                                        <ExclamationTriangleIcon className="w-4 h-4 text-red-400" />
-                                                    </div>
-                                                    <div className="w-1 h-10 rounded-full flex-shrink-0 bg-red-400" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex justify-between items-start gap-2">
-                                                            <h3 className="font-bold text-lg text-black">{task.title}</h3>
-                                                            <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                                {dur && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{dur}</span>}
-                                                                <span className="text-xs px-2 py-1 rounded-full font-bold uppercase tracking-wide bg-red-100 text-red-600">Busy</span>
-                                                            </div>
-                                                        </div>
-                                                        <p className="text-sm font-medium mt-0.5 text-gray-500">{fmtTime(task.startTime)} → {fmtTime(task.endTime)}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    }
+                    {/* ═══ MONTH VIEW ═══ */}
+                    {scheduleView === 'month' && (
+                        <div className="p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <button onClick={goPrevMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                                    <ChevronLeftIcon className="w-5 h-5" />
+                                </button>
+                                <button onClick={goThisMonth} className="text-lg font-black text-gray-800 hover:text-violet-600 transition-colors">
+                                    {monthLabel(viewMonth)}
+                                </button>
+                                <button onClick={goNextMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                                    <ArrowRightIcon className="w-5 h-5" />
+                                </button>
+                            </div>
 
-                                    const detectedType = task.detectedType ? task.detectedType.charAt(0).toUpperCase()+task.detectedType.slice(1).toLowerCase() : 'Other'
-                                    const colors = typeColors[detectedType] || typeColors.Other
-                                    const overdue = isOverdue(task); const dur = getDur(task.startTime,task.endTime)
-                                    const isExp = expandedTask===task.id; const hasNote = task.notes?.trim().length>0
+                            <div className="grid grid-cols-7 gap-2 mb-2">
+                                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+                                    <div key={d} className="text-center text-xs font-black text-gray-400 py-2 uppercase">{d}</div>
+                                ))}
+                            </div>
+
+                            <div className="grid grid-cols-7 gap-2">
+                                {calendarCells.map(cell => {
+                                    const dt = tasksByDate[cell.iso] || []
+                                    const isActive = activeDate === cell.iso
+                                    const isPast = isPastDay(cell.iso)
+                                    const isToday = isTodayDay(cell.iso)
+                                    const dayNum = parseInt(cell.iso.slice(8, 10), 10)
 
                                     return (
-                                        <div key={task.id} className={`border-2 rounded-xl transition-all duration-300 ${
-                                            activeDayIsLocked ? `bg-white ${task.completed?colors.border:'border-gray-200'}` : task.completed ? `bg-white ${colors.border}` : 'bg-gray-50 border-gray-300'
-                                        }`}>
-                                            <div className={`group flex items-center gap-3 p-4 ${activeDayIsLocked?'cursor-default':'cursor-pointer hover:opacity-90'}`}
-                                                onClick={() => !activeDayIsLocked && toggleDone(task.id)}>
-                                                <button disabled={activeDayIsLocked} onClick={e=>{e.stopPropagation();if(!activeDayIsLocked)toggleDone(task.id)}}
-                                                    className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
-                                                        task.completed?'bg-green-500 border-green-500 text-white':activeDayIsLocked?'border-gray-200 bg-white cursor-default':'border-gray-300 bg-white opacity-70 group-hover:opacity-100'
-                                                    }`}>
-                                                    {task.completed && <CheckCircleIcon className="w-5 h-5" />}
-                                                </button>
-                                                <div className={`w-1 h-10 rounded-full flex-shrink-0 ${activeDayIsLocked?(task.completed?colors.bg:'bg-gray-200'):colors.bg}`} />
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex justify-between items-start gap-2">
-                                                        <h3 className={`font-bold text-lg ${task.completed?'text-black':activeDayIsLocked?'text-gray-500':'text-gray-400'}`}>{task.title}</h3>
-                                                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                            {overdue&&!task.completed&&<span className="text-xs bg-red-100 text-red-600 font-black px-2 py-0.5 rounded-full border border-red-200">⏰ Overdue</span>}
-                                                            {dur&&<span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{dur}</span>}
-                                                            <span className={`text-xs px-2 py-1 rounded-full font-bold uppercase tracking-wide ${activeDayIsLocked?'bg-gray-100 text-gray-400':`${colors.light} ${colors.text}`}`}>{detectedType}</span>
-                                                        </div>
-                                                    </div>
-                                                    <p className={`text-sm font-medium mt-0.5 ${task.completed?'text-gray-500':'text-gray-400'}`}>{fmtTime(task.startTime)} → {fmtTime(task.endTime)}</p>
-                                                </div>
-                                                <div className="flex items-center gap-1 flex-shrink-0">
-                                                    <button onClick={e=>{e.stopPropagation();setExpandedTask(isExp?null:task.id)}}
-                                                        className={`p-2 rounded-lg transition-all ${isExp?'bg-violet-100 text-violet-500':hasNote?'text-violet-300 hover:bg-violet-50':'text-gray-300 hover:text-gray-400 hover:bg-gray-50'}`}>
-                                                        {isExp?<ChevronUpIcon className="w-4 h-4"/>:<ChevronDownIcon className="w-4 h-4"/>}
-                                                    </button>
-                                                    {!activeDayIsLocked && (<>
-                                                        <button onClick={e=>openEdit(e,task)} className="p-2 rounded-lg text-gray-400 hover:text-violet-500 hover:bg-violet-50 transition-all"><PencilIcon className="w-4 h-4"/></button>
-                                                        <button onClick={e=>handleDelete(e,task.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-50 rounded-lg transition-all"><TrashIcon className="w-4 h-4"/></button>
-                                                    </>)}
-                                                </div>
+                                        <button
+                                            key={cell.iso}
+                                            onClick={() => {
+                                                setActiveDate(cell.iso)
+                                                setScheduleView('day')
+                                            }}
+                                            className={`relative min-h-[90px] p-2 rounded-xl border-2 transition-all text-left ${
+                                                !cell.inMonth ? 'border-transparent text-gray-300' :
+                                                isActive ? 'border-violet-500 bg-violet-50 shadow-sm' :
+                                                isToday ? 'border-violet-200 bg-violet-50/40' :
+                                                'border-gray-100 hover:border-violet-200 hover:bg-violet-50/30'
+                                            }`}
+                                        >
+                                            <div className="flex items-start justify-between mb-1">
+                                                <span className={`text-sm font-black ${
+                                                    !cell.inMonth ? 'text-gray-300' :
+                                                    isActive ? 'text-violet-700' :
+                                                    isToday ? 'text-violet-700' :
+                                                    isPast ? 'text-gray-400' :
+                                                    'text-gray-700'
+                                                }`}>
+                                                    {dayNum}
+                                                </span>
+                                                {isToday && cell.inMonth && (
+                                                    <span className="text-[8px] font-black text-white bg-violet-600 px-1.5 py-0.5 rounded-full">
+                                                        TODAY
+                                                    </span>
+                                                )}
                                             </div>
-                                            {isExp && (
-                                                <div className="px-4 pb-4">
-                                                    <div className="h-px bg-gray-100 mb-3" />
-                                                    <div className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-3">
-                                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">📝 Notes</p>
-                                                        {hasNote
-                                                            ? <p className="text-sm text-gray-700 font-medium leading-relaxed whitespace-pre-wrap">{task.notes}</p>
-                                                            : <p className="text-sm text-gray-300 italic">No notes recorded.</p>
-                                                        }
-                                                    </div>
+
+                                            {cell.inMonth && dt.length > 0 && (
+                                                <div className="space-y-1">
+                                                    {dt.slice(0, 2).map((t, i) => {
+                                                        const type = t.detectedType?.toLowerCase()
+                                                        const colorClass =
+                                                            type === 'study' ? 'bg-violet-100 text-violet-700' :
+                                                            type === 'wellness' ? 'bg-emerald-100 text-emerald-700' :
+                                                            'bg-blue-100 text-blue-700'
+                                                        return (
+                                                            <div key={i} className={`text-[9px] font-bold px-1.5 py-0.5 rounded truncate ${colorClass}`}>
+                                                                {t.title}
+                                                            </div>
+                                                        )
+                                                    })}
+                                                    {dt.length > 2 && (
+                                                        <div className="text-[9px] font-bold text-gray-400 px-1">
+                                                            +{dt.length - 2} more
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
-                                        </div>
+                                        </button>
                                     )
                                 })}
                             </div>
-                        )}
 
-                        {dayWarnings.length > 0 && (
-                            <div className="mb-4 space-y-2">
-                                {dayWarnings.map((w,i) => (
-                                    <div key={i} className="flex items-start gap-3 px-4 py-3 bg-amber-50 border-2 border-amber-200 rounded-xl">
-                                        <span className="text-amber-500 text-base flex-shrink-0 mt-0.5">⚠️</span>
-                                        <p className="text-sm font-medium text-amber-700 leading-snug">{w.replace(/^⚠\s*/,'')}</p>
-                                    </div>
-                                ))}
+                            <div className="mt-6 flex items-center justify-center gap-4 flex-wrap">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-violet-500" />
+                                    <span className="text-xs font-bold text-gray-600">Study</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                    <span className="text-xs font-bold text-gray-600">Wellness</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                                    <span className="text-xs font-bold text-gray-600">Activities</span>
+                                </div>
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        {!activeDayIsLocked && (recsLoading || suggestions.length > 0) && (() => {
-                            const SUBJECT_ALIAS_MAP = {
-    'math': 'Mathematics', 'maths': 'Mathematics', 'mathematics': 'Mathematics',
-    'algebra': 'Mathematics', 'geometry': 'Mathematics', 'arithmetic': 'Mathematics',
-    'trigonometry': 'Mathematics', 'calculus': 'Mathematics',
-    'science': 'Science', 'sci': 'Science', 'physics': 'Science',
-    'phy': 'Science', 'chemistry': 'Science', 'chem': 'Science',
-    'biology': 'Science', 'bio': 'Science',
-    'sst': 'SST', 'social': 'SST', 'social studies': 'SST',
-    'history': 'SST', 'geography': 'SST', 'geo': 'SST',
-    'civics': 'SST', 'economics': 'SST', 'political science': 'SST',
-    'english': 'English', 'eng': 'English', 'grammar': 'English',
-    'literature': 'English', 'comprehension': 'English',
-    'hindi': 'Hindi', 'हिंदी': 'Hindi',
-}
+                    {/* ── AI Suggestions Section ── */}
+                     {scheduleView === 'day' && !activeDayIsLocked && (recsLoading || suggestions.length > 0) && (() => {
+                        const SUBJECT_ALIAS_MAP = {
+                            'math': 'Mathematics', 'maths': 'Mathematics', 'mathematics': 'Mathematics',
+                            'algebra': 'Mathematics', 'geometry': 'Mathematics', 'arithmetic': 'Mathematics',
+                            'trigonometry': 'Mathematics', 'calculus': 'Mathematics',
+                            'science': 'Science', 'sci': 'Science', 'physics': 'Science',
+                            'phy': 'Science', 'chemistry': 'Science', 'chem': 'Science',
+                            'biology': 'Science', 'bio': 'Science',
+                            'sst': 'SST', 'social': 'SST', 'social studies': 'SST',
+                            'history': 'SST', 'geography': 'SST', 'geo': 'SST',
+                            'civics': 'SST', 'economics': 'SST', 'political science': 'SST',
+                            'english': 'English', 'eng': 'English', 'grammar': 'English',
+                            'literature': 'English', 'comprehension': 'English',
+                            'hindi': 'Hindi', 'हिंदी': 'Hindi',
+                        }
 
-const extractSubject = (title) => {
-    if (!title) return null
-    const lower = title.toLowerCase()
-    for (const [alias, subject] of Object.entries(SUBJECT_ALIAS_MAP)) {
-        if (lower.includes(alias)) return subject
-    }
-    return null
-}
+                        const extractSubject = (title) => {
+                            if (!title) return null
+                            const lower = title.toLowerCase()
+                            for (const [alias, subject] of Object.entries(SUBJECT_ALIAS_MAP)) {
+                                if (lower.includes(alias)) return subject
+                            }
+                            return null
+                        }
 
-const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
-    const alreadyAdded = normTasks.some(t => t.title?.toLowerCase() === s.title?.toLowerCase())
-    if (alreadyAdded) return false
-
-    const suggestionSubject = extractSubject(s.title)
-    if (suggestionSubject) {
-        const subjectAlreadyScheduled = normTasks.some(t =>
-            extractSubject(t.title) === suggestionSubject
-        )
-        if (subjectAlreadyScheduled) return false
-    }
-                                if (isTodayDay(activeDate)) {
-                                    const durationMins = s.estimatedMinutes || 45
-                                    if (currentTimeMins + durationMins > 22*60) return false
-                                    if (s.taskType==='STUDY' && preferredStudyTime) {
-                                        const prefWindowEnds = { MORNING:12*60, AFTERNOON:17*60, EVENING:21*60, NIGHT:23*60 }
-                                        const windowEnd = prefWindowEnds[preferredStudyTime]
-                                        if (windowEnd && currentTimeMins >= windowEnd) return false
-                                    }
+                        const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
+                            const alreadyAdded = normTasks.some(t => t.title?.toLowerCase() === s.title?.toLowerCase())
+                            if (alreadyAdded) return false
+                            const suggestionSubject = extractSubject(s.title)
+                            if (suggestionSubject) {
+                                const subjectAlreadyScheduled = normTasks.some(t => extractSubject(t.title) === suggestionSubject)
+                                if (subjectAlreadyScheduled) return false
+                            }
+                            if (isTodayDay(activeDate)) {
+                                const durationMins = s.estimatedMinutes || 45
+                                if (currentTimeMins + durationMins > 22 * 60) return false
+                                if (s.taskType === 'STUDY' && preferredStudyTime) {
+                                    const prefWindowEnds = { MORNING: 12 * 60, AFTERNOON: 17 * 60, EVENING: 21 * 60, NIGHT: 23 * 60 }
+                                    const windowEnd = prefWindowEnds[preferredStudyTime]
+                                    if (windowEnd && currentTimeMins >= windowEnd) return false
                                 }
-                                if (s.taskType==='STUDY') {
-                                    const studyTasksToday = normTasks.filter(t => t.detectedType?.toLowerCase()==='study')
-                                    if (studyTasksToday.length >= 3) return false
-                                }
-                                return true
-                            })
+                            }
+                            if (s.taskType === 'STUDY') {
+                                const studyTasksToday = normTasks.filter(t => t.detectedType?.toLowerCase() === 'study')
+                                if (studyTasksToday.length >= 3) return false
+                            }
+                            return true
+                        })
 
-                            return (
-                                <div className="mt-2 rounded-2xl overflow-hidden border border-violet-100 shadow-sm">
-                                    <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-5 py-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm"><SparklesIcon className="w-5 h-5 text-white"/></div>
-                                                <div>
-                                                    <p className="text-white font-black text-sm tracking-wide">AI Study Planner</p>
-                                                    <p className="text-violet-200 text-[11px] font-medium">Personalised suggestions for {dayLabel(activeDate)}</p>
-                                                </div>
+                        return (
+                            <div className="border-t border-gray-100">
+                                <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                                                <SparklesIcon className="w-5 h-5 text-white" />
                                             </div>
-                                            {!recsLoading && filteredSuggestions.length > 0 && (
-                                                <span className="bg-white/20 text-white text-xs font-black px-2.5 py-1 rounded-full backdrop-blur-sm">{filteredSuggestions.length} task{filteredSuggestions.length>1?'s':''}</span>
-                                            )}
+                                            <div>
+                                                <p className="text-white font-black text-sm tracking-wide">AI Study Planner</p>
+                                                <p className="text-violet-200 text-[11px] font-medium">Personalised for {dayLabel(activeDate)}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="bg-gradient-to-b from-violet-50/60 to-white px-4 py-4 space-y-2">
-                                        {recsLoading && (
-                                            <div className="flex items-center gap-3 py-4 justify-center">
-                                                <div className="flex gap-1">
-                                                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:'0ms'}}/>
-                                                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:'150ms'}}/>
-                                                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{animationDelay:'300ms'}}/>
-                                                </div>
-                                                <span className="text-sm text-violet-500 font-medium">Analysing your schedule...</span>
-                                            </div>
-                                        )}
-                                        {filteredSuggestions.map((s, i) => {
-                                            const state = suggestionStates[s.title] || 'idle'
-                                            const isPickerOpen = suggestionTimePicker?.index === i
-                                            const style = getSuggestionStyle(s.taskType)
-                                            const typeEmoji = s.taskType==='WELLNESS'?'🧘':s.taskType==='OTHER'?'📋':'📚'
-                                            const typeLabel = s.taskType==='WELLNESS'?'Wellness':s.taskType==='OTHER'?'Other':'Study'
-                                            return (
-                                                <div key={s.title} className="group">
-                                                    <div className={`flex items-center gap-3 rounded-xl px-4 py-3 border-2 transition-all duration-200 ${
-                                                        state==='added'?'bg-green-50 border-green-200':state==='error'?'bg-red-50 border-red-200':
-                                                        'bg-white border-gray-100 hover:border-violet-200 hover:shadow-sm'
-                                                    }`}>
-                                                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-base ${s.taskType==='WELLNESS'?'bg-emerald-100':s.taskType==='OTHER'?'bg-violet-100':'bg-blue-100'}`}>{typeEmoji}</div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className={`text-sm font-bold truncate ${state==='added'?'text-green-700':'text-gray-800'}`}>{state==='added'?'✓ Added!':s.title}</p>
-                                                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                                                <span className="text-[10px] text-gray-400 font-medium">~{s.estimatedMinutes}min</span>
-                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${style.badge}`}>{typeLabel}</span>
-                                                                <span className="text-[10px] text-gray-400">·</span>
-                                                                <span className="text-[10px] text-gray-500 font-medium italic">{s.reasonLabel}</span>
-                                                            </div>
-                                                        </div>
-                                                        {state==='adding' && <div className="w-16 h-8 flex items-center justify-center"><div className="w-4 h-4 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin"/></div>}
-                                                        {state==='added' && <div className="w-16 h-8 bg-green-500 rounded-xl flex items-center justify-center"><CheckCircleIcon className="w-4 h-4 text-white"/></div>}
-                                                        {(state==='idle'||state==='error') && (
-                                                            <button onClick={() => handleRecommendationClick(s)} className="shrink-0 flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors shadow-sm">
-                                                                <PlusIcon className="w-3.5 h-3.5"/>Add
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                        {!recsLoading && filteredSuggestions.length===0 && (
-                                            <div className="text-center py-4"><p className="text-sm text-violet-400 font-medium">✨ All suggestions added for {dayLabel(activeDate)}!</p></div>
-                                        )}
                                         {!recsLoading && filteredSuggestions.length > 0 && (
-                                            <p className="text-[10px] text-gray-400 text-center pt-1 font-medium">Powered by MyMercurie · Based on your exams, goals & schedule</p>
+                                            <span className="bg-white/20 text-white text-xs font-black px-2.5 py-1 rounded-full backdrop-blur-sm">
+                                                {filteredSuggestions.length} task{filteredSuggestions.length > 1 ? 's' : ''}
+                                            </span>
                                         )}
                                     </div>
                                 </div>
-                            )
-                        })()}
-                    </div>
+                                <div className="bg-gradient-to-b from-violet-50/60 to-white px-6 py-4 space-y-2">
+                                    {recsLoading && (
+                                        <div className="flex items-center gap-3 py-4 justify-center">
+                                            <div className="flex gap-1">
+                                                <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                                <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                                <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                            </div>
+                                            <span className="text-sm text-violet-500 font-medium">Analysing your schedule...</span>
+                                        </div>
+                                    )}
+                                    {filteredSuggestions.map((s, i) => {
+                                        const state = suggestionStates[s.title] || 'idle'
+                                        const style = getSuggestionStyle(s.taskType)
+                                        const typeEmoji = s.taskType === 'WELLNESS' ? '🧘' : s.taskType === 'OTHER' ? '📋' : '📚'
+                                        const typeLabel = s.taskType === 'WELLNESS' ? 'Wellness' : s.taskType === 'OTHER' ? 'Other' : 'Study'
+                                        return (
+                                            <div key={s.title} className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all duration-200 ${
+                                                state === 'added' ? 'bg-green-50 border-green-200' :
+                                                state === 'error' ? 'bg-red-50 border-red-200' :
+                                                'bg-white border-gray-100 hover:border-violet-200 hover:shadow-sm'
+                                            }`}>
+                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-base ${
+                                                    s.taskType === 'WELLNESS' ? 'bg-emerald-100' :
+                                                    s.taskType === 'OTHER' ? 'bg-violet-100' : 'bg-blue-100'
+                                                }`}>{typeEmoji}</div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`text-sm font-bold truncate ${state === 'added' ? 'text-green-700' : 'text-gray-800'}`}>
+                                                        {state === 'added' ? '✓ Added!' : s.title}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                                        <span className="text-[10px] text-gray-400 font-medium">~{s.estimatedMinutes}min</span>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${style.badge}`}>{typeLabel}</span>
+                                                        <span className="text-[10px] text-gray-400">·</span>
+                                                        <span className="text-[10px] text-gray-500 font-medium italic">{s.reasonLabel}</span>
+                                                    </div>
+                                                </div>
+                                                {state === 'adding' && (
+                                                    <div className="w-16 h-8 flex items-center justify-center">
+                                                        <div className="w-4 h-4 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin" />
+                                                    </div>
+                                                )}
+                                                {state === 'added' && (
+                                                    <div className="w-16 h-8 bg-green-500 rounded-xl flex items-center justify-center">
+                                                        <CheckCircleIcon className="w-4 h-4 text-white" />
+                                                    </div>
+                                                )}
+                                                {(state === 'idle' || state === 'error') && (
+                                                    <button
+                                                        onClick={() => handleRecommendationClick(s)}
+                                                        className="shrink-0 flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors shadow-sm"
+                                                    >
+                                                        <PlusIcon className="w-3.5 h-3.5" />
+                                                        Add
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                    {!recsLoading && filteredSuggestions.length === 0 && (
+                                        <div className="text-center py-4">
+                                            <p className="text-sm text-violet-500 font-medium">✨ All suggestions added for {dayLabel(activeDate)}!</p>
+                                        </div>
+                                    )}
+                                    {!recsLoading && filteredSuggestions.length > 0 && (
+                                        <p className="text-[10px] text-gray-400 text-center pt-1 font-medium">
+                                            Powered by MyMercurie · Based on your exams, goals & schedule
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    })()}
                 </div>
             </div>
+                        {/* ═══════════════════════════════════════════════════════════ */}
+            {/* MODALS                                                       */}
+            {/* ═══════════════════════════════════════════════════════════ */}
 
             {/* ── Recommendation Detail Modal ── */}
             {showRecModal && !activeDayIsLocked && (
-                <div
-                    onClick={() => setShowRecModal(false)}
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                >
-                    <div
-                        onClick={e => e.stopPropagation()}
-                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl relative"
-                    >
+                <div onClick={() => setShowRecModal(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl p-6 w-full max-w-sm border border-violet-100 shadow-2xl relative">
                         <div className="flex justify-between items-start mb-4">
                             <h3 className="text-xl font-black text-black">
                                 {recModalData.taskType === 'STUDY' ? 'Schedule Study Session' :
                                  recModalData.taskType === 'WELLNESS' ? 'Schedule Relaxing Activity' :
-                                 'Schedule Assigned Intervention'}
+                                 'Schedule Activity'}
                             </h3>
                             <button
                                 onClick={() => setShowRecModal(false)}
@@ -2218,7 +3062,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                         <select
                                             value={recModalData.subjectSelect}
                                             onChange={e => setRecModalData({ ...recModalData, subjectSelect: e.target.value, error: '' })}
-                                            className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm bg-white"
+                                            className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none text-sm bg-white"
                                         >
                                             <option value="Mathematics">Mathematics</option>
                                             <option value="Science">Science</option>
@@ -2237,7 +3081,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                                 value={recModalData.titleInput}
                                                 onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })}
                                                 placeholder="e.g. History, Art, etc."
-                                                className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm"
+                                                className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none text-sm"
                                             />
                                         </div>
                                     )}
@@ -2251,7 +3095,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                         <select
                                             value={recModalData.subjectSelect}
                                             onChange={e => setRecModalData({ ...recModalData, subjectSelect: e.target.value, error: '' })}
-                                            className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm bg-white"
+                                            className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none text-sm bg-white"
                                         >
                                             {WELLNESS_ACTIVITY_OPTIONS.map(opt => (
                                                 <option key={opt} value={opt}>{opt}</option>
@@ -2267,7 +3111,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                                 value={recModalData.titleInput}
                                                 onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })}
                                                 placeholder="e.g. Paint a portrait, Play guitar, etc."
-                                                className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm"
+                                                className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none text-sm"
                                             />
                                         </div>
                                     )}
@@ -2281,7 +3125,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                         <select
                                             value={recModalData.subjectSelect}
                                             onChange={e => setRecModalData({ ...recModalData, subjectSelect: e.target.value, error: '' })}
-                                            className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm bg-white"
+                                            className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none text-sm bg-white"
                                         >
                                             {OTHER_ACTIVITY_OPTIONS.map(opt => (
                                                 <option key={opt} value={opt}>{opt}</option>
@@ -2297,7 +3141,7 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                                 value={recModalData.titleInput}
                                                 onChange={e => setRecModalData({ ...recModalData, titleInput: e.target.value, error: '' })}
                                                 placeholder="e.g. Follow-up Session"
-                                                className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none text-sm"
+                                                className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none text-sm"
                                             />
                                         </div>
                                     )}
@@ -2305,8 +3149,8 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                             )}
 
                             <div className="grid grid-cols-2 gap-4">
-                                <TimeSelect label="Start Time" value={recModalData.startTime} onChange={v => setRecModalData({ ...recModalData, startTime: v, error: '' })} is24h={true}/>
-                                <TimeSelect label="End Time" value={recModalData.endTime} onChange={v => setRecModalData({ ...recModalData, endTime: v, error: '' })} is24h={true}/>
+                                <TimeSelect label="Start Time" value={recModalData.startTime} onChange={v => setRecModalData({ ...recModalData, startTime: v, error: '' })} is24h={true} />
+                                <TimeSelect label="End Time" value={recModalData.endTime} onChange={v => setRecModalData({ ...recModalData, endTime: v, error: '' })} is24h={true} />
                             </div>
 
                             <div>
@@ -2315,15 +3159,19 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                     value={recModalData.notes}
                                     onChange={e => setRecModalData({ ...recModalData, notes: e.target.value })}
                                     rows={2}
-                                    className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none resize-none text-sm"
+                                    className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none resize-none text-sm"
                                 />
                             </div>
 
-                            {recModalData.error && <div className="bg-red-50 border-2 border-red-200 rounded-xl px-4 py-2 text-red-600 text-sm font-medium">⚠️ {recModalData.error}</div>}
+                            {recModalData.error && (
+                                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-red-600 text-sm font-medium">
+                                    ⚠️ {recModalData.error}
+                                </div>
+                            )}
                         </div>
                         <div className="flex gap-3 mt-6">
-                            <button onClick={() => setShowRecModal(false)} className="flex-1 px-4 py-2 rounded-xl font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
-                            <button onClick={saveRecommendationTask} disabled={isSaving} className="flex-1 bg-black text-white px-4 py-2 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50">
+                            <button onClick={() => setShowRecModal(false)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 border border-gray-200">Cancel</button>
+                            <button onClick={saveRecommendationTask} disabled={isSaving} className="flex-1 bg-violet-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-violet-700 disabled:opacity-50 shadow-sm shadow-violet-200">
                                 {isSaving ? 'Saving...' : 'Add to Plan'}
                             </button>
                         </div>
@@ -2333,43 +3181,39 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Edit Task Modal ── */}
             {editingTask && !activeDayIsLocked && (
-                <div
-                    onClick={() => setEditingTask(null)}
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                >
-                    <div
-                        onClick={e => e.stopPropagation()}
-                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl"
-                    >
+                <div onClick={() => setEditingTask(null)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl p-6 w-full max-w-sm border border-violet-100 shadow-2xl">
                         <div className="flex items-center gap-3 mb-5">
-                            <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center"><PencilIcon className="w-4 h-4 text-violet-500"/></div>
+                            <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center">
+                                <PencilIcon className="w-4 h-4 text-violet-600" />
+                            </div>
                             <h3 className="text-xl font-black text-black">Edit Activity</h3>
                         </div>
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Activity Name</label>
-                                <input autoFocus type="text" value={editData.title} onChange={e=>setEditData({...editData,title:e.target.value})} className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none"/>
+                                <input autoFocus type="text" value={editData.title} onChange={e => setEditData({ ...editData, title: e.target.value })} className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <TimeSelect label="Start Time" value={editData.startTime} onChange={v=>setEditData({...editData,startTime:v})} is24h={true}/>
-                                <TimeSelect label="End Time" value={editData.endTime} onChange={v=>setEditData({...editData,endTime:v})} is24h={true}/>
+                                <TimeSelect label="Start Time" value={editData.startTime} onChange={v => setEditData({ ...editData, startTime: v })} is24h={true} />
+                                <TimeSelect label="End Time" value={editData.endTime} onChange={v => setEditData({ ...editData, endTime: v })} is24h={true} />
                             </div>
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Notes <span className="text-gray-400 font-medium">(optional)</span></label>
-                                <textarea value={editData.notes} onChange={e=>setEditData({...editData,notes:e.target.value})} rows={3} className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none resize-none text-sm"/>
+                                <textarea value={editData.notes} onChange={e => setEditData({ ...editData, notes: e.target.value })} rows={3} className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none resize-none text-sm" />
                             </div>
-                            {editError && <div className="bg-red-50 border-2 border-red-200 rounded-xl px-4 py-2 text-red-600 text-sm font-medium">⚠️ {editError}</div>}
+                            {editError && <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-red-600 text-sm font-medium">⚠️ {editError}</div>}
                             {editWarnings.length > 0 && (
-                                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl px-4 py-2 text-amber-700 text-sm font-medium space-y-1">
-                                    {editWarnings.map((w,i) => <p key={i}>⚠️ {w}</p>)}
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-amber-700 text-sm font-medium space-y-1">
+                                    {editWarnings.map((w, i) => <p key={i}>⚠️ {w}</p>)}
                                     <p className="text-xs text-amber-500 font-normal">Changes saved — closing in a moment...</p>
                                 </div>
                             )}
                         </div>
                         <div className="flex gap-3 mt-6">
-                            <button onClick={() => setEditingTask(null)} className="flex-1 px-4 py-2 rounded-xl font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
-                            <button onClick={saveEdit} disabled={!editData.title||isSaving} className="flex-1 bg-black text-white px-4 py-2 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed">
-                                {isSaving?'Saving...':'Save Changes'}
+                            <button onClick={() => setEditingTask(null)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 border border-gray-200">Cancel</button>
+                            <button onClick={saveEdit} disabled={!editData.title || isSaving} className="flex-1 bg-violet-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-violet-200">
+                                {isSaving ? 'Saving...' : 'Save Changes'}
                             </button>
                         </div>
                     </div>
@@ -2378,56 +3222,55 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Add Task Modal ── */}
             {showAddTask && !activeDayIsLocked && (
-                <div
-                    onClick={() => { setShowAddTask(false); setOverlapError(''); setAddWarnings([]) }}
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                >
-                    <div
-                        onClick={e => e.stopPropagation()}
-                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-200 shadow-xl"
-                    >
-                        <h3 className="text-xl font-black text-black mb-4">Add New Activity</h3>
+                <div onClick={() => { setShowAddTask(false); setOverlapError(''); setAddWarnings([]) }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl p-6 w-full max-w-sm border border-violet-100 shadow-2xl">
+                        <div className="flex items-center gap-3 mb-5">
+                            <div className="w-9 h-9 bg-violet-100 rounded-xl flex items-center justify-center">
+                                <PlusIcon className="w-4 h-4 text-violet-600" />
+                            </div>
+                            <h3 className="text-xl font-black text-black">Add New Activity</h3>
+                        </div>
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Activity Name</label>
-                                <input autoFocus type="text" value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})} placeholder="e.g. Math Revision" className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none"/>
+                                <input autoFocus type="text" value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="e.g. Math Revision" className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <TimeSelect label="Start Time" value={newTask.startTime} onChange={v=>setNewTask({...newTask,startTime:v})} is24h={true}/>
-                                <TimeSelect label="End Time" value={newTask.endTime} onChange={v=>setNewTask({...newTask,endTime:v})} is24h={true}/>
+                                <TimeSelect label="Start Time" value={newTask.startTime} onChange={v => setNewTask({ ...newTask, startTime: v })} is24h={true} />
+                                <TimeSelect label="End Time" value={newTask.endTime} onChange={v => setNewTask({ ...newTask, endTime: v })} is24h={true} />
                             </div>
-                            {(blockedWindows.length>0||busySlotBlocks.length>0) && (
+                            {(blockedWindows.length > 0 || busySlotBlocks.length > 0) && (
                                 <div className="space-y-1.5">
-                                    {blockedWindows.length>0 && (
+                                    {blockedWindows.length > 0 && (
                                         <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 flex items-center gap-2">
-                                            <ClockIcon className="w-3.5 h-3.5 text-orange-400 shrink-0"/>
-                                            <p className="text-xs text-orange-600 font-medium">School: {blockedWindows.map(w=>`${fmtTime(w.startTime)}–${fmtTime(w.endTime)}`).join(', ')}</p>
+                                            <ClockIcon className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                                            <p className="text-xs text-orange-700 font-medium">School: {blockedWindows.map(w => `${fmtTime(w.startTime)}–${fmtTime(w.endTime)}`).join(', ')}</p>
                                         </div>
                                     )}
-                                    {busySlotBlocks.length>0 && (
+                                    {busySlotBlocks.length > 0 && (
                                         <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 flex items-center gap-2">
-                                            <ExclamationTriangleIcon className="w-3.5 h-3.5 text-red-400 shrink-0"/>
-                                            <p className="text-xs text-red-600 font-medium">Busy: {busySlotBlocks.map(b=>`${fmtTime(b.startTime)}–${fmtTime(b.endTime)} (${b.reason||'Busy'})`).join(', ')}</p>
+                                            <ExclamationTriangleIcon className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                                            <p className="text-xs text-red-700 font-medium">Busy: {busySlotBlocks.map(b => `${fmtTime(b.startTime)}–${fmtTime(b.endTime)} (${b.reason || 'Busy'})`).join(', ')}</p>
                                         </div>
                                     )}
                                 </div>
                             )}
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Notes <span className="text-gray-400 font-medium">(optional)</span></label>
-                                <textarea value={newTask.notes} onChange={e=>setNewTask({...newTask,notes:e.target.value})} rows={2} className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-200 outline-none resize-none text-sm"/>
+                                <textarea value={newTask.notes} onChange={e => setNewTask({ ...newTask, notes: e.target.value })} rows={2} className="w-full px-4 py-2 rounded-xl border-2 border-gray-100 focus:border-violet-300 outline-none resize-none text-sm" />
                             </div>
-                            {overlapError && <div className="bg-red-50 border-2 border-red-200 rounded-xl px-4 py-2 text-red-600 text-sm font-medium">⚠️ {overlapError}</div>}
+                            {overlapError && <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-red-600 text-sm font-medium">⚠️ {overlapError}</div>}
                             {addWarnings.length > 0 && (
-                                <div className="bg-amber-50 border-2 border-amber-200 rounded-xl px-4 py-2 text-amber-700 text-sm font-medium space-y-1">
-                                    {addWarnings.map((w,i) => <p key={i}>⚠️ {w}</p>)}
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-amber-700 text-sm font-medium space-y-1">
+                                    {addWarnings.map((w, i) => <p key={i}>⚠️ {w}</p>)}
                                     <p className="text-xs text-amber-500 font-normal">Task saved — closing in a moment...</p>
                                 </div>
                             )}
                         </div>
                         <div className="flex gap-3 mt-6">
-                            <button onClick={() => { setShowAddTask(false); setOverlapError(''); setAddWarnings([]) }} className="flex-1 px-4 py-2 rounded-xl font-bold text-gray-500 hover:bg-gray-100">Cancel</button>
-                            <button onClick={handleAdd} disabled={!newTask.title||isSaving} className="flex-1 bg-black text-white px-4 py-2 rounded-xl font-bold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed">
-                                {isSaving?'Saving...':'Add Plan'}
+                            <button onClick={() => { setShowAddTask(false); setOverlapError(''); setAddWarnings([]) }} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 border border-gray-200">Cancel</button>
+                            <button onClick={handleAdd} disabled={!newTask.title || isSaving} className="flex-1 bg-violet-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-violet-200">
+                                {isSaving ? 'Saving...' : 'Add Plan'}
                             </button>
                         </div>
                     </div>
@@ -2436,29 +3279,28 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Push Modal ── */}
             {showPushModal && !activeDayIsLocked && (
-                <div
-                    onClick={closePush}
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                >
-                    <div
-                        onClick={e => e.stopPropagation()}
-                        className="bg-white rounded-2xl p-6 w-full max-w-md border-2 border-amber-200 shadow-xl max-h-[90vh] overflow-y-auto"
-                    >
+                <div onClick={closePush} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl p-6 w-full max-w-md border border-amber-200 shadow-2xl max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center gap-3 mb-5">
-                            <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center"><ArrowRightIcon className="w-5 h-5 text-amber-600"/></div>
+                            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                                <ArrowRightIcon className="w-5 h-5 text-amber-600" />
+                            </div>
                             <div>
                                 <h3 className="text-lg font-black text-black">Push to {shortDateLabel(nextDate)}</h3>
-                                <p className="text-xs text-gray-500 font-medium">Moving {pushNonConflicts.length+pushConflicts.length} task(s)</p>
+                                <p className="text-xs text-gray-500 font-medium">Moving {pushNonConflicts.length + pushConflicts.length} task(s)</p>
                             </div>
                         </div>
                         {pushNonConflicts.length > 0 && (
                             <div className="mb-4">
-                                <div className="flex items-center gap-2 mb-2"><div className="w-2 h-2 bg-violet-400 rounded-full"/><span className="text-sm font-bold text-gray-700">Ready ({pushNonConflicts.length})</span></div>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="w-2 h-2 bg-violet-500 rounded-full" />
+                                    <span className="text-sm font-bold text-gray-700">Ready ({pushNonConflicts.length})</span>
+                                </div>
                                 <div className="space-y-2">
                                     {pushNonConflicts.map(t => (
                                         <div key={t.id} className="bg-violet-50 border border-violet-200 rounded-xl p-3 flex justify-between">
                                             <span className="font-bold text-violet-800 text-sm">{t.title}</span>
-                                            <span className="text-xs text-violet-500">{fmtTime(t.startTime)} → {fmtTime(t.endTime)}</span>
+                                            <span className="text-xs text-violet-600">{fmtTime(t.startTime)} → {fmtTime(t.endTime)}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -2466,27 +3308,32 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                         )}
                         {pushConflicts.length > 0 && (
                             <div className="mb-4">
-                                <div className="flex items-center gap-2 mb-2"><ExclamationTriangleIcon className="w-4 h-4 text-amber-500"/><span className="text-sm font-bold text-gray-700">Conflicts ({pushConflicts.length})</span></div>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <ExclamationTriangleIcon className="w-4 h-4 text-amber-500" />
+                                    <span className="text-sm font-bold text-gray-700">Conflicts ({pushConflicts.length})</span>
+                                </div>
                                 <div className="space-y-3">
                                     {pushConflicts.map(task => {
-                                        const ct = conflictTimes[task.id] || {startTime:task.startTime,endTime:task.endTime}
+                                        const ct = conflictTimes[task.id] || { startTime: task.startTime, endTime: task.endTime }
                                         const ok = isValidConflict(task.id)
                                         return (
-                                            <div key={task.id} className={`border-2 rounded-xl p-3 ${ok?'bg-violet-50 border-violet-200':'bg-amber-50 border-amber-300'}`}>
+                                            <div key={task.id} className={`border rounded-xl p-3 ${ok ? 'bg-violet-50 border-violet-200' : 'bg-amber-50 border-amber-300'}`}>
                                                 <div className="flex items-center justify-between mb-2">
                                                     <span className="font-bold text-gray-800 text-sm">{task.title}</span>
-                                                    {ok ? <span className="text-xs bg-violet-100 text-violet-600 font-bold px-2 py-0.5 rounded-full">✓ OK</span>
-                                                        : <span className="text-xs bg-amber-100 text-amber-600 font-bold px-2 py-0.5 rounded-full">⚠️ Conflict</span>}
+                                                    {ok
+                                                        ? <span className="text-xs bg-violet-100 text-violet-700 font-bold px-2 py-0.5 rounded-full">✓ OK</span>
+                                                        : <span className="text-xs bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">⚠️ Conflict</span>
+                                                    }
                                                 </div>
                                                 <p className="text-xs text-gray-500 mb-2">Original: {fmtTime(task.startTime)} → {fmtTime(task.endTime)}</p>
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 mb-1">New Start</label>
-                                                        <TimeSelect value={ct.startTime} onChange={v=>setConflictTimes(p=>({...p,[task.id]:{...p[task.id],startTime:v}}))} is24h={true}/>
+                                                        <TimeSelect value={ct.startTime} onChange={v => setConflictTimes(p => ({ ...p, [task.id]: { ...p[task.id], startTime: v } }))} is24h={true} />
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs font-bold text-gray-600 mb-1">New End</label>
-                                                        <TimeSelect value={ct.endTime} onChange={v=>setConflictTimes(p=>({...p,[task.id]:{...p[task.id],endTime:v}}))} is24h={true}/>
+                                                        <TimeSelect value={ct.endTime} onChange={v => setConflictTimes(p => ({ ...p, [task.id]: { ...p[task.id], endTime: v } }))} is24h={true} />
                                                     </div>
                                                 </div>
                                             </div>
@@ -2495,68 +3342,27 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                                 </div>
                             </div>
                         )}
-                        {pushError && <div className="bg-red-50 border-2 border-red-200 rounded-xl px-4 py-2 text-red-600 text-sm font-medium mb-4">⚠️ {pushError}</div>}
+                        {pushError && <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-red-600 text-sm font-medium mb-4">⚠️ {pushError}</div>}
                         <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-5">
-                            <div className="flex justify-between text-sm"><span className="text-gray-600 font-medium">Total:</span><span className="font-black">{pushNonConflicts.length+pushConflicts.length}</span></div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-600 font-medium">Total:</span>
+                                <span className="font-black">{pushNonConflicts.length + pushConflicts.length}</span>
+                            </div>
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={closePush} disabled={isSaving} className="flex-1 px-4 py-2 rounded-xl font-bold text-gray-500 hover:bg-gray-100 disabled:opacity-50">Cancel</button>
-                            <button onClick={doPush} disabled={isSaving} className="flex-1 bg-amber-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-amber-600 flex items-center justify-center gap-2 disabled:opacity-50">
-                                {isSaving ? 'Pushing...' : <><ArrowRightIcon className="w-4 h-4"/>Push All</>}
+                            <button onClick={closePush} disabled={isSaving} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:bg-gray-100 border border-gray-200 disabled:opacity-50">Cancel</button>
+                            <button onClick={doPush} disabled={isSaving} className="flex-1 bg-amber-500 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-amber-600 flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm shadow-amber-200">
+                                {isSaving ? 'Pushing...' : <><ArrowRightIcon className="w-4 h-4" />Push All</>}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ── Floating ChatBuddy Button ── */}
-            <div className="fixed bottom-6 right-6 z-40">
-                <button onClick={() => setShowMiniChat(prev => !prev)}
-                    className={`group relative w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 ${
-                        showMiniChat ? 'bg-gray-700 hover:bg-gray-800' : 'bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 hover:scale-110'
-                    }`}>
-                    {showMiniChat ? (
-                        <XMarkIcon className="w-6 h-6 text-white" />
-                    ) : (
-                        <>
-                            <SparklesIcon className="w-6 h-6 text-white" />
-                            <span className="absolute inset-0 rounded-full bg-violet-400 animate-ping opacity-20" />
-                            <span className="absolute right-16 bg-black text-white text-xs font-bold px-3 py-1.5 rounded-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                                Ask Schedule Assistant
-                            </span>
-                        </>
-                    )}
-                </button>
-            </div>
-
-            {/* ── MiniChatBuddy ── */}
-            {showMiniChat && (
-    <MiniChatBuddy
-        user={user}
-        tasksByDate={tasksByDate}
-        setTasksByDate={setTasksByDate}
-        upcomingExams={upcomingExams}
-        activeDate={activeDate}
-        weekDates={contextWeekDates}
-        onClose={() => setShowMiniChat(false)}
-        onTaskChanged={() => setRecsTrigger(t => t + 1)}
-        onOpenChatBuddy={(message) => {
-    setShowMiniChat(false)
-    onOpenChatBuddy?.(message)
-}}
-    />
-)}
-
             {/* ── Confirmation Modal ── */}
             {showConfirmModal && (
-                <div
-                    onClick={() => setShowConfirmModal(false)}
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
-                >
-                    <div
-                        onClick={e => e.stopPropagation()}
-                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-violet-100 shadow-2xl flex flex-col items-center text-center animate-scale-up"
-                    >
+                <div onClick={() => setShowConfirmModal(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl p-6 w-full max-w-sm border border-violet-100 shadow-2xl flex flex-col items-center text-center animate-scale-up">
                         <div className="w-12 h-12 rounded-full bg-violet-50 flex items-center justify-center mb-4">
                             <SparklesIcon className="w-6 h-6 text-violet-600 animate-pulse" />
                         </div>
@@ -2584,14 +3390,8 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
 
             {/* ── Warning Modal ── */}
             {showWarningModal && (
-                <div
-                    onClick={() => setShowWarningModal(false)}
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
-                >
-                    <div
-                        onClick={e => e.stopPropagation()}
-                        className="bg-white rounded-2xl p-6 w-full max-w-sm border-2 border-red-100 shadow-2xl flex flex-col items-center text-center animate-scale-up"
-                    >
+                <div onClick={() => setShowWarningModal(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl p-6 w-full max-w-sm border border-red-100 shadow-2xl flex flex-col items-center text-center animate-scale-up">
                         <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4 text-red-500 text-xl animate-bounce">⚠️</div>
                         <h3 className="text-lg font-black text-black mb-2">Notice</h3>
                         <p className="text-sm text-gray-500 font-medium mb-6 leading-relaxed">
@@ -2599,12 +3399,71 @@ const filteredSuggestions = recsLoading ? [] : suggestions.filter(s => {
                         </p>
                         <button
                             onClick={() => setShowWarningModal(false)}
-                            className="w-full bg-black text-white px-4 py-2.5 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-md"
+                            className="w-full bg-violet-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-violet-700 transition-colors shadow-sm shadow-violet-200"
                         >
                             Okay
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* FLOATING AI ASSISTANT CARD                                   */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {!showMiniChat && (
+                <div className="fixed bottom-6 right-6 z-40">
+                    <button
+                        onClick={() => setShowMiniChat(true)}
+                        className="group bg-white rounded-2xl shadow-2xl border border-violet-100 px-4 py-3 flex items-center gap-3 hover:shadow-violet-200 hover:border-violet-300 transition-all max-w-xs"
+                    >
+                        <div className="w-11 h-11 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md shadow-violet-200 flex-shrink-0">
+                            <SparklesIcon className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="text-left">
+                            <div className="flex items-center gap-2">
+                                <p className="font-black text-sm text-gray-800">AI Assistant</p>
+                                <ChevronUpIcon className="w-3.5 h-3.5 text-gray-400 group-hover:text-violet-600 transition-colors" />
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                                <p className="text-[10px] text-gray-500 font-bold">Online</p>
+                            </div>
+                            <p className="text-[11px] text-gray-500 mt-1 leading-tight">
+                                Need help planning your day? <span className="font-bold text-gray-700">Ask me anything!</span>
+                            </p>
+                        </div>
+                    </button>
+                </div>
+            )}
+
+            {/* Close button when chat is open */}
+            {showMiniChat && (
+                <div className="fixed bottom-6 right-6 z-40">
+                    <button
+                        onClick={() => setShowMiniChat(false)}
+                        className="w-14 h-14 rounded-full bg-gray-800 hover:bg-gray-900 text-white shadow-2xl flex items-center justify-center transition-all"
+                    >
+                        <XMarkIcon className="w-6 h-6" />
+                    </button>
+                </div>
+            )}
+
+            {/* ── MiniChatBuddy ── */}
+            {showMiniChat && (
+                <MiniChatBuddy
+                    user={user}
+                    tasksByDate={tasksByDate}
+                    setTasksByDate={setTasksByDate}
+                    upcomingExams={upcomingExams}
+                    activeDate={activeDate}
+                    weekDates={contextWeekDates}
+                    onClose={() => setShowMiniChat(false)}
+                    onTaskChanged={() => setRecsTrigger(t => t + 1)}
+                    onOpenChatBuddy={(message) => {
+                        setShowMiniChat(false)
+                        onOpenChatBuddy?.(message)
+                    }}
+                />
             )}
         </div>
     )

@@ -1,5 +1,15 @@
 import { apiGet, apiPost, apiPut, apiDelete, apiRequest } from './apiClient.js';
 
+// ── DEFAULTS ──────────────────────────────────────────────────────────────────
+
+export const DEFAULT_PREFERENCES = {
+    preferredStudyTime: 'AFTERNOON',
+    busySlots: [],
+    preferredStudyDays: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
+    dailyStudyTargetHours: 4,
+    studyIntensity: 'MODERATE',
+};
+
 // ── TASKS ─────────────────────────────────────────────────────────────────────
 
 export async function getMonthTasks(studentId, year, month) {
@@ -87,9 +97,21 @@ export async function getOnboardingStatus(studentId) {
     return res.data;
 }
 
-export async function savePreferences(studentId, preferredStudyTime, busySlots) {
+export async function savePreferences(
+    studentId,
+    preferredStudyTime,
+    busySlots,
+    preferredStudyDays = DEFAULT_PREFERENCES.preferredStudyDays,
+    dailyStudyTargetHours = DEFAULT_PREFERENCES.dailyStudyTargetHours,
+    studyIntensity = DEFAULT_PREFERENCES.studyIntensity
+) {
     const res = await apiPost('/api/schedule/preferences', {
-        studentId, preferredStudyTime, busySlots: busySlots || []
+        studentId,
+        preferredStudyTime,
+        busySlots: busySlots || [],
+        preferredStudyDays: preferredStudyDays || DEFAULT_PREFERENCES.preferredStudyDays,
+        dailyStudyTargetHours: dailyStudyTargetHours ?? DEFAULT_PREFERENCES.dailyStudyTargetHours,
+        studyIntensity: studyIntensity || DEFAULT_PREFERENCES.studyIntensity,
     });
     return res.data;
 }
